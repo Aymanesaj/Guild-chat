@@ -1,0 +1,74 @@
+services:
+  nginx:
+    container_name: nginx
+    build: gateway/.
+    ports:
+      - 8080:80
+    networks:
+      - private
+    depends_on:
+      - chat-service
+      - identity-service
+      - org-service
+      - frontend
+
+  chat-service:
+    image: python:alpine
+    container_name: chat-service
+    command: >
+      python3 -c "import http.server; http.server.test(HandlerClass=lambda *args: http.server.SimpleHTTPRequestHandler(*args, directory='/tmp'), port=8081)"
+    networks:
+      - private
+    # depends_on:
+      # - postgres
+    expose:
+      - "8081"
+  identity-service:
+    image: python:alpine
+    command: >
+      python3 -c "import http.server; http.server.test(HandlerClass=lambda *args: http.server.SimpleHTTPRequestHandler(*args, directory='/tmp'), port=8083)"
+    container_name: identity-service
+    networks:
+      - private
+    # depends_on:
+      # - postgres
+    expose:
+      - "8083"
+  org-service:
+    image: python:alpine
+    command: >
+      python3 -c "import http.server; http.server.test(HandlerClass=lambda *args: http.server.SimpleHTTPRequestHandler(*args, directory='/tmp'), port=8082)"
+    container_name: org-service
+    networks:
+      - private
+    # depends_on:
+      # - postgres
+    expose:
+      - "8082"
+  frontend:
+    image: python:alpine
+    command: >
+      python3 -c "import http.server; http.server.test(HandlerClass=lambda *args: http.server.SimpleHTTPRequestHandler(*args, directory='/tmp'), port=8081)"
+    container_name: frontend
+    networks:
+      - private
+    expose:
+      - "8080"
+
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: postgres
+  #   volumes:
+  #     - database:/var/lib/postgresql/data
+  #   networks:
+  #     - private
+  
+  # vault:
+  #   image: hashicorp/vault:latest
+
+volumes:
+  database:
+
+networks:
+  private:
+    name: private
