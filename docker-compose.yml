@@ -3,7 +3,7 @@ services:
     container_name: nginx
     build: gateway/.
     ports:
-      - 8080:80
+      - 8000:80
     networks:
       - private
     depends_on:
@@ -11,22 +11,24 @@ services:
       - identity-service
       - org-service
       - frontend
+    restart: always
 
   chat-service:
     image: python:alpine
     container_name: chat-service
     command: >
-      python3 -c "import http.server; http.server.test(HandlerClass=lambda *args: http.server.SimpleHTTPRequestHandler(*args, directory='/tmp'), port=8081)"
+      python3 -m http.server 8081 --directory /tmp --bind 0.0.0.0
     networks:
       - private
     # depends_on:
       # - postgres
     expose:
       - "8081"
+    restart: always
   identity-service:
     image: python:alpine
     command: >
-      python3 -c "import http.server; http.server.test(HandlerClass=lambda *args: http.server.SimpleHTTPRequestHandler(*args, directory='/tmp'), port=8083)"
+      python3 -m http.server 8083 --directory /tmp --bind 0.0.0.0
     container_name: identity-service
     networks:
       - private
@@ -34,10 +36,11 @@ services:
       # - postgres
     expose:
       - "8083"
+    restart: always
   org-service:
     image: python:alpine
     command: >
-      python3 -c "import http.server; http.server.test(HandlerClass=lambda *args: http.server.SimpleHTTPRequestHandler(*args, directory='/tmp'), port=8082)"
+      python3 -m http.server 8082 --directory /tmp --bind 0.0.0.0
     container_name: org-service
     networks:
       - private
@@ -45,15 +48,59 @@ services:
       # - postgres
     expose:
       - "8082"
+    restart: always
   frontend:
     image: python:alpine
     command: >
-      python3 -c "import http.server; http.server.test(HandlerClass=lambda *args: http.server.SimpleHTTPRequestHandler(*args, directory='/tmp'), port=8081)"
+      python3 -m http.server 8080 --directory /tmp --bind 0.0.0.0
     container_name: frontend
     networks:
       - private
+    volumes:
+      - ./frontend/index.html:/tmp/index.html
     expose:
       - "8080"
+    restart: always
+  
+
+  docker-exporter:
+    container_name: docker-exporter
+    image: seraph919/docker-socket-metrics-exporter
+    expose:
+    - "8090"
+    volumes:
+    - /var/run/user/${UID}/docker.sock:/var/run/docker.sock:ro
+    networks:
+    - private
+    restart: always
+
+  # grafana:
+  #   image: grafana/grafana
+  #   container_name: grafana
+  #   ports:
+  #   - "3000:3000"
+  #   networks:
+  #   - private
+  #   user : "root"
+  #   volumes:
+  #   - ./grafana/data/:/var/lib/grafana
+  #   - ./database/data:/var/lib/postgresql/data
+  #   environment:
+  #   - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+  #   - DS_PROMETHEUS=prometheus
+  #   restart: always
+
+  # prometheus:
+  #   container_name: prometheus
+  #   image: prom/prometheus
+  #   ports:
+  #     - "9090"
+  #   volumes: 
+  #     - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+  #     - prometheus_data:/prometheus
+  #   networks:
+  #     - private
+  #   restart: always
 
   # postgres:
   #   image: postgres:16-alpine
@@ -66,8 +113,9 @@ services:
   # vault:
   #   image: hashicorp/vault:latest
 
-volumes:
-  database:
+# volumes:
+#   database:
+#   prometheus_data:
 
 networks:
   private:
