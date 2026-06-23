@@ -20,6 +20,8 @@ services:
       python3 -m http.server 8081 --directory /tmp --bind 0.0.0.0
     networks:
       - private
+    volumes:
+      - ./services/chat-service/index.html:/tmp/index.html
     # depends_on:
       # - postgres
     expose:
@@ -32,6 +34,8 @@ services:
     container_name: identity-service
     networks:
       - private
+    volumes:
+      - ./services/identity-service/index.html:/tmp/index.html
     # depends_on:
       # - postgres
     expose:
@@ -44,6 +48,8 @@ services:
     container_name: org-service
     networks:
       - private
+    volumes:
+      - ./services/org-service/index.html:/tmp/index.html
     # depends_on:
       # - postgres
     expose:
