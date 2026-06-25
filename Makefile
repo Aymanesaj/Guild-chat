@@ -16,6 +16,12 @@ down:
 clean:
 	docker compose down -v --remove-orphans
 
+fclean:
+	docker system prune
+
+restart:
+	docker compose restart
+
 re: clean build
 
 logs:
