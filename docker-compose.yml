@@ -27,6 +27,7 @@ services:
     expose:
       - "8081"
     restart: always
+
   identity-service:
     image: python:alpine
     command: >
@@ -41,6 +42,7 @@ services:
     expose:
       - "8083"
     restart: always
+
   org-service:
     image: python:alpine
     command: >
@@ -55,6 +57,7 @@ services:
     expose:
       - "8082"
     restart: always
+
   frontend:
     image: python:alpine
     command: >
@@ -71,7 +74,7 @@ services:
 
   docker-exporter:
     container_name: docker-exporter
-    image: seraph919/docker-socket-metrics-exporter
+    image: seraph919/docker-socket-metrics-exporter:latest
     expose:
     - "8090"
     volumes:
@@ -80,33 +83,36 @@ services:
     - private
     restart: always
 
-  # grafana:
-  #   image: grafana/grafana
-  #   container_name: grafana
-  #   ports:
-  #   - "3000:3000"
-  #   networks:
-  #   - private
-  #   user : "root"
-  #   volumes:
-  #   - ./grafana/data/:/var/lib/grafana
-  #   - ./database/data:/var/lib/postgresql/data
-  #   environment:
-  #   - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
-  #   - DS_PROMETHEUS=prometheus
-  #   restart: always
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+    - "3000:3000"
+    networks:
+    - private
+    user : "root"
+    volumes:
+    - grafana_data:/var/lib/grafana
+    - ./infra/grafana/:/etc/grafana/provisioning:ro
+    # - database:/var/lib/postgresql/data
+    environment:
+    - GF_SECURITY_ADMIN_USER=admin
+    - GF_SECURITY_ADMIN_PASSWORD=admin
+    - GF_USERS_ALLOW_SIGN_UP=false
+    - DS_PROMETHEUS=prometheus
+    restart: always
 
-  # prometheus:
-  #   container_name: prometheus
-  #   image: prom/prometheus
-  #   ports:
-  #     - "9090"
-  #   volumes: 
-  #     - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-  #     - prometheus_data:/prometheus
-  #   networks:
-  #     - private
-  #   restart: always
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes: 
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - private
+    restart: always
 
   # postgres:
   #   image: postgres:16-alpine
@@ -119,9 +125,13 @@ services:
   # vault:
   #   image: hashicorp/vault:latest
 
-# volumes:
-#   database:
-#   prometheus_data:
+volumes:
+  database:
+    name: "database"
+  prometheus_data:
+    name: "prometheus_data"
+  grafana_data:
+    name: "grafana_data"
 
 networks:
   private:
