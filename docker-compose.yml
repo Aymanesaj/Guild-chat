@@ -22,8 +22,9 @@ services:
       - private
     volumes:
       - ./services/chat-service/index.html:/tmp/index.html
-    # depends_on:
-      # - postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
     expose:
       - "8081"
     restart: always
@@ -37,8 +38,9 @@ services:
       - private
     volumes:
       - ./services/identity-service/index.html:/tmp/index.html
-    # depends_on:
-      # - postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
     expose:
       - "8083"
     restart: always
@@ -52,8 +54,9 @@ services:
       - private
     volumes:
       - ./services/org-service/index.html:/tmp/index.html
-    # depends_on:
-      # - postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
     expose:
       - "8082"
     restart: always
@@ -69,6 +72,9 @@ services:
       - ./frontend/index.html:/tmp/index.html
     expose:
       - "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: always
   
 
@@ -94,7 +100,7 @@ services:
     volumes:
     - grafana_data:/var/lib/grafana
     - ./infra/grafana/:/etc/grafana/provisioning:ro
-    # - database:/var/lib/postgresql/data
+    - database:/var/lib/postgresql/data
     environment:
     - GF_SECURITY_ADMIN_USER=admin
     - GF_SECURITY_ADMIN_PASSWORD=admin
@@ -114,13 +120,24 @@ services:
       - private
     restart: always
 
-  # postgres:
-  #   image: postgres:16-alpine
-  #   container_name: postgres
-  #   volumes:
-  #     - database:/var/lib/postgresql/data
-  #   networks:
-  #     - private
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    volumes:
+      - database:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: appdb
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d appdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - private
   
   # vault:
   #   image: hashicorp/vault:latest
