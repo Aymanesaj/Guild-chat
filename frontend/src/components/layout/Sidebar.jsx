@@ -164,6 +164,17 @@ const Avatar = styled.div`
   font-weight: bold;
 `;
 
+export const ProfileName = styled.button`
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-weight: bold;
+  text-align: left;
+  &:hover {
+    color: var(--color-text-muted);    
+  }
+`;
+
 function Sidebar({
   isDirectMessages,
   activeRoomId,
@@ -280,7 +291,7 @@ function ProfilePreview() {
       <Avatar>M</Avatar>
 
       <div>
-        <strong>Mohamed</strong>
+        <ProfileName>Mohamed</ProfileName>
         <span>Online</span>
       </div>
     </ProfilePreviewBox>
