@@ -1,4 +1,5 @@
 import styled from "styled-components";
+import { ProfileName } from "../layout/Sidebar";
 
 const PanelEmptyState = styled.div`
   display: grid;
@@ -100,7 +101,7 @@ function MessageItem({ message }) {
 
       <MessageBody>
         <MessageMeta>
-          <strong>{message.username ?? "Unknown user"}</strong>
+          <ProfileName>{message.username ?? "Unknown user"}</ProfileName>
           <time>{message.createdAt}</time>
         </MessageMeta>
 
