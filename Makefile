@@ -31,7 +31,7 @@ ps:
 	docker compose ps
 
 run:
-	if [ ! -f .env ]; then \
+	@if [ ! -f .env ]; then \
 		@echo "ERROR: .env file is missing! Please create it before running."; \
 		@exit 1; \
 	fi
