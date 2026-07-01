@@ -1,8 +1,8 @@
-Remove host port exposures: Drop ports: from postgres, prometheus, and grafana. Only nginx (port 8000) needs host binding.
+Centralized Logging: Integrate a lightweight log collector (like Grafana Loki or Promtail) into the compose file to aggregate container stdout/stderr logs directly into your Grafana instance.
 
 Switch to Named Volumes: Drop bind mounts for your application assets (./services/...). Bundle static files inside the container images via Dockerfiles or use dedicated volumes to align with production workflows.
 
-Centralized Logging: Integrate a lightweight log collector (like Grafana Loki or Promtail) into the compose file to aggregate container stdout/stderr logs directly into your Grafana instance.
-
 # Prometheus Alerting Rules: Create an alerts.yml file in Prometheus to trigger alerts on high container memory consumption, high error rates, or service downtime (up == 0). (expose nginx log and catch it)
 https://www.youtube.com/watch?v=3wT0zSsQb58
+
+Remove host port exposures: Drop ports: from postgres, prometheus, and grafana. Only nginx (port 8000) needs host binding.
