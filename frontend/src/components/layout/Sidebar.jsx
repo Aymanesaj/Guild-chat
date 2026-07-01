@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import styled from "styled-components";
 import { getRooms } from "../../api/rooms";
+import styled from "styled-components";
+import { HiArrowLeftStartOnRectangle } from "react-icons/hi2";
+import { IoMdAdd } from "react-icons/io";
 
 const SidebarRoot = styled.aside`
   display: flex;
@@ -56,6 +58,9 @@ const SectionActionButton = styled.button`
   background: transparent;
   color: var(--color-text-muted);
   font-size: 20px;
+  &:hover {
+    color: var(--color-accent);
+  }
 `;
 
 const StatusMessage = styled.p`
@@ -175,11 +180,36 @@ export const ProfileName = styled.button`
   }
 `;
 
+const LogoutButton = styled.button`
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 10%;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+
+  svg {
+    width: 1.2rem;
+    height: 1.2rem;
+  }
+
+  &:hover {
+    color: var(--color-accent);
+  }
+`;
+
 function Sidebar({
   isDirectMessages,
   activeRoomId,
   onRoomChange,
   onDirectMessages,
+  onLogout
 }) {
   const [rooms, setRooms] = useState([]);
   const [loaded, setLoaded] = useState("loading");
@@ -217,7 +247,7 @@ function Sidebar({
         state={loaded}
       />
 
-      <ProfilePreview />
+      <ProfilePreview onLogout={onLogout} />
     </SidebarRoot>
   );
 }
@@ -257,7 +287,7 @@ function SectionTitle({ title, actionLabel }) {
     <SectionTitleRow>
       <span>{title}</span>
       <SectionActionButton type="button" aria-label={actionLabel}>
-        +
+        <IoMdAdd />
       </SectionActionButton>
     </SectionTitleRow>
   );
@@ -285,7 +315,7 @@ function DirectMessagesButton({ isDirectMessages, onDirectMessages }) {
   );
 }
 
-function ProfilePreview() {
+function ProfilePreview({ onLogout }) {
   return (
     <ProfilePreviewBox>
       <Avatar>M</Avatar>
@@ -294,6 +324,9 @@ function ProfilePreview() {
         <ProfileName>Mohamed</ProfileName>
         <span>Online</span>
       </div>
+      <LogoutButton onClick={onLogout} >
+        <HiArrowLeftStartOnRectangle />
+      </LogoutButton>
     </ProfilePreviewBox>
   );
 }

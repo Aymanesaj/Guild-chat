@@ -27,7 +27,7 @@ const MainContent = styled.main`
   }
 `;
 
-function AppShell() {
+function AppShell( { onLogout } ) {
   const [isDirectMessages, setIsDirectMessages] = useState(true);
   const [activeRoomId, setActiveRoomId] = useState(null);
 
@@ -43,6 +43,7 @@ function AppShell() {
         activeRoomId={activeRoomId?.id}
         onRoomChange={handleRoomChange}
         onDirectMessages={() => setIsDirectMessages(true)}
+        onLogout={onLogout}
       />
 
       <MainContent>
