@@ -1,86 +1,87 @@
 services:
-  # nginx:
-  #   container_name: nginx
-  #   build: gateway/.
-  #   ports:
-  #     - 8000:80
-  #   networks:
-  #     - private
-  #   depends_on:
-  #     - chat-service
-  #     - identity-service
-  #     - org-service
-  #     - frontend
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost/"]
-  #     interval: 30s
-  #     timeout: 5s
-  #     retries: 3
-  #   restart: always
 
-  # frontend:
-  #   image: python:alpine
-  #   command: >
-  #     python3 -m http.server 8080 --directory /tmp --bind 0.0.0.0
-  #   container_name: frontend
-  #   networks:
-  #     - private
-  #   volumes:
-  #     - ./frontend/index.html:/tmp/index.html
-  #   expose:
-  #     - "8080"
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   restart: always
-  
-  # chat-service:
-  #   image: python:alpine
-  #   container_name: chat-service
-  #   command: >
-  #     python3 -m http.server 8081 --directory /tmp --bind 0.0.0.0
-  #   networks:
-  #     - private
-  #   volumes:
-  #     - ./services/chat-service/index.html:/tmp/index.html
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   expose:
-  #     - "8081"
-  #   restart: always
-  
-  # org-service:
-  #   image: python:alpine
-  #   command: >
-  #     python3 -m http.server 8082 --directory /tmp --bind 0.0.0.0
-  #   container_name: org-service
-  #   networks:
-  #     - private
-  #   volumes:
-  #     - ./services/org-service/index.html:/tmp/index.html
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   expose:
-  #     - "8082"
-  #   restart: always
+  nginx:
+    container_name: nginx
+    build: gateway/.
+    ports:
+      - 8000:80
+    networks:
+      - private
+    depends_on:
+      - chat-service
+      - identity-service
+      - org-service
+      - frontend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: always
 
-  # identity-service:
-  #   image: python:alpine
-  #   command: >
-  #     python3 -m http.server 8083 --directory /tmp --bind 0.0.0.0
-  #   container_name: identity-service
-  #   networks:
-  #     - private
-  #   volumes:
-  #     - ./services/identity-service/index.html:/tmp/index.html
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   expose:
-  #     - "8083"
-  #   restart: always
+  frontend:
+    image: python:alpine
+    command: >
+      python3 -m http.server 8080 --directory /tmp --bind 0.0.0.0
+    container_name: frontend
+    networks:
+      - private
+    volumes:
+      - ./frontend/index.html:/tmp/index.html
+    expose:
+      - "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: always
+  
+  chat-service:
+    image: python:alpine
+    container_name: chat-service
+    command: >
+      python3 -m http.server 8081 --directory /tmp --bind 0.0.0.0
+    networks:
+      - private
+    volumes:
+      - ./services/chat-service/index.html:/tmp/index.html
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "8081"
+    restart: always
+  
+  org-service:
+    image: python:alpine
+    command: >
+      python3 -m http.server 8082 --directory /tmp --bind 0.0.0.0
+    container_name: org-service
+    networks:
+      - private
+    volumes:
+      - ./services/org-service/index.html:/tmp/index.html
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "8082"
+    restart: always
+
+  identity-service:
+    image: python:alpine
+    command: >
+      python3 -m http.server 8083 --directory /tmp --bind 0.0.0.0
+    container_name: identity-service
+    networks:
+      - private
+    volumes:
+      - ./services/identity-service/index.html:/tmp/index.html
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "8083"
+    restart: always
 
   docker-exporter:
     container_name: docker-exporter
@@ -100,7 +101,6 @@ services:
       start_period: 5s
     restart: always
   
-
 
   promtail:
     image: grafana/promtail:latest
@@ -164,23 +164,23 @@ services:
 
 
 
-  # postgres:
-  #   image: postgres:16-alpine
-  #   container_name: postgres
-  #   volumes:
-  #     - database:/var/lib/postgresql/data
-  #   env_file:
-  #     - ./.env
-  #   ports:
-  #     - "5432:5432"
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U admin -d appdb"]
-  #     interval: 5s
-  #     timeout: 5s
-  #     retries: 6
-  #   restart: always
-  #   networks:
-  #     - private
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    volumes:
+      - database:/var/lib/postgresql/data
+    env_file:
+      - ./.env
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d appdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+    restart: always
+    networks:
+      - private
   
   # # vault:
   # #   image: hashicorp/vault:latest
