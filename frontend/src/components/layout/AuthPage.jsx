@@ -1,5 +1,6 @@
 import styled from "styled-components";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 export const Container = styled.div`
   min-height: 100vh;
@@ -121,7 +122,15 @@ export const Accent = styled.span`
   }
 `;
 
-function LoginView({ setView }) {
+function LoginView({ setView, onLogin }) {
+  const navigate = useNavigate();
+
+  const handleLogin = (e) => {
+	e.preventDefault();
+	onLogin();
+	navigate("/app");
+  }
+
   return (
     <>
       <Subtitle>Sign in to continue.</Subtitle>
@@ -130,7 +139,7 @@ function LoginView({ setView }) {
         <Input type="email" placeholder="Email" required />
         <Input type="password" placeholder="Password" required />
 
-        <PrimaryButton type="submit">Login</PrimaryButton>
+        <PrimaryButton type="submit" onClick={handleLogin} >Login</PrimaryButton>
       </Form>
 
       <TextButton type="button" onClick={() => setView("forgot")}>
@@ -187,7 +196,7 @@ function ForgotView({ setView }) {
   );
 }
 
-function AuthPage() {
+function AuthPage( { onLogin } ) {
   const [view, setView] = useState("login");
 
   const renderView = () => {
@@ -197,7 +206,7 @@ function AuthPage() {
       case "forgot":
         return <ForgotView setView={setView} />;
       default:
-        return <LoginView setView={setView} />;
+        return <LoginView setView={setView} onLogin={onLogin} />;
     }
   };
 
