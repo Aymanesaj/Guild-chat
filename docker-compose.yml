@@ -129,11 +129,11 @@ services:
     #uses port 8093 internally with promitheus
     env_file:
       - ./.env
-    restart: always
     networks:
     - private
     depends_on:
       - loki
+    restart: always
 
   loki:
     image: grafana/loki:latest
@@ -152,11 +152,25 @@ services:
       - "9090:9090"
     volumes: 
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./infra/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
       - prometheus_data:/prometheus
     networks:
       - private
     restart: always
 
+
+  alertmanager:
+    container_name: alertmanager
+    image: prom/alertmanager:latest
+    volumes:
+      - ./infra/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+    ports:
+      - "9093:9093"
+    networks:
+      - private
+    restart: always
 
 # -----------------------------------------------------------
 # -------------------- Data visualization -------------------

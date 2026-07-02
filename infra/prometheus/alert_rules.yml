@@ -1,0 +1,22 @@
+groups:
+  - name: transcendence_alerts
+    rules:
+      # 1. Catch Stopped or Missing Containers via Historical Drops
+      - alert: ContainerDown
+        expr: max_over_time(container_running[5m]) == 1 unless container_running == 1
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Container {{ $labels.container }} is DOWN"
+          description: "Container {{ $labels.container }} was active recently but is no longer reporting as running."
+
+      # 2. Catch Out-Of-Memory (OOM) Kill events instantly
+      - alert: ContainerOOMKilled
+        expr: container_oom_killed == 1
+        for: 0m  # Fire instantly! No need to wait for a grace period on OOM kills.
+        labels:
+          severity: critical
+        annotations:
+          summary: "Container {{ $labels.container }} OOM KILLED"
+          description: "The Linux kernel has forcefully killed container {{ $labels.container }} due to out-of-memory constraints."
