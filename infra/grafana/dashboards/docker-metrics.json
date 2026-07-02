@@ -4,22 +4,22 @@
   "metadata": {
     "name": "docker-container-metrics",
     "namespace": "default",
-    "uid": "3b7aaab9-1b89-4e02-9cb8-679e0f97b6e4",
-    "resourceVersion": "1782881918725016",
-    "generation": 3,
-    "creationTimestamp": "2026-07-01T04:51:14Z",
+    "uid": "56655b0b-8cac-4758-9f4f-6f69c1a460ca",
+    "resourceVersion": "1782942599316018",
+    "generation": 2,
+    "creationTimestamp": "2026-07-01T21:47:59Z",
     "labels": {
-      "grafana.app/deprecatedInternalID": "525380522586112"
+      "grafana.app/deprecatedInternalID": "781255402397696"
     },
     "annotations": {
       "grafana.app/createdBy": "access-policy:service",
       "grafana.app/managedBy": "classic-file-provisioning",
       "grafana.app/managerId": "default",
-      "grafana.app/sourceChecksum": "bab92b8af3ed748bfdd221deefda3a6e",
+      "grafana.app/sourceChecksum": "5edab03144a87f07a513239403b3191f",
       "grafana.app/sourcePath": "/etc/grafana/provisioning/dashboards/docker-metrics.json",
-      "grafana.app/sourceTimestamp": "1782881913000",
+      "grafana.app/sourceTimestamp": "1782942594000",
       "grafana.app/updatedBy": "access-policy:service",
-      "grafana.app/updatedTimestamp": "2026-07-01T04:58:38Z",
+      "grafana.app/updatedTimestamp": "2026-07-01T21:49:59Z",
       "grafana.app/folder": ""
     }
   },
@@ -3791,7 +3791,7 @@
                       "spec": {
                         "direction": "backward",
                         "editorMode": "code",
-                        "expr": "sum by (container) (rate({container=~\"$container\", container=~\".+\", container!~\"loki|promtail\"} |~ \"(?i)error|panic|fatal|fail\"[1m]))",
+                        "expr": "sum by (container) (rate({container=~\"$container\", container=~\".+\"} |~ \"(?i)error|panic|fatal|fail\"[1m]))",
                         "legendFormat": "{{container}} errors",
                         "queryType": "range"
                       },
@@ -4379,7 +4379,7 @@
       "ft_trancendence"
     ],
     "timeSettings": {
-      "autoRefresh": "30s",
+      "autoRefresh": "10s",
       "autoRefreshIntervals": [
         "5s",
         "10s",

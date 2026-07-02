@@ -1,5 +1,9 @@
 services:
 
+# -----------------------------------------------------------
+# ---------------------- Reverse proxy ----------------------
+# -----------------------------------------------------------
+
   nginx:
     container_name: nginx
     build: gateway/.
@@ -19,6 +23,10 @@ services:
       retries: 3
     restart: always
 
+
+# -----------------------------------------------------------
+# --------------------- Micro services ----------------------
+# -----------------------------------------------------------
   frontend:
     image: python:alpine
     command: >
@@ -50,7 +58,6 @@ services:
     expose:
       - "8081"
     restart: always
-  
   org-service:
     image: python:alpine
     command: >
@@ -82,6 +89,10 @@ services:
     expose:
       - "8083"
     restart: always
+
+# -----------------------------------------------------------
+# --------------------- Data exporters ----------------------
+# -----------------------------------------------------------
 
   docker-exporter:
     container_name: docker-exporter
@@ -118,6 +129,7 @@ services:
     #uses port 8093 internally with promitheus
     env_file:
       - ./.env
+    restart: always
     networks:
     - private
     depends_on:
@@ -131,6 +143,24 @@ services:
       - "3100:3100"
     networks:
       - private
+    restart: always
+
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes: 
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - private
+    restart: always
+
+
+# -----------------------------------------------------------
+# -------------------- Data visualization -------------------
+# -----------------------------------------------------------
 
   grafana:
     image: grafana/grafana:13.0.3-slim
@@ -148,21 +178,10 @@ services:
       - ./.env
     restart: always
 
-  prometheus:
-    container_name: prometheus
-    image: prom/prometheus
-    ports:
-      - "9090:9090"
-    volumes: 
-      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
-    networks:
-      - private
-    restart: always
 
-
-
-
+# -----------------------------------------------------------
+# ------------------------ Data Base ------------------------
+# -----------------------------------------------------------
 
   postgres:
     image: postgres:16-alpine
