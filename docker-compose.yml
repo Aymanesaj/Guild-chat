@@ -62,19 +62,13 @@ services:
     restart: always
 
   frontend:
-    image: python:alpine
-    command: >
-      python3 -m http.server 8080 --directory /tmp --bind 0.0.0.0
-    container_name: frontend
+    build: frontend/.
+    image: frontend:latest
+    pull_policy: never
     networks:
       - private
-    volumes:
-      - ./frontend/index.html:/tmp/index.html
     expose:
       - "8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
     restart: always
   
 
