@@ -305,7 +305,6 @@ function DirectMessagesButton({ isDirectMessages, onDirectMessages }) {
   return (
     <DirectMessagesSection>
       <DmButton
-        type="button"
         $active={isDirectMessages}
         onClick={onDirectMessages}
       >
