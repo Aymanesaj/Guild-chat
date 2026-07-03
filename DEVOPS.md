@@ -74,3 +74,20 @@ These services are reachable inside the private Docker network:
 - The project currently uses static HTML pages for the frontend and the service placeholders.
 - PostgreSQL credentials and Grafana settings are read from `.env`.
 - The stack expects `UID` to match the local user so Docker socket access works for the exporter and Promtail setup.
+
+## Container Size Metrics Breakdown
+
+| Service / Container Name | Actual Size (Writable Layer) | Virtual Size (Base Image included) |
+| :--- | :--- | :--- |
+| `nginx` | **0 B** | 300 MB |
+| `org-service` | **0 B** | 47.6 MB |
+| `chat-service` | **0 B** | 47.6 MB |
+| `identity-service` | **0 B** | 47.6 MB |
+| `frontend` | **0 B** | 47.6 MB |
+| `promtail` | **52 MB** | 255 MB |
+| `docker-exporter` | **25.6 kB** | 19.4 MB |
+| `postgres` | **63 B** | 294 MB |
+| `prometheus` | **0 B** | 307 MB |
+| `alertmanager` | **0 B** | 80.1 MB |
+| `loki` | **596 kB** | 157 MB |
+| `grafana` | **0 B** | 1.03 GB |

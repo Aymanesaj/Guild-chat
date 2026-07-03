@@ -171,13 +171,14 @@ services:
     networks:
       - private
     restart: always
+    
 
 # -----------------------------------------------------------
 # -------------------- Data visualization -------------------
 # -----------------------------------------------------------
 
   grafana:
-    image: grafana/grafana:13.0.3-slim
+    build: ./infra/grafana/
     container_name: grafana
     ports:
     - "3000:3000"
@@ -210,7 +211,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U admin -d appdb"]
       interval: 5s
       timeout: 5s
-      retries: 6
+      retries: 15
     restart: always
     networks:
       - private

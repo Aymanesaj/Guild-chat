@@ -17,7 +17,7 @@ clean:
 	docker compose down -v --remove-orphans
 
 fclean:
-	docker system prune
+	docker system prune -a
 
 restart:
 	docker compose restart
