@@ -13,9 +13,10 @@ scrape_configs:
     static_configs:
       - targets: ['prometheus:9090']
 
-  - job_name: "docker-exporter"
+  - job_name: 'docker-exporter'
+    metrics_path: /metrics.prom
     static_configs:
-      - targets: ["docker-exporter:8090"]
+      - targets: ['docker-exporter:8090']
   - job_name: "promtail"
     static_configs:
       - targets: ["promtail:8093"]

@@ -97,7 +97,7 @@ services:
   docker-exporter:
     container_name: docker-exporter
     # build: ./infra/exporter/
-    image: ghcr.io/seraph919/docker-exporter:v2.2
+    image: ghcr.io/seraph919/docker-exporter:v2.3
     expose:
     - "8090"
     volumes:

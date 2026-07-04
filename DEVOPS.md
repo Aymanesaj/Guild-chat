@@ -38,7 +38,7 @@ This repository is currently set up as a Docker Compose-based microservices stac
 - `http://localhost:8000/api/orgs/` - org service
 - `http://localhost:8000/api/chat/` - chat service
 - `http://localhost:8000/ws/chat/` - chat websocket route
-- `http://localhost:8000/metrics` - docker exporter metrics
+- `http://localhost:8000/metrics.prom` - docker exporter metrics
 - `http://localhost:8000/nginx_status` - Nginx stub status
 
 ### Direct service ports exposed by Compose
