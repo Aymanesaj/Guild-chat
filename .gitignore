@@ -1,2 +1,5 @@
 docs
 .env
+infra/exporter/
+
+test.js
