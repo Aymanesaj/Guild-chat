@@ -6,7 +6,9 @@ services:
 
   nginx:
     container_name: nginx
-    build: gateway/.
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
     ports:
       - 8000:80
     networks:
@@ -15,7 +17,6 @@ services:
       - chat-service
       - identity-service
       - org-service
-      - frontend
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
@@ -27,15 +28,6 @@ services:
 # -----------------------------------------------------------
 # --------------------- Micro services ----------------------
 # -----------------------------------------------------------
-  frontend:
-    container_name: frontend
-    build: ./frontend/
-    networks:
-    - private
-    expose:
-    - "8080"
-    restart: always
-  
   chat-service:
     image: python:alpine
     container_name: chat-service
