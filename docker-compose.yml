@@ -28,19 +28,12 @@ services:
 # --------------------- Micro services ----------------------
 # -----------------------------------------------------------
   frontend:
-    image: python:alpine
-    command: >
-      python3 -m http.server 8080 --directory /tmp --bind 0.0.0.0
     container_name: frontend
+    build: ./frontend/
     networks:
-      - private
-    volumes:
-      - ./frontend/index.html:/tmp/index.html
+    - private
     expose:
-      - "8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
+    - "8080"
     restart: always
   
   chat-service:
@@ -58,6 +51,7 @@ services:
     expose:
       - "8081"
     restart: always
+
   org-service:
     image: python:alpine
     command: >
