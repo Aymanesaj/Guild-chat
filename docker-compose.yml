@@ -125,8 +125,8 @@ services:
     image: grafana/loki:latest
     container_name: loki
     command: -config.file=/etc/loki/local-config.yaml
-    ports:
-      - "3100:3100"
+    expose:
+      - "3100"
     networks:
       - private
     restart: always
@@ -134,8 +134,13 @@ services:
   prometheus:
     container_name: prometheus
     image: prom/prometheus
-    ports:
-      - "9090:9090"
+    expose:
+      - "9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.external-url=http://localhost/prometheus/'
+      - '--web.route-prefix=/'
     volumes: 
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./infra/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
@@ -152,8 +157,8 @@ services:
       - ./infra/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml
     command:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
-    ports:
-      - "9093:9093"
+    expose:
+      - "9093"
     networks:
       - private
     restart: always
@@ -166,8 +171,8 @@ services:
   grafana:
     build: ./infra/grafana/
     container_name: grafana
-    ports:
-    - "3000:3000"
+    expose:
+    - "3000"
     networks:
     - private
     user : "root"
@@ -192,7 +197,7 @@ services:
     env_file:
       - ./.env
     ports:
-      - "5432:5432"
+      - "5432:5432" # for now
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d appdb"]
       interval: 5s
