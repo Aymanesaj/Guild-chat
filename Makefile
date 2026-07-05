@@ -4,10 +4,10 @@ endif
 
 all: up
 
-up:
+up: run
 	docker compose up -d
 
-build:
+build: run
 	docker compose up --build -d
 
 down:
@@ -17,7 +17,7 @@ clean:
 	docker compose down -v --remove-orphans
 
 fclean:
-	docker system prune
+	docker system prune -a
 
 restart:
 	docker compose restart
@@ -29,3 +29,10 @@ logs:
 
 ps:
 	docker compose ps
+
+run:
+	@if [ ! -f .env ]; then \
+		@echo "ERROR: .env file is missing! Please create it before running."; \
+		@exit 1; \
+	fi
+	@echo "Starting the application..."
