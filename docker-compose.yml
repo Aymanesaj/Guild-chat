@@ -82,14 +82,16 @@ services:
 
   docker-exporter:
     container_name: docker-exporter
-    # build: ./infra/exporter/
-    image: ghcr.io/seraph919/docker-exporter:v2.3
+    build: ./infra/exporter/
+    # image: ghcr.io/seraph919/docker-exporter:v2.3
     expose:
     - "8090"
     volumes:
     - /var/run/user/${UID}/docker.sock:/var/run/docker.sock:ro
     networks:
     - private
+    env_file:
+    - ./.env
     healthcheck:
       test: ["CMD", "curl", "-f", "http://docker-exporter:8090"]
       interval: 30s
@@ -196,8 +198,8 @@ services:
       - database:/var/lib/postgresql/data
     env_file:
       - ./.env
-    ports:
-      - "5432:5432" # for now
+    expose:
+      - "5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d appdb"]
       interval: 5s
