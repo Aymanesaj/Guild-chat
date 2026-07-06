@@ -30,14 +30,21 @@ services:
     restart: always
 
   identity-service:
-    image: python:alpine
-    command: >
-      python3 -m http.server 8083 --directory /tmp --bind 0.0.0.0
+    build: services/identity-service/.
     container_name: identity-service
     networks:
       - private
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/appdb
+      SPRING_DATASOURCE_USERNAME: admin
+      SPRING_DATASOURCE_PASSWORD: admin
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-secret-with-at-least-32-chars}
+      JWT_ISSUER: ft-transcendence
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GITHUB_REDIRECT_URI: ${GITHUB_REDIRECT_URI:-http://localhost:8000/api/users/oauth/github/callback}
     volumes:
-      - ./services/identity-service/index.html:/tmp/index.html
+      - identity_avatars:/tmp/identity-avatars
     depends_on:
       postgres:
         condition: service_healthy
@@ -143,6 +150,8 @@ volumes:
     name: "prometheus_data"
   grafana_data:
     name: "grafana_data"
+  identity_avatars:
+    name: "identity_avatars"
 
 networks:
   private:
