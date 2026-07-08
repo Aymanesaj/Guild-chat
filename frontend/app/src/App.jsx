@@ -4,13 +4,15 @@ import AppShell from "./components/layout/AppShell.jsx";
 import AuthPage from "./components/layout/AuthPage.jsx";
 
 function App() {
-  const [isAuth, setisAuth] = useState(false);
+  const [isAuth, setisAuth] = useState(() => Boolean(localStorage.getItem("token")));
+  console.log("----isAuth:", isAuth);
 
   const logIn = () => {
-    setisAuth(true);
+    setisAuth(Boolean(localStorage.getItem("token")));
   };
 
   const logOut = () => {
+    localStorage.removeItem("token");
     setisAuth(false);
   }
 
@@ -19,16 +21,22 @@ function App() {
       <Routes>
         <Route
           path="/auth"
-          element={<AuthPage onLogin={logIn} />}
-        />
-
-        <Route
-          path="/app"
           element={
-            isAuth ? <AppShell onLogout={logOut} /> : <Navigate to="/auth" replace />
+            isAuth
+              ? <Navigate to="/app" replace />
+              : <AuthPage onLogin={logIn} />
           }
         />
-
+      
+        <Route
+          path="/app/*"
+          element={
+            isAuth
+              ? <AppShell onLogout={logOut} />
+              : <Navigate to="/auth" replace />
+          }
+        />
+      
         <Route
           path="*"
           element={<Navigate to={isAuth ? "/app" : "/auth"} replace />}
