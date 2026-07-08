@@ -1,0 +1,134 @@
+```markdown
+=====================================
+Core responsibilities (DevOps scope — required)
+=====================================
+
+Phase 1 — Make the stack runnable and testable (High priority)
+
+1. [ ] Make service images buildable
+   - Add minimal `Dockerfile` for each service (`services/identity-service`, `services/chat-service`, `services/org-service`) so CI and local dev can build images.
+   - Provide a simple health shim (HTTP `/health` and `/ready`) if the service code is not yet implemented.
+   - Acceptance: `docker compose build` succeeds and containers start.
+
+2. [ ] Add reliable healthchecks & readiness probes
+   - Add `healthcheck` to each service in `docker-compose.yml` (use `curl -f http://localhost:<port>/health`).
+   - Update `depends_on` to use health conditions where appropriate.
+   - Acceptance: services report healthy in `docker compose ps` and `nginx` only routes to healthy backends.
+
+3. [ ] Standardize environment & secrets for Compose
+   - Add or update `infra/.env.example` + `./.env` usage and ensure `docker-compose` uses `env_file` or Docker secrets for sensitive values.
+   - Acceptance: `.env.example` documents PG, broker, Vault, and exporter variables.
+
+4. [ ] Add DB migrations & backup plan
+   - Add `infra/db/migrations/` and a `migrate` service (Flyway or similar) or CI migration step.
+   - Add a simple backup job (pg_dump) that writes to a named volume and document restore steps.
+   - Acceptance: migrations apply successfully and a test backup/restore completes.
+
+=====================================
+Monitoring system (Major — 2 pts)
+=====================================
+
+Phase 2 — Monitoring, dashboards, alerting (High priority for grade)
+
+5. [ ] Prometheus scrape and alerting configuration
+   - Update `infra/prometheus/prometheus.yml` to include scrape jobs for all services (identity/chat/org/docker-exporter/postgres/nginx).
+   - Add `infra/prometheus/alert_rules.yml` with critical alerts (DB down, service down, high DB connections, exporter down).
+   - Acceptance: Prometheus shows targets UP and alerts fire on simulated failures.
+
+6. [ ] Grafana provisioning & dashboards
+   - Add Grafana provisioning files under `infra/grafana/provisioning/` and include at least one dashboard JSON for system + service metrics.
+   - Acceptance: Grafana displays the provisioned dashboard automatically at startup.
+
+7. [ ] Centralized logs (Loki/Promtail) validation
+   - Ensure `promtail` configuration collects container logs and labels them; test log queries in Grafana Explore.
+   - Acceptance: can find service logs by container label in Grafana.
+
+=====================================
+Security & hardening (Major — 2 pts)
+=====================================
+
+Phase 3 — Gateway hardening + secrets (High priority for grade)
+
+8. [ ] Harden gateway (WAF + security headers + rate limits)
+   - Ensure ModSecurity CRS is enabled in your `gateway` image and tuned (block high-confidence attacks, log others).
+   - Add strict security headers and basic rate limiting in `gateway/nginx.conf`.
+   - Acceptance: WAF logs show blocked/observed rules and headers present in responses.
+
+9. [ ] HashiCorp Vault (secrets management)
+   - Add Vault (dev mode allowed for testing) to `docker-compose.yml` and document how to store/retrieve secrets.
+   - Provide a sample `vault` bootstrap script and `infra/vault/README.md` with commands.
+   - Acceptance: services can read secrets from Vault (manual test) or vault-agent templating is demonstrated.
+
+=====================================
+Resilience & inter-service patterns (DevOps scope)
+=====================================
+
+Phase 4 — Service communication and resilience (Medium priority)
+
+10. [ ] Add message broker for async decoupling (RabbitMQ)
+    - Add `rabbitmq` container and document `AMQP_URL` in `.env.example`.
+    - Acceptance: broker reachable at `rabbitmq:5672` and management UI accessible.
+
+11. [ ] Service-to-service contracts & healthchecks
+    - Document API contracts (OpenAPI stubs) for each service under `infra/apis/` so backend devs can implement and you can use health endpoints in Compose.
+    - Acceptance: each service has a minimal OpenAPI file and a corresponding health endpoint defined.
+
+12. [ ] Add retry/circuit-breaker guidance for services (DevOps docs)
+    - Provide recommended timeout/retry/circuit-breaker settings and examples for service clients (e.g., Hystrix/Resilience4J/Polly)
+    - Acceptance: docs added to `DEVOPS.md` and `SERVICES.md`.
+
+=====================================
+CI/CD, testing, and observability (DevOps scope)
+=====================================
+
+13. [ ] CI pipeline (build, test, migrate)
+    - Create `.github/workflows/ci.yml` to build images, run smoke tests against `/health`, and run DB migrations in CI.
+    - Acceptance: PRs trigger CI which runs smoke tests and build steps.
+
+14. [ ] Integration smoke tests & health check job
+    - Add a small `smoke` job that calls key endpoints through nginx to validate end-to-end functionality after deployment.
+    - Acceptance: smoke job passes in CI; script available under `infra/ci/smoke.sh`.
+
+15. [ ] Observability: Tracing (Jaeger/OTel)
+    - Add an OpenTelemetry collector or Jaeger to Compose and document how to instrument services and propagate `X-Request-ID`.
+    - Acceptance: example trace from frontend → nginx → service appears in Jaeger UI.
+
+=====================================
+Documentation & handoff (always required)
+=====================================
+
+16. [ ] Update `DEVOPS.md` and add `SERVICES.md`
+    - `DEVOPS.md`: detailed runbook, build steps, vault bootstrap, backup/restore commands, CI run commands.
+    - `SERVICES.md`: per-service responsibilities, ports, env vars, OpenAPI paths, and owner (DevOps vs backend).
+    - Acceptance: README clarity checked by a team member; runbook allows bringing up the stack from scratch.
+
+17. [ ] Final checklist & grading readiness
+    - Verify the three Majors are covered by evidence: (1) microservices + broker or documented REST gateway, (2) Prometheus+Grafana dashboards+alerts, (3) WAF + Vault integration and docs.
+    - Prepare short demo script and screenshots for grading.
+
+=====================================
+Suggested first tasks (pick one to start)
+=====================================
+
+- A. Monitoring (Prometheus + Grafana provisioning) — highest impact for grading and purely DevOps work.
+- B. Gateway hardening + Vault — completes security major.
+- C. Make services buildable + healthchecks — prerequisite for CI and smoke tests.
+
+Pick one (A/B/C) and I'll start implementing the related files and mark them in the Tasks list as in-progress.
+
+```Phase 2 (Week 2) – Add Inter-Service Communication:
+4. [ ] Document API contracts (OpenAPI specs)
+5. [ ] Add service-to-service REST calls with proper error handling
+6. [ ] Add health checks between services
+
+Phase 3 (Week 3) – Improve Resilience:
+7. [ ] Add retry logic / circuit breakers
+8. [ ] Add request logging/tracing (use X-Request-ID header)
+9. [ ] Implement namespace schemas in PostgreSQL
+
+Phase 4 (Week 4+) – Production Ready:
+10. [ ] Add async communication (RabbitMQ or Kafka)
+11. [ ] Split databases per service
+12. [ ] Add distributed tracing (Jaeger)
+13. [ ] Add service mesh (optional: Istio, Linkerd)
+
