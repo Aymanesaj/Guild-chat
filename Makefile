@@ -36,3 +36,11 @@ run:
 		@exit 1; \
 	fi
 	@echo "Starting the application..."
+
+monitoring:
+	docker compose down -v --remove-orphans grafana prometheus docker-exporter alertmanager loki promtail
+	docker compose up --build -d grafana prometheus docker-exporter alertmanager loki promtail
+
+microservices:
+	docker compose down -v --remove-orphans chat-service identity-service org-service 
+	docker compose up --build -d chat-service identity-service org-service 
