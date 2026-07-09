@@ -5,7 +5,6 @@ import AuthPage from "./components/layout/AuthPage.jsx";
 
 function App() {
   const [isAuth, setisAuth] = useState(() => Boolean(localStorage.getItem("token")));
-  console.log("----isAuth:", isAuth);
 
   const logIn = () => {
     setisAuth(Boolean(localStorage.getItem("token")));

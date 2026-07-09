@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { getRooms } from "../../api/rooms";
 import styled from "styled-components";
 import { HiArrowLeftStartOnRectangle } from "react-icons/hi2";
 import { IoMdAdd } from "react-icons/io";
+import { useProfileOverlay } from "./ProfileOverlayContext";
+import { getRooms } from "../../api/rooms";
+import { getMe } from "../../api/authentication.js";
 
 const SidebarRoot = styled.aside`
   display: flex;
@@ -255,7 +257,7 @@ function Sidebar({
 function SidebarHeader() {
   return (
     <SidebarHeaderBox>
-      <SidebarTitle>RAHMOHAM</SidebarTitle>
+      <SidebarTitle>AppName</SidebarTitle>
     </SidebarHeaderBox>
   );
 }
@@ -315,12 +317,36 @@ function DirectMessagesButton({ isDirectMessages, onDirectMessages }) {
 }
 
 function ProfilePreview({ onLogout }) {
+
+  const [user, setUser] = useState(null);
+  const { openProfile } = useProfileOverlay();
+
+  useEffect(() => {
+    async function fetchUser() {
+      const token = localStorage.getItem("token");
+      if (token) {
+        try {
+          const userData = await getMe(token);
+          setUser(userData);
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+        }
+      }
+    }
+    fetchUser();
+  }, []);
+
+  function openPrfl() {
+    openProfile(user);
+    console.log("shoudl be opened!");
+  }
   return (
     <ProfilePreviewBox>
-      <Avatar>M</Avatar>
+      <Avatar>{user?.username?.charAt(0)}</Avatar>
 
       <div>
-        <ProfileName>Mohamed</ProfileName>
+        <ProfileName onClick={openPrfl} >
+          {user?.username}</ProfileName>
         <span>Online</span>
       </div>
       <LogoutButton onClick={onLogout} >
