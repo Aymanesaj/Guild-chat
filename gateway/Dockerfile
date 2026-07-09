@@ -1,4 +1,4 @@
-FROM owasp/modsecurity-crs:nginx 
+FROM owasp/modsecurity-crs:nginx
 
 USER root
 
