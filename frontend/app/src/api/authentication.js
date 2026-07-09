@@ -45,3 +45,21 @@ export async function loginUser(identifier, password) {
 
 	return data;
 }
+
+export async function getMe( token ) {
+	const response = await fetch("http://localhost:8083/me", {
+		method: "GET",
+		headers: {
+			"Content-Type": "application/json",
+			"Authorization": `Bearer ${token}`	
+		}
+	});
+
+	const data = await response.json();
+
+	if (!response.ok) {
+		throw new Error(data.message || "Failed to fetch user data");
+	}
+
+	return data;
+}

@@ -321,8 +321,8 @@ function AuthPage( { onLogin } ) {
             loading={loading}
           />
         );
-      case "forgot":
-        return <ForgotView setView={setView} />;
+      // case "forgot":
+      //   return <ForgotView setView={setView} />;
       default:
         return (
           <LoginView
@@ -345,8 +345,8 @@ function AuthPage( { onLogin } ) {
           {view === "login"
             ? "Welcome Back"
             : view === "signup"
-            ? "Create Account"
-            : "Reset Password"}
+            /*? "Create Account"
+            : "Reset Password"*/}
         </Title>
 
         {renderView()}
