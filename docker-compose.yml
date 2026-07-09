@@ -35,10 +35,10 @@ services:
     networks:
       - private
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/appdb
-      SPRING_DATASOURCE_USERNAME: admin
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/transdb
+      SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: admin
-      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-secret-with-at-least-32-chars}
+      JWT_SECRET: OBYcCOxLMXYDJxwgeOAdASTDflOwKNVm
       JWT_ISSUER: ft-transcendence
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
@@ -133,13 +133,11 @@ services:
     volumes:
       - database:/var/lib/postgresql/data
     environment:
-      POSTGRES_USER: admin
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: admin
-      POSTGRES_DB: appdb
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: transdb
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d appdb"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d transdb"]
       interval: 10s
       timeout: 5s
       retries: 5
