@@ -1,4 +1,4 @@
-docs
+Docs/
 .env
 infra/exporter/
 test.js
