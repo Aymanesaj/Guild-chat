@@ -52,15 +52,8 @@ services:
       timeout: 3s
       retries: 3
       start_period: 15s
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/transdb
-      SPRING_DATASOURCE_USERNAME: admin
-      SPRING_DATASOURCE_PASSWORD: admin
-      JWT_SECRET: ${JWT_SECRET:-OBYcCOxLMXYDJxwgeOAdASTDflOwKNVm}}
-      JWT_ISSUER: ft-transcendence
-      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
-      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
-      GITHUB_REDIRECT_URI: ${GITHUB_REDIRECT_URI:-http://localhost:8000/api/users/oauth/github/callback}
+    env_file:
+      - ./.env
     volumes:
       - identity_avatars:/tmp/identity-avatars
     depends_on:
