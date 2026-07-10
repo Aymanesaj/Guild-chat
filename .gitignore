@@ -2,3 +2,7 @@ docs
 .env
 infra/exporter/
 test.js
+tmp/*
+.vscode/
+*.sh
+*.md
