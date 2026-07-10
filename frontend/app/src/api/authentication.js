@@ -1,5 +1,5 @@
 export async function registerUser(username, email, password) {
-	const response = await fetch("http://localhost:8083/register", {
+	const response = await fetch("http://localhost:8000/api/users/register", { // not the DNS but was the wrog port and api endpoint.
 	method: "POST",
 	headers: {
 	  "Content-Type": "application/json"
@@ -23,7 +23,7 @@ export async function registerUser(username, email, password) {
 }
 
 export async function loginUser(identifier, password) {
-	const response = await fetch("http://localhost:8083/login", {
+	const response = await fetch("http://localhost:8000/api/users/login", {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json"
@@ -47,7 +47,7 @@ export async function loginUser(identifier, password) {
 }
 
 export async function getMe( token ) {
-	const response = await fetch("http://localhost:8083/me", {
+	const response = await fetch("http://localhost:8000/api/users/me", {
 		method: "GET",
 		headers: {
 			"Content-Type": "application/json",
