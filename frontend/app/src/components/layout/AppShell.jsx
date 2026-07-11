@@ -2,6 +2,8 @@ import { useState } from "react";
 import styled from "styled-components";
 import Sidebar from "./Sidebar";
 import MainPanel from "./MainPanel";
+import ProfileOverlay from "./ProfileOverlay";
+import { ProfileOverlayProvider, useProfileOverlay } from "./ProfileOverlayContext";
 
 const AppShellRoot = styled.div`
   display: flex;
@@ -27,9 +29,11 @@ const MainContent = styled.main`
   }
 `;
 
-function AppShell( { onLogout } ) {
+function AppShellContent({ onLogout }) {
   const [isDirectMessages, setIsDirectMessages] = useState(true);
   const [activeRoomId, setActiveRoomId] = useState(null);
+
+  const { profile, closeProfile } = useProfileOverlay();
 
   function handleRoomChange(roomId) {
     setActiveRoomId(roomId);
@@ -37,21 +41,38 @@ function AppShell( { onLogout } ) {
   }
 
   return (
-    <AppShellRoot>
-      <Sidebar
-        isDirectMessages={isDirectMessages}
-        activeRoomId={activeRoomId?.id}
-        onRoomChange={handleRoomChange}
-        onDirectMessages={() => setIsDirectMessages(true)}
-        onLogout={onLogout}
-      />
-
-      <MainContent>
-        <MainPanel
-          activeView={isDirectMessages ? true : activeRoomId}
+    <>
+      <AppShellRoot>
+        <Sidebar
+          isDirectMessages={isDirectMessages}
+          activeRoomId={activeRoomId?.id}
+          onRoomChange={handleRoomChange}
+          onDirectMessages={() => setIsDirectMessages(true)}
+          onLogout={onLogout}
         />
-      </MainContent>
-    </AppShellRoot>
+
+        <MainContent>
+          <MainPanel
+            activeView={isDirectMessages ? true : activeRoomId}
+          />
+        </MainContent>
+      </AppShellRoot>
+
+      {profile && (
+        <ProfileOverlay
+          user={profile}
+          onClose={closeProfile}
+        />
+      )}
+    </>
+  );
+}
+
+function AppShell({ onLogout }) {
+  return (
+    <ProfileOverlayProvider>
+      <AppShellContent onLogout={onLogout} />
+    </ProfileOverlayProvider>
   );
 }
 

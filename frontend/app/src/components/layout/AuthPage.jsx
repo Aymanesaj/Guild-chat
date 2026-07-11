@@ -1,6 +1,7 @@
 import styled from "styled-components";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { loginUser, registerUser } from "../../api/authentication.js";
 
 export const Container = styled.div`
   min-height: 100vh;
@@ -111,6 +112,13 @@ export const Footer = styled.div`
   color: var(--color-text);
 `;
 
+export const ErrorText = styled.p`
+  margin-top: -2px;
+  min-height: 18px;
+  font-size: 13px;
+  color: #ff8a8a;
+`;
+
 export const Accent = styled.span`
   margin-left: 6px;
   color: var(--color-accent);
@@ -122,24 +130,40 @@ export const Accent = styled.span`
   }
 `;
 
-function LoginView({ setView, onLogin }) {
+function LoginView({ setView, onLogin, values, onChange, error, loading }) {
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
 	e.preventDefault();
-	onLogin();
+	await onLogin(values.email, values.password);
 	navigate("/app");
-  }
+  };
 
   return (
     <>
       <Subtitle>Sign in to continue.</Subtitle>
 
-      <Form>
-        <Input type="email" placeholder="Email" required />
-        <Input type="password" placeholder="Password" required />
+      <Form onSubmit={handleLogin}>
+        <Input
+          type="email"
+          placeholder="Email"
+          required
+          value={values.email}
+          onChange={(e) => onChange("email", e.target.value)}
+        />
+        <Input
+          type="password"
+          placeholder="Password"
+          required
+          value={values.password}
+          onChange={(e) => onChange("password", e.target.value)}
+        />
 
-        <PrimaryButton type="submit" onClick={handleLogin} >Login</PrimaryButton>
+        <ErrorText>{error}</ErrorText>
+
+        <PrimaryButton type="submit" disabled={loading}>
+          {loading ? "Logging in..." : "Login"}
+        </PrimaryButton>
       </Form>
 
       <TextButton type="button" onClick={() => setView("forgot")}>
@@ -154,18 +178,53 @@ function LoginView({ setView, onLogin }) {
   );
 }
 
-function SignupView({ setView }) {
+function SignupView({ setView, onSignup, values, onChange, error, loading }) {
+  const navigate = useNavigate();
+
+  const handleSignup = async (e) => {
+	e.preventDefault();
+	await onSignup(values.username, values.email, values.password, values.confirmPassword);
+	navigate("/app");
+  };
+
   return (
     <>
       <Subtitle>Create an account to get started.</Subtitle>
 
-      <Form>
-        <Input placeholder="Username" required />
-        <Input type="email" placeholder="Email" required />
-        <Input type="password" placeholder="Password" required />
-        <Input type="password" placeholder="Confirm Password" required />
+      <Form onSubmit={handleSignup}>
+        <Input
+          placeholder="Username"
+          required
+          value={values.username}
+          onChange={(e) => onChange("username", e.target.value)}
+        />
+        <Input
+          type="email"
+          placeholder="Email"
+          required
+          value={values.email}
+          onChange={(e) => onChange("email", e.target.value)}
+        />
+        <Input
+          type="password"
+          placeholder="Password"
+          required
+          value={values.password}
+          onChange={(e) => onChange("password", e.target.value)}
+        />
+        <Input
+          type="password"
+          placeholder="Confirm Password"
+          required
+          value={values.confirmPassword}
+          onChange={(e) => onChange("confirmPassword", e.target.value)}
+        />
 
-        <PrimaryButton type="submit">Create Account</PrimaryButton>
+        <ErrorText>{error}</ErrorText>
+
+        <PrimaryButton type="submit" disabled={loading}>
+          {loading ? "Creating..." : "Create Account"}
+        </PrimaryButton>
       </Form>
 
       <Footer>
@@ -198,15 +257,83 @@ function ForgotView({ setView }) {
 
 function AuthPage( { onLogin } ) {
   const [view, setView] = useState("login");
+  const [form, setForm] = useState({
+    username: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const updateField = (field, value) => {
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const handleLogin = async (email, password) => {
+    setLoading(true);
+    setError("");
+
+    try {
+      await loginUser(email, password);
+      onLogin();
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignup = async (username, email, password, confirmPassword) => {
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      await registerUser(username, email, password);
+      onLogin();
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const renderView = () => {
     switch (view) {
       case "signup":
-        return <SignupView setView={setView} />;
-      case "forgot":
-        return <ForgotView setView={setView} />;
+        return (
+          <SignupView
+            setView={setView}
+            onSignup={handleSignup}
+            values={form}
+            onChange={updateField}
+            error={error}
+            loading={loading}
+          />
+        );
+      // case "forgot":
+      //   return <ForgotView setView={setView} />;
       default:
-        return <LoginView setView={setView} onLogin={onLogin} />;
+        return (
+          <LoginView
+            setView={setView}
+            onLogin={handleLogin}
+            values={form}
+            onChange={updateField}
+            error={error}
+            loading={loading}
+          />
+        );
     }
   };
 
@@ -218,8 +345,8 @@ function AuthPage( { onLogin } ) {
           {view === "login"
             ? "Welcome Back"
             : view === "signup"
-            ? "Create Account"
-            : "Reset Password"}
+            /*? "Create Account"
+            : "Reset Password"*/}
         </Title>
 
         {renderView()}
