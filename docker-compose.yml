@@ -14,9 +14,9 @@ services:
     networks:
       - private
     depends_on:
-      - chat-service
+      # - chat-service
       - identity-service
-      - org-service
+      # - org-service
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
@@ -28,53 +28,53 @@ services:
 # --------------------- Micro services ----------------------
 # -----------------------------------------------------------
 
-  chat-service:
-    build:
-      context: ./services/
-      dockerfile: ./chat-service/Dockerfile
-    container_name: chat-service
-    environment:
-      PORT: 8081
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/health || exit 1"]
-      interval: 20s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
-    networks:
-      - private
-    env_file:
-      - ./.env
-    depends_on:
-      postgres:
-        condition: service_healthy
-    expose:
-      - "8081"
-    restart: always
+  # chat-service:
+  #   build:
+  #     context: ./services/
+  #     dockerfile: ./chat-service/Dockerfile
+  #   container_name: chat-service
+  #   environment:
+  #     PORT: 8081
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/health || exit 1"]
+  #     interval: 20s
+  #     timeout: 3s
+  #     retries: 3
+  #     start_period: 10s
+  #   networks:
+  #     - private
+  #   env_file:
+  #     - ./.env
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   expose:
+  #     - "8081"
+  #   restart: always
 
-  org-service:
-    build:
-      context: ./services/
-      dockerfile: ./org-service/Dockerfile
-    container_name: org-service
-    environment:
-      PORT: 8082
-    networks:
-      - private
-    expose:
-      - "8082"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8082/health || exit 1"]
-      interval: 20s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
-    depends_on:
-      postgres:
-        condition: service_healthy
-    env_file:
-      - ./.env
-    restart: always
+  # org-service:
+  #   build:
+  #     context: ./services/
+  #     dockerfile: ./org-service/Dockerfile
+  #   container_name: org-service
+  #   environment:
+  #     PORT: 8082
+  #   networks:
+  #     - private
+  #   expose:
+  #     - "8082"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "wget -q --spider http://localhost:8082/health || exit 1"]
+  #     interval: 20s
+  #     timeout: 3s
+  #     retries: 3
+  #     start_period: 10s
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   env_file:
+  #     - ./.env
+  #   restart: always
   
   identity-service:
     build: services/identity-service/.
