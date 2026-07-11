@@ -203,7 +203,7 @@
           "description": "",
           "id": 10,
           "links": [],
-          "title": "🟢 Running Containers",
+          "title": "\ud83d\udfe2 Running Containers",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
@@ -282,7 +282,7 @@
           "description": "",
           "id": 11,
           "links": [],
-          "title": "💾 Total Memory Used",
+          "title": "\ud83d\udcbe Total Memory Used",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
@@ -362,7 +362,7 @@
           "description": "",
           "id": 12,
           "links": [],
-          "title": "📡 Total Network In",
+          "title": "\ud83d\udce1 Total Network In",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
@@ -442,7 +442,7 @@
           "description": "",
           "id": 13,
           "links": [],
-          "title": "📤 Total Network Out",
+          "title": "\ud83d\udce4 Total Network Out",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
@@ -522,7 +522,7 @@
           "description": "",
           "id": 14,
           "links": [],
-          "title": "⚠️ Memory % of Limit (highest)",
+          "title": "\u26a0\ufe0f Memory % of Limit (highest)",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
@@ -610,7 +610,7 @@
           "description": "",
           "id": 15,
           "links": [],
-          "title": "🖥️ Top CPU Container",
+          "title": "\ud83d\udda5\ufe0f Top CPU Container",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
@@ -1040,7 +1040,7 @@
           "description": "",
           "id": 30,
           "links": [],
-          "title": "⏱️ System Uptime",
+          "title": "\u23f1\ufe0f System Uptime",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
@@ -1120,7 +1120,7 @@
           "description": "",
           "id": 31,
           "links": [],
-          "title": "🌡️ Max CPU Temp",
+          "title": "\ud83c\udf21\ufe0f Max CPU Temp",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
@@ -1212,7 +1212,7 @@
           "description": "",
           "id": 32,
           "links": [],
-          "title": "🌡️ Core Temperatures",
+          "title": "\ud83c\udf21\ufe0f Core Temperatures",
           "vizConfig": {
             "group": "bargauge",
             "kind": "VizConfig",
@@ -1312,7 +1312,7 @@
           "description": "",
           "id": 33,
           "links": [],
-          "title": "🖥️ Core Usage %",
+          "title": "\ud83d\udda5\ufe0f Core Usage %",
           "vizConfig": {
             "group": "bargauge",
             "kind": "VizConfig",
@@ -1408,7 +1408,7 @@
           "description": "",
           "id": 34,
           "links": [],
-          "title": "📈 Core Usage over Time",
+          "title": "\ud83d\udcc8 Core Usage over Time",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -1529,7 +1529,7 @@
           "description": "",
           "id": 35,
           "links": [],
-          "title": "🌡️ Core Temp over Time",
+          "title": "\ud83c\udf21\ufe0f Core Temp over Time",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -1635,7 +1635,7 @@
                       "kind": "DataQuery",
                       "spec": {
                         "expr": "rate(container_network_receive_bytes_total{name=~\"$container\"}[1m])",
-                        "legendFormat": "⬇ {{container}}"
+                        "legendFormat": "\u2b07 {{container}}"
                       },
                       "version": "v0"
                     },
@@ -1756,7 +1756,7 @@
                       "kind": "DataQuery",
                       "spec": {
                         "expr": "rate(container_network_transmit_bytes_total{name=~\"$container\"}[1m])",
-                        "legendFormat": "⬆ {{container}}"
+                        "legendFormat": "\u2b06 {{container}}"
                       },
                       "version": "v0"
                     },
@@ -1892,7 +1892,7 @@
           "description": "",
           "id": 50,
           "links": [],
-          "title": "🖥️ Total CPU Usage",
+          "title": "\ud83d\udda5\ufe0f Total CPU Usage",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
@@ -1981,7 +1981,7 @@
           "description": "",
           "id": 51,
           "links": [],
-          "title": "📊 Load (1m / 5m / 15m)",
+          "title": "\ud83d\udcca Load (1m / 5m / 15m)",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
@@ -2060,7 +2060,7 @@
           "description": "",
           "id": 52,
           "links": [],
-          "title": "🧠 Memory Used %",
+          "title": "\ud83e\udde0 Memory Used %",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
@@ -2147,7 +2147,7 @@
           "description": "",
           "id": 53,
           "links": [],
-          "title": "🧠 Memory Available",
+          "title": "\ud83e\udde0 Memory Available",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
@@ -2227,7 +2227,7 @@
           "description": "",
           "id": 54,
           "links": [],
-          "title": "🔄 Container Restarts",
+          "title": "\ud83d\udd04 Container Restarts",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
@@ -2306,7 +2306,7 @@
           "description": "",
           "id": 56,
           "links": [],
-          "title": "🖥️ Total CPU Usage over Time",
+          "title": "\ud83d\udda5\ufe0f Total CPU Usage over Time",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -2465,7 +2465,7 @@
           "description": "",
           "id": 57,
           "links": [],
-          "title": "📊 Load Average over Time",
+          "title": "\ud83d\udcca Load Average over Time",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -2643,7 +2643,7 @@
           "description": "",
           "id": 58,
           "links": [],
-          "title": "🧠 Host Memory over Time",
+          "title": "\ud83e\udde0 Host Memory over Time",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -2825,7 +2825,7 @@
           "description": "",
           "id": 59,
           "links": [],
-          "title": "🧠 Memory Breakdown (now)",
+          "title": "\ud83e\udde0 Memory Breakdown (now)",
           "vizConfig": {
             "group": "bargauge",
             "kind": "VizConfig",
@@ -3041,7 +3041,7 @@
           "description": "",
           "id": 60,
           "links": [],
-          "title": "📡 Host Network Receive over Time",
+          "title": "\ud83d\udce1 Host Network Receive over Time",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -3162,7 +3162,7 @@
           "description": "",
           "id": 61,
           "links": [],
-          "title": "📤 Host Network Transmit over Time",
+          "title": "\ud83d\udce4 Host Network Transmit over Time",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -3302,7 +3302,7 @@
           "description": "",
           "id": 63,
           "links": [],
-          "title": "💿 Disk I/O over Time",
+          "title": "\ud83d\udcbf Disk I/O over Time",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -3423,7 +3423,7 @@
           "description": "",
           "id": 64,
           "links": [],
-          "title": "🔄 Container Restart Count over Time",
+          "title": "\ud83d\udd04 Container Restart Count over Time",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -3545,7 +3545,7 @@
           "description": "",
           "id": 65,
           "links": [],
-          "title": "🔄 Restarts Now (bar)",
+          "title": "\ud83d\udd04 Restarts Now (bar)",
           "vizConfig": {
             "group": "bargauge",
             "kind": "VizConfig",
@@ -3639,7 +3639,7 @@
           "description": "",
           "id": 7,
           "links": [],
-          "title": "Memory Snapshot — All Containers",
+          "title": "Memory Snapshot \u2014 All Containers",
           "vizConfig": {
             "group": "gauge",
             "kind": "VizConfig",
@@ -3888,6 +3888,745 @@
                   "mode": "single",
                   "sort": "none"
                 }
+              }
+            },
+            "version": "13.0.3"
+          }
+        }
+      },
+      "p80": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": { "name": "prometheus" },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "pg_connections_used / pg_connections_max",
+                        "instant": true
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 80,
+          "links": [],
+          "title": "\ud83d\udc18 Postgres Connections Used %",
+          "vizConfig": {
+            "group": "stat",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": { "mode": "thresholds" },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      { "color": "green", "value": 0 },
+                      { "color": "yellow", "value": 0.6 },
+                      { "color": "red", "value": 0.8 }
+                    ]
+                  },
+                  "unit": "percentunit"
+                },
+                "overrides": []
+              },
+              "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "percentChangeColorMode": "standard",
+                "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+                "showPercentChange": false,
+                "textMode": "auto",
+                "wideLayout": true
+              }
+            },
+            "version": "13.0.3"
+          }
+        }
+      },
+      "p81": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": { "name": "prometheus" },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": { "expr": "pg_connections_active", "instant": true },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 81,
+          "links": [],
+          "title": "\u26a1 Postgres Active Queries",
+          "vizConfig": {
+            "group": "stat",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": { "fixedColor": "blue", "mode": "fixed" },
+                  "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": 0 }] }
+                },
+                "overrides": []
+              },
+              "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "percentChangeColorMode": "standard",
+                "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+                "showPercentChange": false,
+                "textMode": "auto",
+                "wideLayout": true
+              }
+            },
+            "version": "13.0.3"
+          }
+        }
+      },
+      "p82": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": { "name": "prometheus" },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": { "expr": "pg_connections_idle_in_transaction", "instant": true },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 82,
+          "links": [],
+          "title": "\u26a0\ufe0f Idle-in-Transaction (leak indicator)",
+          "vizConfig": {
+            "group": "stat",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": { "mode": "thresholds" },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      { "color": "green", "value": 0 },
+                      { "color": "yellow", "value": 3 },
+                      { "color": "red", "value": 8 }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "percentChangeColorMode": "standard",
+                "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+                "showPercentChange": false,
+                "textMode": "auto",
+                "wideLayout": true
+              }
+            },
+            "version": "13.0.3"
+          }
+        }
+      },
+      "p83": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": { "name": "prometheus" },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "pg_cache_hit_ratio",
+                        "instant": true,
+                        "legendFormat": "{{database}}"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "Fraction of reads served from shared_buffers. Low values mean shared_buffers is too small.",
+          "id": 83,
+          "links": [],
+          "title": "\ud83d\udcc8 Cache Hit Ratio per Database",
+          "vizConfig": {
+            "group": "bargauge",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": { "mode": "thresholds" },
+                  "max": 1,
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      { "color": "red", "value": 0 },
+                      { "color": "yellow", "value": 0.9 },
+                      { "color": "green", "value": 0.99 }
+                    ]
+                  },
+                  "unit": "percentunit"
+                },
+                "overrides": []
+              },
+              "options": {
+                "displayMode": "gradient",
+                "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+                "maxVizHeight": 300,
+                "minVizHeight": 16,
+                "minVizWidth": 8,
+                "namePlacement": "auto",
+                "orientation": "horizontal",
+                "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+                "showUnfilled": true,
+                "sizing": "auto",
+                "valueMode": "color"
+              }
+            },
+            "version": "13.0.3"
+          }
+        }
+      },
+      "p84": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": { "name": "prometheus" },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "pg_database_size_bytes",
+                        "instant": true,
+                        "legendFormat": "{{database}}"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 84,
+          "links": [],
+          "title": "\ud83d\udcbe Database Size",
+          "vizConfig": {
+            "group": "bargauge",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": { "mode": "thresholds" },
+                  "min": 0,
+                  "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": 0 }] },
+                  "unit": "bytes"
+                },
+                "overrides": []
+              },
+              "options": {
+                "displayMode": "gradient",
+                "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+                "maxVizHeight": 300,
+                "minVizHeight": 16,
+                "minVizWidth": 8,
+                "namePlacement": "auto",
+                "orientation": "horizontal",
+                "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+                "showUnfilled": true,
+                "sizing": "auto",
+                "valueMode": "color"
+              }
+            },
+            "version": "13.0.3"
+          }
+        }
+      },
+      "p85": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": { "name": "prometheus" },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "rate(pg_xact_commit_total[1m])",
+                        "legendFormat": "commits {{database}}"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": { "name": "prometheus" },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "rate(pg_xact_rollback_total[1m])",
+                        "legendFormat": "rollbacks {{database}}"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "B"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 85,
+          "links": [],
+          "title": "\ud83d\udd01 Transactions per Second",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": { "mode": "palette-classic" },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "gradientMode": "hue",
+                    "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                    "insertNulls": false,
+                    "lineInterpolation": "smooth",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": { "type": "linear" },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": { "group": "A", "mode": "none" },
+                    "thresholdsStyle": { "mode": "off" }
+                  },
+                  "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "red", "value": 80 }] },
+                  "unit": "short"
+                },
+                "overrides": []
+              },
+              "options": {
+                "annotations": { "clustering": -1, "multiLane": false },
+                "legend": { "calcs": ["lastNotNull", "max", "mean"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+                "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+              }
+            },
+            "version": "13.0.3"
+          }
+        }
+      },
+      "p86": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": { "name": "prometheus" },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "rate(pg_deadlocks_total[5m])",
+                        "legendFormat": "{{database}}"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 86,
+          "links": [],
+          "title": "\ud83d\udd12 Deadlocks (rate)",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": { "mode": "palette-classic" },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "bars",
+                    "fillOpacity": 60,
+                    "gradientMode": "none",
+                    "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": { "type": "linear" },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": { "group": "A", "mode": "none" },
+                    "thresholdsStyle": { "mode": "off" }
+                  },
+                  "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "red", "value": 1 }] },
+                  "unit": "short"
+                },
+                "overrides": []
+              },
+              "options": {
+                "annotations": { "clustering": -1, "multiLane": false },
+                "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
+                "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+              }
+            },
+            "version": "13.0.3"
+          }
+        }
+      },
+      "p87": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": { "name": "prometheus" },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": { "expr": "pg_locks_granted", "legendFormat": "granted" },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": { "name": "prometheus" },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": { "expr": "pg_locks_waiting", "legendFormat": "waiting" },
+                      "version": "v0"
+                    },
+                    "refId": "B"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 87,
+          "links": [],
+          "title": "\ud83d\udd10 Locks Granted vs Waiting",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": { "mode": "palette-classic" },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "gradientMode": "hue",
+                    "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                    "insertNulls": false,
+                    "lineInterpolation": "smooth",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": { "type": "linear" },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": { "group": "A", "mode": "none" },
+                    "thresholdsStyle": { "mode": "off" }
+                  },
+                  "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "red", "value": 80 }] },
+                  "unit": "short"
+                },
+                "overrides": []
+              },
+              "options": {
+                "annotations": { "clustering": -1, "multiLane": false },
+                "legend": { "calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+                "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+              }
+            },
+            "version": "13.0.3"
+          }
+        }
+      },
+      "p88": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": { "name": "prometheus" },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "pg_replication_lag_seconds",
+                        "legendFormat": "{{standby}}"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "No data shown if there are no standbys attached.",
+          "id": 88,
+          "links": [],
+          "title": "\ud83d\udd01 Replication Lag",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": { "mode": "palette-classic" },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "gradientMode": "hue",
+                    "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                    "insertNulls": false,
+                    "lineInterpolation": "smooth",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": { "type": "linear" },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": { "group": "A", "mode": "none" },
+                    "thresholdsStyle": { "mode": "off" }
+                  },
+                  "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "red", "value": 10 }] },
+                  "unit": "s"
+                },
+                "overrides": []
+              },
+              "options": {
+                "annotations": { "clustering": -1, "multiLane": false },
+                "legend": { "calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+                "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+              }
+            },
+            "version": "13.0.3"
+          }
+        }
+      },
+      "p89": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": { "name": "prometheus" },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "topk(10, pg_table_dead_tuples)",
+                        "instant": true,
+                        "legendFormat": "{{table}}"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "Top 10 tables by dead (unvacuumed) tuple count.",
+          "id": 89,
+          "links": [],
+          "title": "\ud83e\uddf9 Dead Tuples per Table (top 10)",
+          "vizConfig": {
+            "group": "bargauge",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": { "mode": "thresholds" },
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      { "color": "green", "value": 0 },
+                      { "color": "yellow", "value": 10000 },
+                      { "color": "red", "value": 100000 }
+                    ]
+                  },
+                  "unit": "short"
+                },
+                "overrides": []
+              },
+              "options": {
+                "displayMode": "gradient",
+                "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+                "maxVizHeight": 300,
+                "minVizHeight": 16,
+                "minVizWidth": 8,
+                "namePlacement": "auto",
+                "orientation": "horizontal",
+                "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+                "showUnfilled": true,
+                "sizing": "auto",
+                "valueMode": "color"
               }
             },
             "version": "13.0.3"
@@ -4365,6 +5104,106 @@
               "width": 24,
               "x": 0,
               "y": 89
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": { "kind": "ElementReference", "name": "p80" },
+              "height": 4,
+              "width": 4,
+              "x": 0,
+              "y": 99
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": { "kind": "ElementReference", "name": "p81" },
+              "height": 4,
+              "width": 4,
+              "x": 4,
+              "y": 99
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": { "kind": "ElementReference", "name": "p82" },
+              "height": 4,
+              "width": 4,
+              "x": 8,
+              "y": 99
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": { "kind": "ElementReference", "name": "p87" },
+              "height": 4,
+              "width": 6,
+              "x": 12,
+              "y": 99
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": { "kind": "ElementReference", "name": "p88" },
+              "height": 4,
+              "width": 6,
+              "x": 18,
+              "y": 99
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": { "kind": "ElementReference", "name": "p83" },
+              "height": 6,
+              "width": 8,
+              "x": 0,
+              "y": 103
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": { "kind": "ElementReference", "name": "p84" },
+              "height": 6,
+              "width": 8,
+              "x": 8,
+              "y": 103
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": { "kind": "ElementReference", "name": "p89" },
+              "height": 6,
+              "width": 8,
+              "x": 16,
+              "y": 103
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": { "kind": "ElementReference", "name": "p85" },
+              "height": 7,
+              "width": 12,
+              "x": 0,
+              "y": 109
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": { "kind": "ElementReference", "name": "p86" },
+              "height": 7,
+              "width": 12,
+              "x": 12,
+              "y": 109
             }
           }
         ]

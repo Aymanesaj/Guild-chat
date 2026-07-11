@@ -6,16 +6,17 @@ services:
 
   nginx:
     container_name: nginx
-    build: gateway/.
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
     ports:
       - 8000:80
     networks:
       - private
     depends_on:
-      - chat-service
+      # - chat-service
       - identity-service
-      - org-service
-      - frontend
+      # - org-service
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
@@ -23,72 +24,80 @@ services:
       retries: 3
     restart: always
 
-
 # -----------------------------------------------------------
 # --------------------- Micro services ----------------------
 # -----------------------------------------------------------
-  frontend:
-    image: python:alpine
-    command: >
-      python3 -m http.server 8080 --directory /tmp --bind 0.0.0.0
-    container_name: frontend
-    networks:
-      - private
-    volumes:
-      - ./frontend/index.html:/tmp/index.html
-    expose:
-      - "8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: always
-  
-  chat-service:
-    image: python:alpine
-    container_name: chat-service
-    command: >
-      python3 -m http.server 8081 --directory /tmp --bind 0.0.0.0
-    networks:
-      - private
-    volumes:
-      - ./services/chat-service/index.html:/tmp/index.html
-    depends_on:
-      postgres:
-        condition: service_healthy
-    expose:
-      - "8081"
-    restart: always
-  org-service:
-    image: python:alpine
-    command: >
-      python3 -m http.server 8082 --directory /tmp --bind 0.0.0.0
-    container_name: org-service
-    networks:
-      - private
-    volumes:
-      - ./services/org-service/index.html:/tmp/index.html
-    depends_on:
-      postgres:
-        condition: service_healthy
-    expose:
-      - "8082"
-    restart: always
 
+  # chat-service:
+  #   build:
+  #     context: ./services/
+  #     dockerfile: ./chat-service/Dockerfile
+  #   container_name: chat-service
+  #   environment:
+  #     PORT: 8081
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/health || exit 1"]
+  #     interval: 20s
+  #     timeout: 3s
+  #     retries: 3
+  #     start_period: 10s
+  #   networks:
+  #     - private
+  #   env_file:
+  #     - ./.env
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   expose:
+  #     - "8081"
+  #   restart: always
+
+  # org-service:
+  #   build:
+  #     context: ./services/
+  #     dockerfile: ./org-service/Dockerfile
+  #   container_name: org-service
+  #   environment:
+  #     PORT: 8082
+  #   networks:
+  #     - private
+  #   expose:
+  #     - "8082"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "wget -q --spider http://localhost:8082/health || exit 1"]
+  #     interval: 20s
+  #     timeout: 3s
+  #     retries: 3
+  #     start_period: 10s
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   env_file:
+  #     - ./.env
+  #   restart: always
+  
   identity-service:
-    image: python:alpine
-    command: >
-      python3 -m http.server 8083 --directory /tmp --bind 0.0.0.0
+    build: services/identity-service/.
     container_name: identity-service
     networks:
       - private
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health/readiness"]
+      interval: 20s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    env_file:
+      - ./.env
     volumes:
-      - ./services/identity-service/index.html:/tmp/index.html
+      - identity_avatars:/tmp/identity-avatars
     depends_on:
       postgres:
         condition: service_healthy
-    expose:
-      - "8083"
+    ports:
+      - "8083:8083"
     restart: always
+
 
 # -----------------------------------------------------------
 # --------------------- Data exporters ----------------------
@@ -97,15 +106,17 @@ services:
   docker-exporter:
     container_name: docker-exporter
     # build: ./infra/exporter/
-    image: ghcr.io/seraph919/docker-exporter:v2.3
+    image: ghcr.io/seraph919/docker-exporter:v2.4
     expose:
     - "8090"
     volumes:
     - /var/run/user/${UID}/docker.sock:/var/run/docker.sock:ro
     networks:
     - private
+    env_file:
+    - ./.env
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://docker-exporter:8090"]
+      test: ["CMD", "curl", "-f", "http://docker-exporter:8090/metrics.prom"]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -127,6 +138,12 @@ services:
       exec /usr/bin/promtail -config.file=/tmp/config.yml
       "
     #uses port 8093 internally with promitheus
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'printf \"GET / HTTP/1.1\n\n\" > /dev/tcp/127.0.0.1/8093; exit $?;'"]
+      interval: 20s
+      retries: 30
+      timeout: 10s
+      start_period: 10s
     env_file:
       - ./.env
     networks:
@@ -139,8 +156,8 @@ services:
     image: grafana/loki:latest
     container_name: loki
     command: -config.file=/etc/loki/local-config.yaml
-    ports:
-      - "3100:3100"
+    expose:
+      - "3100"
     networks:
       - private
     restart: always
@@ -148,8 +165,13 @@ services:
   prometheus:
     container_name: prometheus
     image: prom/prometheus
-    ports:
-      - "9090:9090"
+    expose:
+      - "9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.external-url=http://localhost/prometheus/'
+      - '--web.route-prefix=/'
     volumes: 
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./infra/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
@@ -166,8 +188,8 @@ services:
       - ./infra/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml
     command:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
-    ports:
-      - "9093:9093"
+    expose:
+      - "9093"
     networks:
       - private
     restart: always
@@ -176,12 +198,12 @@ services:
 # -----------------------------------------------------------
 # -------------------- Data visualization -------------------
 # -----------------------------------------------------------
-
+  # add healthcheck later
   grafana:
     build: ./infra/grafana/
     container_name: grafana
-    ports:
-    - "3000:3000"
+    expose:
+    - "3000"
     networks:
     - private
     user : "root"
@@ -205,10 +227,10 @@ services:
       - database:/var/lib/postgresql/data
     env_file:
       - ./.env
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d appdb"]
+      test: ["CMD-SHELL", "pg_isready -U admin -d transdb"]
       interval: 5s
       timeout: 5s
       retries: 15
@@ -226,6 +248,8 @@ volumes:
     name: "prometheus_data"
   grafana_data:
     name: "grafana_data"
+  identity_avatars:
+    name: "identity_avatars"
 
 networks:
   private:
