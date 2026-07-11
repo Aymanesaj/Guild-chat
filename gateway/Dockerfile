@@ -5,14 +5,12 @@ RUN npm ci
 COPY frontend/app/ ./
 RUN npm run build
 
-FROM owasp/modsecurity-crs:nginx 
+FROM owasp/modsecurity-crs:nginx
 USER root
 RUN apt-get update \
     && apt-get install openssl -y \
     && apt-get clean
-
 RUN rm /etc/nginx/conf.d/default.conf
-
 COPY ./gateway/nginx.conf /etc/nginx/nginx.conf
 COPY --from=frontend-builder /app/dist /usr/share/nginx/html
 COPY ./gateway/script.sh .
