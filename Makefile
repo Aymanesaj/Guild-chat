@@ -2,13 +2,17 @@ ifeq ($(origin UID),undefined)
     export UID := $(shell id -u)
 endif
 
+DOCKER_SOCK := $(shell if [ -S /var/run/user/$$(id -u)/docker.sock ]; then \
+	echo /var/run/user/$$(id -u)/docker.sock; \
+	else echo /var/run/docker.sock; fi)
+
 all: up
 
 up: run
-	docker compose up -d
+	DOCKER_SOCK=$(DOCKER_SOCK) docker compose up -d
 
 build: run
-	docker compose up --build -d
+	DOCKER_SOCK=$(DOCKER_SOCK) docker compose up --build -d
 
 down:
 	docker compose down
@@ -19,6 +23,9 @@ clean:
 fclean:
 	docker system prune -a
 
+ps:
+	docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
 restart:
 	docker compose restart
 
@@ -26,9 +33,6 @@ re: clean build
 
 logs:
 	docker compose logs -f
-
-ps:
-	docker compose ps
 
 run:
 	@if [ ! -f .env ]; then \
