@@ -110,7 +110,7 @@ services:
     expose:
     - "8090"
     volumes:
-    - /var/run/user/${UID}/docker.sock:/var/run/docker.sock:ro
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
     networks:
     - private
     env_file:
