@@ -1,7 +1,11 @@
-FROM node:18-alpine
-RUN apk add --no-cache busybox-extras
+FROM python:3.12-alpine
+
 WORKDIR /app
-COPY health.sh .
-RUN chmod +x health.sh
-EXPOSE 8080
-ENTRYPOINT ["./health.sh"]
+
+RUN pip install --no-cache-dir fastapi uvicorn
+
+COPY frontend/app/mock-server/main.py ./main.py
+
+EXPOSE 8081
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8081"]

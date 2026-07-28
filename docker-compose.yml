@@ -14,9 +14,8 @@ services:
     networks:
       - private
     depends_on:
-      # - chat-service
       - identity-service
-      # - org-service
+      - chat-service
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
@@ -27,6 +26,17 @@ services:
 # -----------------------------------------------------------
 # --------------------- Micro services ----------------------
 # -----------------------------------------------------------
+
+  chat-service:
+    build:
+      context: .
+      dockerfile: services/chat-service/Dockerfile
+    container_name: chat-service
+    networks:
+      - private
+    expose:
+      - "8081"
+    restart: always
 
   # chat-service:
   #   build:
