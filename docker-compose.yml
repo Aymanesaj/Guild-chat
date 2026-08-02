@@ -36,7 +36,7 @@ services:
     environment:
       PORT: 8081
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/actuator/health || exit 1"]
       interval: 20s
       timeout: 3s
       retries: 3
@@ -46,10 +46,30 @@ services:
     env_file:
       - ./.env
     depends_on:
-      postgres:
+      mongodb:
         condition: service_healthy
     expose:
       - "8081"
+    restart: always
+
+  mongodb:
+    image: mongo:7
+    container_name: mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+    volumes:
+      - mongo_data:/data/db
+    expose:
+      - "27017"
+    networks:
+      - private
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: always
 
   # org-service:
@@ -250,7 +270,8 @@ volumes:
     name: "grafana_data"
   identity_avatars:
     name: "identity_avatars"
-
+  mongo_data:
+    name: "mongo_data"
 networks:
   private:
     name: private
