@@ -13,11 +13,14 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 @RequiredArgsConstructor
 public class ChatWebSocketHandler extends TextWebSocketHandler {
 
+    private final SessionRegistry sessionRegistry;
+
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
         String userId = (String) session.getAttributes().get("userId");
         String username = (String) session.getAttributes().get("username");
         log.info("WS connected: userId={} username={} sessionId={}", userId, username, session.getId());
+        sessionRegistry.register(userId, session);
     }
 
     @Override
@@ -31,5 +34,6 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         String userId = (String) session.getAttributes().get("userId");
         log.info("WS disconnected: userId={} status={}", userId, status);
+        sessionRegistry.unregister(userId, session);
     }
 }
