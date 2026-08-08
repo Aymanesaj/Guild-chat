@@ -3,7 +3,9 @@ package com.fttranscendence.chatservice.message.service;
 import com.fttranscendence.chatservice.message.domain.Room;
 import com.fttranscendence.chatservice.message.repository.RoomRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.List;
@@ -46,5 +48,10 @@ public class RoomService {
 
     public boolean isMember(Room room, String userId) {
         return room.getMemberIds().contains(userId);
+    }
+
+    public Room getRoomOrThrow(String roomId) {
+        return roomRepository.findById(roomId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Room not found"));
     }
 }
