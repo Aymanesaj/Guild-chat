@@ -6,3 +6,14 @@ tmp/*
 .vscode/
 *.sh
 *.md
+
+services/chat-service/target/
+
+
+notes/*
+
+
+CLAUDE.md
+
+# shared with the frontend dev — must be tracked despite the *.md rule above
+!services/chat-service/API_CONTRACT.md
