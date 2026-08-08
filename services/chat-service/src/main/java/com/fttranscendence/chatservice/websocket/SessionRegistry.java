@@ -3,6 +3,7 @@ package com.fttranscendence.chatservice.websocket;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketSession;
 
+import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
@@ -26,5 +27,9 @@ public class SessionRegistry {
         if (sessions.isEmpty()) {
             userSessions.remove(userId);
         }
+    }
+
+    public Set<WebSocketSession> getSessions(String userId) {
+        return userSessions.getOrDefault(userId, Collections.emptySet());
     }
 }
