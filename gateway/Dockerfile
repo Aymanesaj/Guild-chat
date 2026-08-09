@@ -8,7 +8,7 @@ RUN npm run build
 FROM owasp/modsecurity-crs:nginx
 USER root
 RUN apt-get update \
-    && apt-get install openssl -y \
+    && apt-get install openssl libmodsecurity3 modsecurity-crs -y \
     && apt-get clean
 RUN rm /etc/nginx/conf.d/default.conf
 COPY ./gateway/nginx.conf /etc/nginx/nginx.conf
