@@ -17,3 +17,6 @@ CLAUDE.md
 
 # shared with the frontend dev — must be tracked despite the *.md rule above
 !services/chat-service/API_CONTRACT.md
+
+
+tasks.md

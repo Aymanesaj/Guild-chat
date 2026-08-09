@@ -9,6 +9,10 @@ services:
     build:
       context: .
       dockerfile: gateway/Dockerfile
+    volumes:
+      - ./gateway/modsec/main.conf:/etc/nginx/modsec/main.conf
+      - ./gateway/modsec/modsecurity.conf:/etc/nginx/modsec/modsecurity.conf
+      - ./gateway/modsec/unicode.mapping:/etc/nginx/modsec/unicode.mapping
     ports:
       - 8000:80
     networks:
@@ -72,29 +76,29 @@ services:
       start_period: 10s
     restart: always
 
-  # org-service:
-  #   build:
-  #     context: ./services/
-  #     dockerfile: ./org-service/Dockerfile
-  #   container_name: org-service
-  #   environment:
-  #     PORT: 8082
-  #   networks:
-  #     - private
-  #   expose:
-  #     - "8082"
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "wget -q --spider http://localhost:8082/health || exit 1"]
-  #     interval: 20s
-  #     timeout: 3s
-  #     retries: 3
-  #     start_period: 10s
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   env_file:
-  #     - ./.env
-  #   restart: always
+  org-service:
+    build:
+      context: ./services/
+      dockerfile: ./org-service/Dockerfile
+    container_name: org-service
+    environment:
+      PORT: 8082
+    networks:
+      - private
+    expose:
+      - "8082"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8082/health || exit 1"]
+      interval: 20s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ./.env
+    restart: always
   
   identity-service:
     build: services/identity-service/.
