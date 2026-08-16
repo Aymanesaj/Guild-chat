@@ -31,15 +31,21 @@ public class RoomService {
                 ));
     }
 
-    public Room createGroup(String name, List<String> memberIds) {
+    public Room createGroup(String name, String ownerId, List<String> memberIds) {
         return roomRepository.save(
                 Room.builder()
                         .type(Room.RoomType.GROUP)
                         .name(name)
+                        .ownerId(ownerId)
                         .memberIds(memberIds)
                         .createdAt(Instant.now())
                         .build()
         );
+    }
+
+    /** True if the room is a group and this user created it. Always false for DMs. */
+    public boolean isOwner(Room room, String userId) {
+        return room.getOwnerId() != null && room.getOwnerId().equals(userId);
     }
 
     public List<Room> getRoomsForUser(String userId) {

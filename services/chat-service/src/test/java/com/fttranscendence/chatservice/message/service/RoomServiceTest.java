@@ -60,11 +60,39 @@ class RoomServiceTest {
     void createGroup_savesRoomWithNameAndMembers() {
         when(roomRepository.save(any(Room.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Room result = roomService.createGroup("squad", List.of("u1", "u2", "u3"));
+        Room result = roomService.createGroup("squad", "u1", List.of("u1", "u2", "u3"));
 
         assertThat(result.getType()).isEqualTo(Room.RoomType.GROUP);
         assertThat(result.getName()).isEqualTo("squad");
+        assertThat(result.getOwnerId()).isEqualTo("u1");
         assertThat(result.getMemberIds()).containsExactly("u1", "u2", "u3");
+    }
+
+    @Test
+    void getOrCreateDm_leavesOwnerNull() {
+        when(roomRepository.findByTypeAndMemberIds(any(), any())).thenReturn(Optional.empty());
+        when(roomRepository.save(any(Room.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Room result = roomService.getOrCreateDm("userA", "userB");
+
+        // A DM has no owner: both members are equal peers.
+        assertThat(result.getOwnerId()).isNull();
+    }
+
+    @Test
+    void isOwner_trueOnlyForTheCreator() {
+        Room group = Room.builder().ownerId("u1").memberIds(List.of("u1", "u2")).build();
+        assertThat(roomService.isOwner(group, "u1")).isTrue();
+        assertThat(roomService.isOwner(group, "u2")).isFalse();
+    }
+
+    @Test
+    void isOwner_falseForDmWithNoOwner() {
+        // Guards against a null ownerId matching a null userId and granting
+        // ownership of every DM to nobody-in-particular.
+        Room dm = Room.builder().memberIds(List.of("u1", "u2")).build();
+        assertThat(roomService.isOwner(dm, "u1")).isFalse();
+        assertThat(roomService.isOwner(dm, null)).isFalse();
     }
 
     @Test

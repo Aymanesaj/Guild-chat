@@ -82,6 +82,7 @@ Every room the caller belongs to — both DMs and groups.
     "id": "68b3f1c9a4e2b10c3d5f7a01",
     "type": "GROUP",
     "name": "development",
+    "ownerId": "user-1",
     "memberIds": ["user-1", "user-2"],
     "createdAt": "2026-08-10T11:20:31.442Z"
   },
@@ -89,11 +90,18 @@ Every room the caller belongs to — both DMs and groups.
     "id": "68b3f1c9a4e2b10c3d5f7a02",
     "type": "DM",
     "name": null,
+    "ownerId": null,
     "memberIds": ["user-1", "user-9"],
     "createdAt": "2026-08-10T11:22:04.118Z"
   }
 ]
 ```
+
+`ownerId` is the user who created a **group**, and is `null` for DMs — a DM has no
+owner, both members are equal peers. It is recorded but **not yet enforced**:
+there are no privileged operations (no add/remove member, rename, or delete), so
+today every member has identical rights. Do not build UI that implies otherwise
+yet; rooms created before 2026-08-17 have `ownerId: null` even when they are groups.
 
 **There is no `/api/direct-messages` endpoint.** Filter this response client-side:
 

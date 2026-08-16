@@ -47,7 +47,7 @@ public class RoomController {
                 request.getMemberIds().stream()
         ).distinct().toList();
 
-        return roomService.createGroup(request.getName(), members);
+        return roomService.createGroup(request.getName(), userId, members);
     }
 
     @GetMapping("/{roomId}/messages")

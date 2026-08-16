@@ -62,13 +62,15 @@ class RoomControllerTest {
 
     @Test
     void createGroup_includesCallerInMemberList() {
-        when(roomService.createGroup(eq("squad"), anyList()))
+        when(roomService.createGroup(eq("squad"), eq("user-1"), anyList()))
                 .thenAnswer(inv -> Room.builder().id("g1").name(inv.getArgument(0))
-                        .memberIds(inv.getArgument(1)).build());
+                        .ownerId(inv.getArgument(1)).memberIds(inv.getArgument(2)).build());
 
         Room result = controller.createGroup("user-1", new CreateGroupRequest("squad", List.of("user-2", "user-3")));
 
         assertThat(result.getMemberIds()).containsExactlyInAnyOrder("user-1", "user-2", "user-3");
+        // Owner comes from the authenticated caller, never from the request body.
+        assertThat(result.getOwnerId()).isEqualTo("user-1");
     }
 
     @Test
