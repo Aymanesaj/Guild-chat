@@ -4,6 +4,8 @@ infra/exporter/
 test.js
 tmp/*
 .vscode/
+.idea/
+.claude/
 *.sh
 *.md
 
