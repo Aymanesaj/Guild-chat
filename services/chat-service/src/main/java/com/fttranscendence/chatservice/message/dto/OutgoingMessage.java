@@ -13,6 +13,14 @@ import java.time.Instant;
 @AllArgsConstructor
 public class OutgoingMessage {
 
+    /**
+     * Discriminator so the client can tell a chat message from an ErrorFrame
+     * without guessing from which fields happen to be present.
+     * Builder.Default keeps the value when the object is built via builder().
+     */
+    @Builder.Default
+    private String type = "MESSAGE";
+
     private String id;
     private String roomId;
     private String senderId;

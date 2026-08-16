@@ -4,8 +4,10 @@ import com.fttranscendence.chatservice.message.domain.ChatMessage;
 import com.fttranscendence.chatservice.message.domain.Room;
 import com.fttranscendence.chatservice.message.dto.CreateDmRequest;
 import com.fttranscendence.chatservice.message.dto.CreateGroupRequest;
+import com.fttranscendence.chatservice.message.dto.RoomMemberResponse;
 import com.fttranscendence.chatservice.message.service.ChatMessageService;
 import com.fttranscendence.chatservice.message.service.RoomService;
+import com.fttranscendence.chatservice.websocket.SessionRegistry;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -22,6 +24,7 @@ public class RoomController {
 
     private final RoomService roomService;
     private final ChatMessageService chatMessageService;
+    private final SessionRegistry sessionRegistry;
 
     @GetMapping
     public List<Room> getMyRooms(@RequestAttribute("userId") String userId) {
@@ -57,5 +60,17 @@ public class RoomController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not a member of this room");
         }
         return chatMessageService.getHistory(roomId, page, size);
+    }
+
+    @GetMapping("/{roomId}/members")
+    public List<RoomMemberResponse> getMembers(@RequestAttribute("userId") String userId,
+                                                @PathVariable String roomId) {
+        Room room = roomService.getRoomOrThrow(roomId);
+        if (!roomService.isMember(room, userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not a member of this room");
+        }
+        return room.getMemberIds().stream()
+                .map(memberId -> new RoomMemberResponse(memberId, sessionRegistry.isOnline(memberId)))
+                .toList();
     }
 }

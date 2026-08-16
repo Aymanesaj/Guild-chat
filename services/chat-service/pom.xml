@@ -43,26 +43,25 @@
             <artifactId>spring-boot-starter-websocket</artifactId>
         </dependency>
 
-        <!-- JPA / Hibernate -->
-        <!-- <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-jpa</artifactId>
-        </dependency>  -->
-
-        <!-- PostgreSQL -->
-        <!-- <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>postgresql</artifactId>
-            <scope>runtime</scope>
-        </dependency> -->
+        <!-- Persistence. MongoDB only: chat-service owns no relational data.
+             JPA + PostgreSQL used to be declared here (scaffold leftovers) and
+             were removed — identity-service owns Postgres, not us. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-mongodb</artifactId>
         </dependency>
-        <!-- Monitoring -->
+
+        <!-- Monitoring: actuator exposes the endpoints, micrometer-registry-prometheus
+             renders the metrics in the text format Prometheus scrapes. Actuator alone
+             gives you /actuator/health but NOT /actuator/prometheus. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+            <scope>runtime</scope>
         </dependency>
 
         <!-- Lombok -->

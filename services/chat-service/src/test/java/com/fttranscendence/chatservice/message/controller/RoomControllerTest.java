@@ -4,8 +4,10 @@ import com.fttranscendence.chatservice.message.domain.ChatMessage;
 import com.fttranscendence.chatservice.message.domain.Room;
 import com.fttranscendence.chatservice.message.dto.CreateDmRequest;
 import com.fttranscendence.chatservice.message.dto.CreateGroupRequest;
+import com.fttranscendence.chatservice.message.dto.RoomMemberResponse;
 import com.fttranscendence.chatservice.message.service.ChatMessageService;
 import com.fttranscendence.chatservice.message.service.RoomService;
+import com.fttranscendence.chatservice.websocket.SessionRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,12 +30,14 @@ class RoomControllerTest {
     private RoomService roomService;
     @Mock
     private ChatMessageService chatMessageService;
+    @Mock
+    private SessionRegistry sessionRegistry;
 
     private RoomController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new RoomController(roomService, chatMessageService);
+        controller = new RoomController(roomService, chatMessageService, sessionRegistry);
     }
 
     @Test
@@ -93,5 +97,35 @@ class RoomControllerTest {
                 .hasFieldOrPropertyWithValue("statusCode", HttpStatus.FORBIDDEN);
 
         verifyNoInteractions(chatMessageService);
+    }
+
+    @Test
+    void getMembers_returnsMemberIdsWithLivePresence() {
+        Room room = Room.builder().id("room-1").memberIds(List.of("user-1", "user-2")).build();
+
+        when(roomService.getRoomOrThrow("room-1")).thenReturn(room);
+        when(roomService.isMember(room, "user-1")).thenReturn(true);
+        when(sessionRegistry.isOnline("user-1")).thenReturn(true);
+        when(sessionRegistry.isOnline("user-2")).thenReturn(false);
+
+        List<RoomMemberResponse> result = controller.getMembers("user-1", "room-1");
+
+        assertThat(result).containsExactly(
+                new RoomMemberResponse("user-1", true),
+                new RoomMemberResponse("user-2", false));
+    }
+
+    @Test
+    void getMembers_throwsForbidden_whenCallerIsNotMember() {
+        Room room = Room.builder().id("room-1").memberIds(List.of("someone-else")).build();
+
+        when(roomService.getRoomOrThrow("room-1")).thenReturn(room);
+        when(roomService.isMember(room, "user-1")).thenReturn(false);
+
+        assertThatThrownBy(() -> controller.getMembers("user-1", "room-1"))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasFieldOrPropertyWithValue("statusCode", HttpStatus.FORBIDDEN);
+
+        verifyNoInteractions(sessionRegistry);
     }
 }

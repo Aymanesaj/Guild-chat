@@ -1,255 +1,301 @@
-# chat-service API Contract
+# chat-service — API contract
 
-This is what chat-service **actually** exposes today, verified against the
-running stack (not aspirational — every example below was captured from a
-real request/response). If you're integrating the frontend, this is the
-ground truth; `frontend/app/mock-server/main.py` is the old FastAPI mock and
-its contract (`/api/rooms/{id}/chat`, `/api/rooms/{id}/members`,
-`/api/direct-messages`) does **not** match this service.
+Everything below is what the service **actually implements** today, read off the code.
+Frontend should code against this document, not against `frontend/app/mock-server/main.py`
+(the mock is a different, older contract and is not part of the Docker stack).
 
-All requests go through the gateway at `http://localhost:8000` — chat-service
-is never reachable directly from the browser (`nginx.conf` only exposes
-`:8000`; chat-service's own port `8081` is internal to the Docker network).
+Base URL through the gateway: `http://localhost:8000`
+Use **relative paths** in the frontend (`/api/rooms`), never a hardcoded origin — the SPA is
+served by the same nginx that proxies the API.
 
 ---
 
-## Authentication
+## 1. Authentication
 
-Every endpoint below (REST and WebSocket) requires a JWT **issued by
-identity-service** — chat-service never issues its own tokens and has no
-login/register endpoints of its own.
+chat-service does not issue tokens. identity-service does. chat-service only verifies them,
+using the shared `JWT_SECRET`.
 
-1. Get a token from identity-service, through the gateway:
-   ```
-   POST /api/users/register   { username, email, password, displayName? }
-   POST /api/users/login      { identifier, password }   // identifier = username or email
-   ```
-   Response (both): `{ "tokenType": "Bearer", "accessToken": "<jwt>", "user": {...} }`
+### REST — `Authorization` header
 
-2. **REST calls** — send it as a header:
-   ```
-   Authorization: Bearer <accessToken>
-   ```
-   Missing or invalid → `401`. There is currently **no other way** to
-   authenticate a REST call — no cookies, no session.
+Every `/api/rooms/**` request needs:
 
-3. **WebSocket connect** — the header approach doesn't work here, because the
-   browser's native `WebSocket` API cannot set custom headers on the
-   handshake request. Use a query parameter instead:
-   ```
-   ws://localhost:8000/ws/chat?token=<accessToken>
-   ```
-   (`Authorization: Bearer` header is also accepted if your WS client can set
-   one — useful for non-browser testing — but query param is the only option
-   from real browser JS.)
+```
+Authorization: Bearer <token>
+```
 
-Token expiry is whatever identity-service set (`exp` claim) — chat-service
-just checks it's valid and unexpired, it doesn't refresh anything.
+Exempt: `/actuator/**`, `/ws/**`. Everything else without a valid token gets **401**.
+
+```js
+const token = localStorage.getItem("token");
+
+const response = await fetch("/api/rooms", {
+  headers: { Authorization: `Bearer ${token}` },
+});
+```
+
+### WebSocket — `?token=` query parameter
+
+The browser `WebSocket` constructor **cannot set request headers** — there is no API for it.
+So the handshake takes the token from the query string instead:
+
+```js
+const socket = new WebSocket(`/ws/chat?token=${token}`);   // resolve to ws:// origin
+```
+
+A bad or missing token fails the handshake with **401** and the socket never opens.
+(`JwtHandshakeInterceptor` also accepts an `Authorization` header, which is useful for
+non-browser clients and tests, but is unreachable from browser JS.)
 
 ---
 
-## REST Endpoints
+## 2. Identifiers
+
+**All ids are strings.** MongoDB generates them (`"68b3f1c9a4e2..."`), they are not integers.
+The mock's `room_id: int` does not exist here. Never do arithmetic on, sort, or `parseInt` an id.
+
+---
+
+## 3. What chat-service does *not* own
+
+There is no username, avatar, or email in any response below — only `userId` / `senderId`.
+
+identity-service owns user data. To display a member or a message author, resolve the
+profile separately:
+
+```
+GET /api/users/{userId}      → identity-service
+```
+
+Cache these client-side; do not re-fetch per message.
+
+---
+
+## 4. REST endpoints
 
 ### `GET /api/rooms`
-List every room (DM or group) the authenticated caller is a member of.
 
-**Auth:** required.
-**Response `200`:**
+Every room the caller belongs to — both DMs and groups.
+
 ```json
 [
   {
-    "id": "6a76064b586b1c7be1750adb",
-    "type": "DM",
-    "name": null,
-    "memberIds": ["a07abeb0-8b70-4e2c-9e4c-1f2040f0e858", "a215c5f8-d810-4518-ad4c-8d551eb6dfc4"],
-    "createdAt": "2026-08-07T16:22:35.744Z"
+    "id": "68b3f1c9a4e2b10c3d5f7a01",
+    "type": "GROUP",
+    "name": "development",
+    "memberIds": ["user-1", "user-2"],
+    "createdAt": "2026-08-10T11:20:31.442Z"
   },
   {
-    "id": "6a76064b586b1c7be1750adc",
-    "type": "GROUP",
-    "name": "contract-test",
-    "memberIds": ["a215c5f8-d810-4518-ad4c-8d551eb6dfc4", "a07abeb0-8b70-4e2c-9e4c-1f2040f0e858"],
-    "createdAt": "2026-08-07T16:22:35.806Z"
+    "id": "68b3f1c9a4e2b10c3d5f7a02",
+    "type": "DM",
+    "name": null,
+    "memberIds": ["user-1", "user-9"],
+    "createdAt": "2026-08-10T11:22:04.118Z"
   }
 ]
 ```
-- `name` is always `null` for `type: "DM"`.
-- `memberIds` are identity-service user **UUIDs** — chat-service does not
-  know usernames/display names. See [Known Gaps](#known-gaps).
 
----
+**There is no `/api/direct-messages` endpoint.** Filter this response client-side:
 
-### `POST /api/rooms/dm`
-Get-or-create a 1:1 room with another user. Idempotent — calling it again
-with the same pair returns the **same** room, doesn't create a duplicate
-(dedup is on the sorted pair of member IDs, so it doesn't matter who calls it
-first).
-
-**Auth:** required. The caller is always one side of the DM (taken from the
-JWT, not from the request body).
-
-**Request body:**
-```json
-{ "targetUserId": "a07abeb0-8b70-4e2c-9e4c-1f2040f0e858" }
+```js
+const dms = rooms.filter((room) => room.type === "DM");
 ```
-`targetUserId` must be non-blank or you get `400`.
 
-**Response `200`:** same `Room` shape as above, `type: "DM"`.
-
----
-
-### `POST /api/rooms/group`
-Create a group room. Not idempotent — every call creates a new room, even
-with identical `name`/`memberIds`.
-
-**Auth:** required. The caller is automatically added as a member — you do
-**not** need to include your own id in `memberIds`.
-
-**Request body:**
-```json
-{ "name": "contract-test", "memberIds": ["a07abeb0-8b70-4e2c-9e4c-1f2040f0e858"] }
-```
-`name` non-blank, `memberIds` non-empty, or `400`.
-
-**Response `201`:**
-```json
-{
-  "id": "6a76064b586b1c7be1750adc",
-  "type": "GROUP",
-  "name": "contract-test",
-  "memberIds": ["a215c5f8-d810-4518-ad4c-8d551eb6dfc4", "a07abeb0-8b70-4e2c-9e4c-1f2040f0e858"],
-  "createdAt": "2026-08-07T16:22:35.806379865Z"
-}
-```
+For a DM, the display name is the *other* member — `memberIds.find(id => id !== myUserId)`,
+then resolve via identity-service.
 
 ---
 
 ### `GET /api/rooms/{roomId}/messages?page=0&size=50`
-Message history for a room, **newest first**.
 
-**Auth:** required, and the caller must be a member of `roomId` or this
-returns `403` (not just an empty list — membership is enforced, not silently
-filtered).
+Message history, newest-first paging. Replaces the mock's `/api/rooms/{id}/chat`.
 
-**Query params:** `page` (default `0`), `size` (default `50`) — standard
-offset pagination.
-
-**Response `200`:**
 ```json
 [
   {
-    "id": "6a75d613586b1c7be1750ad4",
-    "roomId": "6a75d60a586b1c7be1750ad3",
-    "senderId": "a215c5f8-d810-4518-ad4c-8d551eb6dfc4",
-    "content": "hello",
-    "sentAt": "2026-08-07T12:56:51.179Z"
+    "id": "68b3f2...",
+    "roomId": "68b3f1c9a4e2b10c3d5f7a01",
+    "senderId": "user-2",
+    "content": "did you finish the layout?",
+    "sentAt": "2026-08-10T11:41:09.771Z"
   }
 ]
 ```
-Note: **no `senderUsername` field here** — history entries only carry
-`senderId` (the raw user UUID). The live WebSocket broadcast *does* include
-`senderUsername` (see below) because it's available from the sender's JWT at
-broadcast time; history reads from MongoDB, which only ever stored `senderId`.
-If the UI needs a display name in history, it has to resolve `senderId` →
-username itself (via identity-service), same as for `memberIds`.
 
-`roomId` that doesn't exist → `404`. `roomId` that exists but caller isn't a
-member of → `403`.
+- `403` if the caller is not a member of the room
+- `404` if the room does not exist
 
 ---
 
-## Error response shape
+### `GET /api/rooms/{roomId}/members`
 
-All errors (`400`, `401`, `403`, `404`) use Spring Boot's default shape —
-this is not a custom error format:
 ```json
-{
-  "timestamp": "2026-08-07T16:22:35.761+00:00",
-  "status": 403,
-  "error": "Forbidden",
-  "path": "/api/rooms/6a76064b586b1c7be1750adb/messages"
-}
+[
+  { "userId": "user-1", "online": true },
+  { "userId": "user-2", "online": false }
+]
 ```
-There's no `message` field with a human-readable reason — just `status` +
-`error`. Branch UI behavior on the numeric `status`, not on parsing `error`.
+
+`online` is live presence, derived from open WebSocket sessions — not a stored field.
+It is accurate at request time only; it does **not** push updates. A user with no open
+socket reads as offline even if they have the tab open but the socket dropped.
+
+- `403` if the caller is not a member
 
 ---
 
-## WebSocket — `/ws/chat`
+### `POST /api/rooms/dm`
 
-**Connect:** `ws://localhost:8000/ws/chat?token=<accessToken>`
+Get the existing DM room with another user, or create it. Idempotent — calling twice
+returns the same room, so it is safe to call on every "open conversation" click.
 
-- Invalid/missing token → the handshake never completes (no `101`), the
-  connection attempt fails outright. No specific error message is sent back
-  on the socket, because there is no socket yet at that point.
-- On success, the connection just opens — no "welcome" frame, no ack.
-
-**Send** (client → server), one JSON object per text frame:
 ```json
-{ "roomId": "6a75d60a586b1c7be1750ad3", "content": "hello" }
+{ "targetUserId": "user-9" }
 ```
-- `senderId` is **never** part of the payload — it's taken from your JWT,
-  can't be spoofed by sending a different value.
-- If `roomId`/`content` missing, `content` blank, payload isn't valid JSON,
-  or you're not a member of `roomId`: the message is **silently dropped**.
-  No error frame is sent back to you — this is a deliberate choice (see
-  `ChatWebSocketHandler.handleTextMessage`), so if a send appears to do
-  nothing, check `docker logs chat-service` for the actual reason
-  (`"Dropping malformed message"`, `"Rejected message: ... is not a member"`,
-  etc.) rather than expecting client-visible feedback today.
 
-**Receive** (server → client), broadcast to every online session of every
-room member — **including the sender's own other connections**:
+Returns `200` with the Room object.
+
+---
+
+### `POST /api/rooms/group`
+
+```json
+{ "name": "development", "memberIds": ["user-2", "user-3"] }
+```
+
+The caller is added automatically — do not include your own id. Returns `201` with the Room.
+
+---
+
+## 5. WebSocket protocol
+
+```
+ws://localhost:8000/ws/chat?token=<jwt>
+```
+
+nginx is already configured to proxy the upgrade (`gateway/nginx.conf`), with a 3600s read
+timeout so idle sockets are not killed.
+
+### Sending
+
+```json
+{ "roomId": "68b3f1c9a4e2b10c3d5f7a01", "content": "hello" }
+```
+
+Only those two fields are read. **`senderId` is never taken from the client** — it comes from
+the verified JWT, so spoofing another user is not possible.
+
+Limits, enforced server-side:
+
+| Limit | Value | On breach |
+|---|---|---|
+| `content` length | 2000 characters | `ERROR` frame, `VALIDATION_FAILED` |
+| `content` blank/missing | — | `ERROR` frame, `VALIDATION_FAILED` |
+| Raw frame size | 16 KB | Tomcat closes the connection |
+| Send rate | burst 10, then 5/sec | `ERROR` frame, `RATE_LIMITED` |
+
+### Every server frame has a `type`
+
+Two kinds of frame arrive on the socket. Switch on `type` before reading anything else:
+
+```js
+socket.onmessage = (event) => {
+  const frame = JSON.parse(event.data);
+  if (frame.type === "ERROR") return showError(frame.code, frame.message);
+  appendIfNew(frame.id, frame);
+};
+```
+
+### Receiving
+
+Broadcast to every member of the room with an open socket, including the sender. So the
+sender should **not** optimistically append its own message — it will come back, with the
+real server id and timestamp.
+
 ```json
 {
-  "id": "6a75d613586b1c7be1750ad4",
-  "roomId": "6a75d60a586b1c7be1750ad3",
-  "senderId": "a215c5f8-d810-4518-ad4c-8d551eb6dfc4",
-  "senderUsername": "med_curl",
+  "type": "MESSAGE",
+  "id": "68b3f2...",
+  "roomId": "68b3f1c9a4e2b10c3d5f7a01",
+  "senderId": "user-2",
+  "senderUsername": "amine",
   "content": "hello",
-  "sentAt": "2026-08-07T12:56:51.179Z"
+  "sentAt": "2026-08-10T11:41:09.771Z"
 }
 ```
-- Only delivered to members who are **currently connected**. There is no
-  push notification / offline queue — if a member isn't connected to
-  `/ws/chat` at send time, they simply don't get this frame (they'll see it
-  later via `GET /api/rooms/{roomId}/messages`, since it's persisted
-  regardless of who's online).
-- One user can have multiple simultaneous sessions (multiple tabs/devices) —
-  all of them receive the broadcast.
+
+### Error frames
+
+Sent **only to the client that caused them**, never broadcast to the room.
+
+```json
+{ "type": "ERROR", "code": "RATE_LIMITED", "message": "Too many messages, slow down" }
+```
+
+| `code` | Meaning | Suggested client behaviour |
+|---|---|---|
+| `INVALID_PAYLOAD` | Frame was not valid JSON for a message | Bug in the client — log it |
+| `VALIDATION_FAILED` | Blank content, or over 2000 chars | Show inline, keep the text |
+| `ROOM_NOT_FOUND` | No such `roomId` | Refresh the room list |
+| `FORBIDDEN` | Not a member of that room | Refresh the room list |
+| `RATE_LIMITED` | Sending too fast | Back off, retry after ~1s |
+| `SERVER_ERROR` | Our fault | Show "message failed to send", allow retry |
+
+One message is delivered per open socket, so the same user with two tabs receives it twice —
+dedupe on `id`.
+
+### Known limitations (backend side, mine to fix)
+
+1. ~~Invalid messages fail silently.~~ **Fixed** — every rejection now returns an `ERROR`
+   frame with a code (see the table above).
+2. **`senderUsername` is inconsistent.** It is present on WebSocket frames (taken from the JWT
+   claim) but absent from REST history, which returns the raw stored message. So the same
+   message has a different shape depending on where it came from. Until this is fixed, resolve
+   names from identity-service in both paths and ignore `senderUsername`.
+3. **No delivery on reconnect.** Messages sent while a socket is closed are persisted but not
+   replayed on reconnect — refetch history after reconnecting.
 
 ---
 
-## Known Gaps (not implemented — do not assume these exist)
+## 6. Frontend migration checklist
 
-- **`GET /api/rooms/{id}/members`** — does not exist. If you need a member
-  list with online/offline status, `Room.memberIds` (from `GET /api/rooms`)
-  plus your own presence tracking is what's available today; there's no
-  chat-service endpoint that returns member *details*.
-- **`GET /api/direct-messages`** — does not exist as a distinct concept. DMs
-  are just rooms with `type: "DM"` — use `GET /api/rooms` and filter by
-  `type` client-side, or `POST /api/rooms/dm` to get/create one.
-- **No username/display-name enrichment anywhere.** Every `memberIds`/
-  `senderId` is a raw identity-service UUID. This is deliberate — chat-service
-  doesn't own user data (see the project's architecture rules) — but it means
-  the frontend must resolve UUIDs to display names itself, presumably via an
-  identity-service endpoint (check that service's contract separately; not
-  covered here).
-- **No read receipts, typing indicators, online-presence broadcast, message
-  editing, or message deletion.** None of these exist in any form yet.
-- **No pagination cursor / "load more" beyond `page`/`size`** — plain offset
-  pagination, no cursor-based infinite scroll support.
+| File | Change |
+|---|---|
+| `src/api/*.js` | Drop the `http://localhost:8000` prefix — use relative paths |
+| `src/api/*.js` | Add `Authorization: Bearer ${token}` to every chat call |
+| `src/api/roomChat.js` | `/api/rooms/{id}/chat` → `/api/rooms/{id}/messages` |
+| `src/api/directMessages.js` | Delete — filter `getRooms()` by `type === "DM"` |
+| `src/api/roomMembers.js` | Response shape is now `{userId, online}`, no `username` |
+| components | Room ids are strings, not numbers |
+| `MessageComposer.jsx` | `handleSubmit` is a no-op — needs to send over the socket |
+| new | WebSocket client: connect, dedupe on `id`, reconnect + refetch history |
 
 ---
 
-## Quick reference table
+## 7. Minimal working example
 
-| Method | Path | Auth | Body | Success | Notes |
-|---|---|---|---|---|---|
-| POST | `/api/users/register` | none | `{username,email,password}` | `200` | identity-service, not chat-service |
-| POST | `/api/users/login` | none | `{identifier,password}` | `200` | identity-service, not chat-service |
-| GET | `/api/rooms` | Bearer | — | `200` | list caller's rooms |
-| POST | `/api/rooms/dm` | Bearer | `{targetUserId}` | `200` | idempotent get-or-create |
-| POST | `/api/rooms/group` | Bearer | `{name, memberIds[]}` | `201` | caller auto-added |
-| GET | `/api/rooms/{id}/messages?page&size` | Bearer | — | `200` / `403` / `404` | newest first |
-| WS | `/ws/chat?token=` | query param | JSON frames | — | see above |
+```js
+const token = localStorage.getItem("token");
+
+// history
+const messages = await fetch(`/api/rooms/${roomId}/messages`, {
+  headers: { Authorization: `Bearer ${token}` },
+}).then((r) => r.json());
+
+// live
+const wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/chat?token=${token}`;
+const socket = new WebSocket(wsUrl);
+
+socket.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+  if (message.roomId !== roomId) return;      // one socket carries all your rooms
+  appendIfNew(message.id, message);
+};
+
+// send
+socket.send(JSON.stringify({ roomId, content: text }));
+```
+
+Note the last point: **one socket carries every room the user is in.** There is no
+subscribe/join step — the server broadcasts based on room membership in the database.
+The client must route incoming frames by `roomId` itself.

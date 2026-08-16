@@ -5,7 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
@@ -15,13 +15,16 @@ import java.time.Instant;
 @NoArgsConstructor
 @AllArgsConstructor
 @Document(collection = "messages")
+// Matches findByRoomIdOrderBySentAtDesc exactly: filter by roomId, then walk
+// sentAt in already-sorted order. A roomId-only index would still force Mongo
+// to sort the matched documents in memory.
+@CompoundIndex(name = "room_sent_idx", def = "{'roomId': 1, 'sentAt': -1}")
 public class ChatMessage {
 
     @Id
     private String id;
 
-    @Indexed
-    private String roomId;      // indexed — you'll query by this constantly
+    private String roomId;
 
     private String senderId;    // always from verified JWT sub, never client input
 
