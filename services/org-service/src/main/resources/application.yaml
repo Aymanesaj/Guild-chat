@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: org-service
+  
+  jpa:
+    open-in-view: false
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/org_service_db}
+    username: ${SPRING_DATASOURCE_USERNAME:admin}
+    password: ${SPRING_DATASOURCE_PASSWORD:admin}
+
+server:
+  port: ${PORT:8082}
