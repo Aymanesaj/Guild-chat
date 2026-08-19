@@ -45,31 +45,8 @@ services:
       - private
     env_file:
       - ./.env
-    depends_on:
-      mongodb:
-        condition: service_healthy
     expose:
       - "8081"
-    restart: always
-
-  mongodb:
-    image: mongo:7
-    container_name: mongodb
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
-    volumes:
-      - mongo_data:/data/db
-    expose:
-      - "27017"
-    networks:
-      - private
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 20s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
     restart: always
 
   # org-service:
@@ -95,7 +72,7 @@ services:
   #   env_file:
   #     - ./.env
   #   restart: always
-  
+
   identity-service:
     build: services/identity-service/.
     container_name: identity-service
@@ -142,7 +119,7 @@ services:
       retries: 5
       start_period: 5s
     restart: always
-  
+
 
   promtail:
     image: grafana/promtail:latest
@@ -192,7 +169,7 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--web.external-url=http://localhost/prometheus/'
       - '--web.route-prefix=/'
-    volumes: 
+    volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./infra/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
       - prometheus_data:/prometheus
@@ -213,7 +190,7 @@ services:
     networks:
       - private
     restart: always
-    
+
 
 # -----------------------------------------------------------
 # -------------------- Data visualization -------------------
@@ -257,7 +234,7 @@ services:
     restart: always
     networks:
       - private
-  
+
   # # vault:
   # #   image: hashicorp/vault:latest
 
@@ -270,8 +247,6 @@ volumes:
     name: "grafana_data"
   identity_avatars:
     name: "identity_avatars"
-  mongo_data:
-    name: "mongo_data"
 networks:
   private:
     name: private
