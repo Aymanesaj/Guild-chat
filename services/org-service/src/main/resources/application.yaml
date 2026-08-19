@@ -3,6 +3,8 @@ spring:
     name: org-service
   
   jpa:
+    hibernate:
+      ddl-auto: update
     open-in-view: false
 
   datasource:
