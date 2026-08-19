@@ -33,8 +33,14 @@ services:
       context: ./services/
       dockerfile: ./chat-service/Dockerfile
     container_name: chat-service
+    # No env_file here on purpose: ./.env exports SPRING_DATASOURCE_* for
+    # identity, and OS env vars outrank application.properties in Spring's
+    # Environment, so chat-service would silently connect to transdb.
     environment:
-      PORT: 8081
+      SERVER_PORT: 8081
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${CHAT_DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${CHAT_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${CHAT_DB_PASSWORD}
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/actuator/health || exit 1"]
       interval: 20s
@@ -43,8 +49,9 @@ services:
       start_period: 10s
     networks:
       - private
-    env_file:
-      - ./.env
+    depends_on:
+      postgres:
+        condition: service_healthy
     expose:
       - "8081"
     restart: always

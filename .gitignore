@@ -12,9 +12,8 @@ tmp/*
 services/chat-service/target/
 
 
-notes/*
-
-
+services/chat-service/notes
+services/chat-service/notes/*
 
 # shared with the frontend dev — must be tracked despite the *.md rule above
 !services/chat-service/API_CONTRACT.md
