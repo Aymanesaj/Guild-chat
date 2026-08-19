@@ -32,4 +32,13 @@ public class MemberRole {
     @ManyToOne
     @JoinColumn(name = "role_id", nullable = false)
     private Role role;
+
+    // setters
+    public void setRoomMember(RoomMember roomMember) {
+        this.roomMember = roomMember;
+    }
+
+    public void setRole(Role role) {
+        this.role = role;
+    }
 }
