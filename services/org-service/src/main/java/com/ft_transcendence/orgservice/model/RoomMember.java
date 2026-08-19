@@ -34,4 +34,13 @@ public class RoomMember {
 
     @Column(name = "user_id", nullable = false)
     private UUID userId;
+
+    // setters
+    public void setRoom(Room room) {
+        this.room = room;
+    }
+
+    public void setUserId(UUID userId) {
+        this.userId = userId;
+    }
 }
