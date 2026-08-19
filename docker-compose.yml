@@ -52,30 +52,33 @@ services:
   #     - "8081"
   #   restart: always
 
-  # org-service:
-  #   build:
-  #     context: ./services/
-  #     dockerfile: ./org-service/Dockerfile
-  #   container_name: org-service
-  #   environment:
-  #     PORT: 8082
-  #   networks:
-  #     - private
-  #   expose:
-  #     - "8082"
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "wget -q --spider http://localhost:8082/health || exit 1"]
-  #     interval: 20s
-  #     timeout: 3s
-  #     retries: 3
-  #     start_period: 10s
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   env_file:
-  #     - ./.env
-  #   restart: always
-  
+  org-service:
+    build: services/org-service/.
+    container_name: org-service
+    environment:
+      PORT: 8082
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/org_service_db
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+    networks:
+      - private
+    expose:
+      - "8082"
+    ports:
+      - "8082:8082"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/healthz"]
+      interval: 20s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ./.env
+    restart: always
+
   identity-service:
     build: services/identity-service/.
     container_name: identity-service
@@ -225,12 +228,13 @@ services:
     container_name: postgres
     volumes:
       - database:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
     env_file:
       - ./.env
     expose:
       - "5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d transdb"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 15
