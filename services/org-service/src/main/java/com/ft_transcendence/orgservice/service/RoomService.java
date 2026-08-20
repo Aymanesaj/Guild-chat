@@ -15,6 +15,10 @@ import com.ft_transcendence.orgservice.model.Role;
 import com.ft_transcendence.orgservice.model.RoleName;
 import com.ft_transcendence.orgservice.model.RoomMember;
 import com.ft_transcendence.orgservice.model.MemberRole;
+import com.ft_transcendence.orgservice.exception.NotFoundException;
+import java.util.List;
+import java.util.UUID;
+import java.security.Principal;
 
 @Service
 public class RoomService {
@@ -35,8 +39,28 @@ public class RoomService {
         this.memberRoleRepository = memberRoleRepository;
     }
 
+    public List<RoomResponse> getRoomsByUserId(UUID userId) {
+        List<RoomMember> roomMembers = roomMemberRepository.findByUserId(userId);
+        return roomMembers.stream()
+                .map(roomMember -> new RoomResponse(roomMember.getRoom().getId(), roomMember.getRoom().getName(), roomMember.getRoom().getCreatedAt(), roomMember.getRoom().getType(), roomMember.getRoom().getUpdatedAt()))
+                .toList();
+    }
+
+    public boolean isUserInRoom(Long roomId, UUID userId) {
+        return roomMemberRepository.existsByRoomIdAndUserId(roomId, userId);
+    }
+
+    public RoomResponse getRoomById(Long roomId, UUID userId) {
+        if (!isUserInRoom(roomId, userId)) {
+            throw new NotFoundException("User is not a member of the room with id: " + roomId);
+        }
+        Room room = roomRepository.findById(roomId).orElseThrow(()
+        -> new NotFoundException("Room not found with id: " + roomId));
+        return new RoomResponse(room.getId(), room.getName(), room.getCreatedAt(), room.getType(), room.getUpdatedAt());
+    }
+
     @Transactional
-    public RoomResponse createRoom(CreateRoomRequest request) {
+    public RoomResponse createRoom(CreateRoomRequest request, UUID creatorId) {
         if ((request.name() == null || request.name().isBlank())
              && request.type() == RoomType.GROUP) {
             throw new BadRequestException("GROUP rooms must have a non-blank name");
@@ -66,7 +90,7 @@ public class RoomService {
         // Create default room member for the creator of the room
         RoomMember roomMember = new RoomMember();
         roomMember.setRoom(savedRoom);
-        roomMember.setUserId(request.creatorId());
+        roomMember.setUserId(creatorId);
         RoomMember savedRoomMember = roomMemberRepository.save(roomMember);
 
         // Assign the OWNER role to the creator of the room
