@@ -43,4 +43,9 @@ public class RoomMember {
     public void setUserId(UUID userId) {
         this.userId = userId;
     }
+
+    // getters
+    public Room getRoom() {
+        return room;
+    }
 }
