@@ -13,6 +13,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import java.util.List;
 import java.security.Principal;
 import java.util.UUID;
+import com.ft_transcendence.orgservice.dto.AddMemberRequest;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
+import com.ft_transcendence.orgservice.dto.CreateDirectMessageRequest;
+import org.springframework.web.bind.annotation.DeleteMapping;
 
 @RestController
 @RequestMapping("/rooms")
@@ -21,6 +26,17 @@ public class RoomController {
 
     public RoomController(RoomService roomService) {
         this.roomService = roomService;        
+    }
+
+    @PostMapping("/{roomId}/members")
+    public ResponseEntity<Void> addMember(
+            @PathVariable Long roomId,
+            @Valid @RequestBody AddMemberRequest request,
+            Principal principal
+    ) {
+        UUID actorId = UUID.fromString(principal.getName());
+        roomService.addMember(roomId, actorId, request.UserId());
+        return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
     @GetMapping
@@ -35,6 +51,18 @@ public class RoomController {
         return roomService.getRoomById(id, userId);
     }
 
+    @PostMapping("/dm")
+    public RoomResponse createDirectMessageRoom(
+            @Valid @RequestBody CreateDirectMessageRequest request,
+            Principal principal
+    ) {
+        UUID creatorId = UUID.fromString(principal.getName());
+        return roomService.createDirectMessageRoom(
+                creatorId,
+                request.userId()
+        );
+    }
+
     @PostMapping
     public RoomResponse createRoom(
             @Valid @RequestBody CreateRoomRequest request,
@@ -42,5 +70,16 @@ public class RoomController {
     ) {
         UUID creatorId = UUID.fromString(principal.getName());
         return roomService.createRoom(request, creatorId);
+    }
+
+    @DeleteMapping("/{roomId}/members/{userId}")
+    public ResponseEntity<Void> removeMember(
+            @PathVariable Long roomId,
+            @PathVariable UUID userId,
+            Principal principal
+    ) {
+        UUID actorId = UUID.fromString(principal.getName());
+        roomService.removeMember(roomId, actorId, userId);
+        return ResponseEntity.noContent().build();
     }
 }
