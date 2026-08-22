@@ -7,6 +7,7 @@ import com.ft_transcendence.orgservice.model.RoleName;
 import java.util.Collection;
 import com.ft_transcendence.orgservice.model.RoomMember;
 import java.util.List;
+import java.util.Optional;
 
 public interface MemberRoleRepository extends JpaRepository<MemberRole, Long> {
 
@@ -19,6 +20,8 @@ public interface MemberRoleRepository extends JpaRepository<MemberRole, Long> {
     void deleteAllByRoomMember(RoomMember roomMember);
 
     List<MemberRole> findByRoomMemberRoomId(Long roomId);
+
+    Optional<MemberRole> findByRoomMember(RoomMember roomMember);
 
     boolean existsByRoomMemberRoomIdAndRoomMemberUserIdAndRoleName(
             Long roomId,

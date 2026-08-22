@@ -42,6 +42,76 @@ public class RoomService {
         this.memberRoleRepository = memberRoleRepository;
     }
 
+    private boolean isOwner(Long roomId, UUID userId) {
+        return memberRoleRepository.existsByRoomMemberRoomIdAndRoomMemberUserIdAndRoleName(
+                roomId,
+                userId,
+                RoleName.OWNER
+        );
+    }
+
+    public List<RoleName> getRolesByRoomId(Long roomId, UUID userId) {
+        if (roomRepository.findById(roomId).isEmpty() || !isUserInRoom(roomId, userId)) {
+            throw new NotFoundException("Room not found with id: " + roomId);
+        }
+        List<Role> roles = roleRepository.findByRoomId(roomId);
+        return roles.stream()
+                .map(Role::getName)
+                .toList();
+    }
+
+    @Transactional
+    public void markRoomAsRead(Long roomId, UUID userId) {
+        RoomMember roomMember = roomMemberRepository
+                .findByRoomIdAndUserId(roomId, userId)
+                .orElseThrow(() ->
+                        new NotFoundException(
+                                "User is not a member of this room"
+                        )
+                );
+
+        roomMember.setLastReadAt(java.time.Instant.now());
+        roomMemberRepository.save(roomMember);
+    }
+
+    @Transactional
+    public void updateMemberRole(Long roomId, UUID targetUserId, RoleName newRoleName, UUID actorId) {
+        if (roomRepository.findById(roomId).isEmpty() || !isUserInRoom(roomId, actorId)) {
+            throw new NotFoundException("Room not found with id: " + roomId);
+        }
+
+        if (!isOwner(roomId, actorId)) {
+            throw new ForbiddenException("User does not have permission to update member roles in this room");
+        }
+
+        RoomMember targetRoomMember = roomMemberRepository
+                .findByRoomIdAndUserId(roomId, targetUserId)
+                .orElseThrow(() ->
+                        new NotFoundException(
+                                "Target user is not a member of this room"
+                        )
+                );
+
+        Role newRole = roleRepository
+                .findByRoomIdAndName(roomId, newRoleName)
+                .orElseThrow(() ->
+                        new NotFoundException(
+                                "Role not found in this room"
+                        )
+                );
+
+        MemberRole memberRole = memberRoleRepository
+                .findByRoomMember(targetRoomMember)
+                .orElseThrow(() ->
+                        new IllegalStateException(
+                                "Target user has no role assigned in this room"
+                        )
+                );
+
+        memberRole.setRole(newRole);
+        memberRoleRepository.save(memberRole);
+    }
+
     @Transactional
     public RoomResponse updateRoom(Long roomId, UpdateRoomRequest request, UUID userId) {
         Room room = roomRepository.findById(roomId)
@@ -71,7 +141,7 @@ public class RoomService {
     }
 
     public List<MemberResponse> getMembersByRoomId(Long roomId, UUID userId) {
-        if (!isUserInRoom(roomId, userId) || roomRepository.findById(roomId).isEmpty()) {
+        if (roomRepository.findById(roomId).isEmpty() || !isUserInRoom(roomId, userId)) {
             // 404 Not Found is more appropriate than 403 Forbidden in this case, as the user should not be able to determine whether the room exists or not if they are not a member. However, since the requirement specifies to return 403 Forbidden, we will follow that.
             throw new NotFoundException("Room not found with id: " + roomId);
         }
@@ -171,7 +241,7 @@ public class RoomService {
                         userId,
                         RoleName.OWNER
                 )) {
-            throw new ForbiddenException("Cannot remove the owner of the room");
+            throw new ForbiddenException("Owner cannot leave the room.");
         }
         memberRoleRepository.deleteAllByRoomMember(roomMember);
         roomMemberRepository.delete(roomMember);

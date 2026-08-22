@@ -21,6 +21,8 @@ import com.ft_transcendence.orgservice.dto.CreateDirectMessageRequest;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import com.ft_transcendence.orgservice.dto.MemberResponse;
 import com.ft_transcendence.orgservice.dto.UpdateRoomRequest;
+import com.ft_transcendence.orgservice.model.RoleName;
+import com.ft_transcendence.orgservice.dto.UpdateMemberRoleRequest;
 
 @RestController
 @RequestMapping("/rooms")
@@ -31,6 +33,18 @@ public class RoomController {
         this.roomService = roomService;        
     }
 
+    @PatchMapping("/{roomId}/members/{userId}/roles")
+    public ResponseEntity<Void> updateMemberRole(
+            @PathVariable Long roomId,
+            @PathVariable UUID userId,
+            @Valid @RequestBody UpdateMemberRoleRequest request,
+            Principal principal
+    ) {
+        UUID actorId = UUID.fromString(principal.getName());
+        roomService.updateMemberRole(roomId, userId, request.roleName(), actorId);
+        return ResponseEntity.noContent().build();
+    }
+
     @PatchMapping("/{roomId}")
     public RoomResponse updateRoom(
             @PathVariable Long roomId,
@@ -39,6 +53,12 @@ public class RoomController {
     ) {
         UUID userId = UUID.fromString(principal.getName());
         return roomService.updateRoom(roomId, request, userId);
+    }
+
+    @GetMapping("/{roomId}/roles")
+    public List<RoleName> getRoles(@PathVariable Long roomId, Principal principal) {
+        UUID userId = UUID.fromString(principal.getName());
+        return roomService.getRolesByRoomId(roomId, userId);
     }
 
     @GetMapping("{roomId}/members")
@@ -68,6 +88,13 @@ public class RoomController {
     public RoomResponse getRoomById(@PathVariable Long id, Principal principal) {
         UUID userId = UUID.fromString(principal.getName());
         return roomService.getRoomById(id, userId);
+    }
+
+    @PostMapping("/{roomId}/read")
+    public ResponseEntity<Void> markRoomAsRead(@PathVariable Long roomId, Principal principal) {
+        UUID userId = UUID.fromString(principal.getName());
+        roomService.markRoomAsRead(roomId, userId);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/dm")
