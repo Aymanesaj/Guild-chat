@@ -41,4 +41,14 @@ public class MemberRole {
     public void setRole(Role role) {
         this.role = role;
     }
+
+    public RoomMember getRoomMember() {
+        return roomMember;
+    }
+
+    // getters
+
+    public Role getRole() {
+        return role;
+    }
 }

@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import com.ft_transcendence.orgservice.exception.ForbiddenException;
+import com.ft_transcendence.orgservice.dto.MemberResponse;
 
 @Service
 public class RoomService {
@@ -38,6 +39,37 @@ public class RoomService {
         this.roomMemberRepository = roomMemberRepository;
         this.roleRepository = roleRepository;
         this.memberRoleRepository = memberRoleRepository;
+    }
+
+    public List<MemberResponse> getMembersByRoomId(Long roomId, UUID userId) {
+        if (!isUserInRoom(roomId, userId) || roomRepository.findById(roomId).isEmpty()) {
+            // 404 Not Found is more appropriate than 403 Forbidden in this case, as the user should not be able to determine whether the room exists or not if they are not a member. However, since the requirement specifies to return 403 Forbidden, we will follow that.
+            throw new NotFoundException("Room not found with id: " + roomId);
+        }
+        List<RoomMember> roomMembers = roomMemberRepository.findByRoomId(roomId);
+        List<MemberRole> memberRoles = memberRoleRepository.findByRoomMemberRoomId(roomId);
+        return roomMembers.stream()
+        .map(roomMember -> {
+
+            RoleName role = memberRoles.stream()
+                    .filter(memberRole ->
+                            memberRole.getRoomMember().getId()
+                                    .equals(roomMember.getId())
+                    )
+                    .map(memberRole -> memberRole.getRole().getName())
+                    .findFirst()
+                    .orElseThrow(() ->
+                            new IllegalStateException(
+                                    "Member has no role assigned"
+                            )
+                    );
+
+            return new MemberResponse(
+                    roomMember.getUserId(),
+                    role
+            );
+        })
+        .toList();
     }
 
     @Transactional
@@ -80,6 +112,10 @@ public class RoomService {
 
     @Transactional
     public void addMember(Long roomId, UUID actorId, UUID targetUserId) {
+        
+        // check if target user with that id exists in identity service
+        // ... later, for now we assume the user exists
+
         Room room = roomRepository.findById(roomId)
                 .orElseThrow(() ->
                         new NotFoundException("Room not found with id: " + roomId)

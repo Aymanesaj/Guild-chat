@@ -48,4 +48,12 @@ public class RoomMember {
     public Room getRoom() {
         return room;
     }
+
+    public UUID getUserId() {
+        return userId;
+    }
+
+    public Long getId() {
+        return id;
+    }
 }
