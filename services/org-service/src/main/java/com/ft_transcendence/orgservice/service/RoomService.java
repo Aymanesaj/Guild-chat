@@ -21,6 +21,7 @@ import java.util.Optional;
 import java.util.UUID;
 import com.ft_transcendence.orgservice.exception.ForbiddenException;
 import com.ft_transcendence.orgservice.dto.MemberResponse;
+import com.ft_transcendence.orgservice.dto.UpdateRoomRequest;
 
 @Service
 public class RoomService {
@@ -39,6 +40,34 @@ public class RoomService {
         this.roomMemberRepository = roomMemberRepository;
         this.roleRepository = roleRepository;
         this.memberRoleRepository = memberRoleRepository;
+    }
+
+    @Transactional
+    public RoomResponse updateRoom(Long roomId, UpdateRoomRequest request, UUID userId) {
+        Room room = roomRepository.findById(roomId)
+                .orElseThrow(() -> new NotFoundException("Room not found with id: " + roomId));
+
+        if (!isUserInRoom(roomId, userId)) {
+            throw new NotFoundException("Room not found with id: " + roomId);
+        }
+
+        if (!canManageMembers(roomId, userId)) {
+            throw new ForbiddenException("User does not have permission to update this room");
+        }
+
+        if (room.getName().equals(request.name())) {
+            throw new BadRequestException("New room name is the same as the current name");
+        }
+
+        room.setName(request.name());
+
+        return new RoomResponse(
+                room.getId(),
+                room.getName(),
+                room.getCreatedAt(),
+                room.getType(),
+                room.getUpdatedAt()
+        );
     }
 
     public List<MemberResponse> getMembersByRoomId(Long roomId, UUID userId) {
@@ -72,6 +101,39 @@ public class RoomService {
         .toList();
     }
 
+    private boolean canDeleteRoom(Long roomId, UUID userId) {
+        return memberRoleRepository.existsByRoomMemberRoomIdAndRoomMemberUserIdAndRoleName(
+                roomId,
+                userId,
+                RoleName.OWNER
+        );
+    }
+
+    @Transactional
+    public void deleteRoom(Long roomId, UUID userId) {
+        Room room = roomRepository.findById(roomId)
+                .orElseThrow(() -> new NotFoundException("Room not found with id: " + roomId));
+
+        if (!isUserInRoom(roomId, userId)) {
+            throw new NotFoundException("Room not found with id: " + roomId);
+        }
+
+        if (!canDeleteRoom(roomId, userId)) {
+            throw new ForbiddenException("User does not have permission to delete this room");
+        }
+
+        List<RoomMember> roomMembers = roomMemberRepository.findByRoomId(roomId);
+        for (RoomMember roomMember : roomMembers) {
+            memberRoleRepository.deleteAllByRoomMember(roomMember);
+        }
+
+        roomMemberRepository.deleteAll(roomMembers);
+
+        roleRepository.deleteAllByRoomId(roomId);
+
+        roomRepository.delete(room);
+    }
+
     @Transactional
     public void removeMember(Long roomId, UUID actorId, UUID targetUserId) {
         
@@ -90,24 +152,29 @@ public class RoomService {
             );
         }
 
-        RoomMember targetRoomMember = roomMemberRepository
-                .findByRoomIdAndUserId(roomId, targetUserId)
+        leaveRoom(roomId, targetUserId);
+    }
+
+    @Transactional
+    public void leaveRoom(Long roomId, UUID userId) {
+        RoomMember roomMember = roomMemberRepository
+                .findByRoomIdAndUserId(roomId, userId)
                 .orElseThrow(() ->
                         new NotFoundException(
-                                "Target user is not a member of this room"
+                                "User is not a member of this room"
                         )
                 );
 
         if (memberRoleRepository
                 .existsByRoomMemberRoomIdAndRoomMemberUserIdAndRoleName(
                         roomId,
-                        targetUserId,
+                        userId,
                         RoleName.OWNER
                 )) {
             throw new ForbiddenException("Cannot remove the owner of the room");
         }
-        memberRoleRepository.deleteAllByRoomMember(targetRoomMember);
-        roomMemberRepository.delete(targetRoomMember);
+        memberRoleRepository.deleteAllByRoomMember(roomMember);
+        roomMemberRepository.delete(roomMember);
     }
 
     @Transactional

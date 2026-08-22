@@ -1,6 +1,7 @@
 package com.ft_transcendence.orgservice.controller;
 
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import com.ft_transcendence.orgservice.dto.CreateDirectMessageRequest;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import com.ft_transcendence.orgservice.dto.MemberResponse;
+import com.ft_transcendence.orgservice.dto.UpdateRoomRequest;
 
 @RestController
 @RequestMapping("/rooms")
@@ -27,6 +29,16 @@ public class RoomController {
 
     public RoomController(RoomService roomService) {
         this.roomService = roomService;        
+    }
+
+    @PatchMapping("/{roomId}")
+    public RoomResponse updateRoom(
+            @PathVariable Long roomId,
+            @Valid @RequestBody UpdateRoomRequest request,
+            Principal principal
+    ) {
+        UUID userId = UUID.fromString(principal.getName());
+        return roomService.updateRoom(roomId, request, userId);
     }
 
     @GetMapping("{roomId}/members")
@@ -42,7 +54,7 @@ public class RoomController {
             Principal principal
     ) {
         UUID actorId = UUID.fromString(principal.getName());
-        roomService.addMember(roomId, actorId, request.UserId());
+        roomService.addMember(roomId, actorId, request.userId());
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
@@ -79,6 +91,13 @@ public class RoomController {
         return roomService.createRoom(request, creatorId);
     }
 
+    @DeleteMapping("/{roomId}/members/me")
+    public ResponseEntity<Void> leaveRoom(@PathVariable Long roomId, Principal principal) {
+        UUID userId = UUID.fromString(principal.getName());
+        roomService.leaveRoom(roomId, userId);
+        return ResponseEntity.noContent().build();
+    }
+
     @DeleteMapping("/{roomId}/members/{userId}")
     public ResponseEntity<Void> removeMember(
             @PathVariable Long roomId,
@@ -87,6 +106,13 @@ public class RoomController {
     ) {
         UUID actorId = UUID.fromString(principal.getName());
         roomService.removeMember(roomId, actorId, userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{roomId}")
+    public ResponseEntity<Void> deleteRoom(@PathVariable Long roomId, Principal principal) {
+        UUID userId = UUID.fromString(principal.getName());
+        roomService.deleteRoom(roomId, userId);
         return ResponseEntity.noContent().build();
     }
 }
