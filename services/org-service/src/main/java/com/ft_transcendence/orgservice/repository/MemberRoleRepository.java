@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import com.ft_transcendence.orgservice.model.RoleName;
 import java.util.Collection;
 import com.ft_transcendence.orgservice.model.RoomMember;
+import java.util.List;
 
 public interface MemberRoleRepository extends JpaRepository<MemberRole, Long> {
 
@@ -16,6 +17,8 @@ public interface MemberRoleRepository extends JpaRepository<MemberRole, Long> {
     );
 
     void deleteAllByRoomMember(RoomMember roomMember);
+
+    List<MemberRole> findByRoomMemberRoomId(Long roomId);
 
     boolean existsByRoomMemberRoomIdAndRoomMemberUserIdAndRoleName(
             Long roomId,

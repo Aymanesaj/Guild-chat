@@ -18,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import com.ft_transcendence.orgservice.dto.CreateDirectMessageRequest;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import com.ft_transcendence.orgservice.dto.MemberResponse;
 
 @RestController
 @RequestMapping("/rooms")
@@ -26,6 +27,12 @@ public class RoomController {
 
     public RoomController(RoomService roomService) {
         this.roomService = roomService;        
+    }
+
+    @GetMapping("{roomId}/members")
+    public List<MemberResponse> getMembers(@PathVariable Long roomId, Principal principal) {
+        UUID userId = UUID.fromString(principal.getName());
+        return roomService.getMembersByRoomId(roomId, userId);
     }
 
     @PostMapping("/{roomId}/members")
