@@ -1,5 +1,6 @@
 package com.ft_transcendence.orgservice.service;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.ft_transcendence.orgservice.repository.RoomRepository;
@@ -22,6 +23,7 @@ import java.util.UUID;
 import com.ft_transcendence.orgservice.exception.ForbiddenException;
 import com.ft_transcendence.orgservice.dto.MemberResponse;
 import com.ft_transcendence.orgservice.dto.UpdateRoomRequest;
+import com.ft_transcendence.orgservice.client.IdentityServiceClient;
 
 @Service
 public class RoomService {
@@ -29,17 +31,23 @@ public class RoomService {
     private final RoomMemberRepository roomMemberRepository;
     private final RoleRepository roleRepository;
     private final MemberRoleRepository memberRoleRepository;
+    private final IdentityServiceClient identityServiceClient;
+    private final DirectMessageCreationService directMessageCreationService;
 
     public RoomService(
             RoomRepository roomRepository, 
             RoomMemberRepository roomMemberRepository, 
             RoleRepository roleRepository, 
-            MemberRoleRepository memberRoleRepository
+            MemberRoleRepository memberRoleRepository,
+            IdentityServiceClient identityServiceClient,
+            DirectMessageCreationService directMessageCreationService
     ) {
         this.roomRepository = roomRepository;
         this.roomMemberRepository = roomMemberRepository;
         this.roleRepository = roleRepository;
         this.memberRoleRepository = memberRoleRepository;
+        this.identityServiceClient = identityServiceClient;
+        this.directMessageCreationService = directMessageCreationService;
     }
 
     private boolean isOwner(Long roomId, UUID userId) {
@@ -84,6 +92,10 @@ public class RoomService {
             throw new ForbiddenException("User does not have permission to update member roles in this room");
         }
 
+        if (newRoleName == RoleName.OWNER) {
+            throw new BadRequestException("Cannot assign OWNER role to a member");
+        }
+
         RoomMember targetRoomMember = roomMemberRepository
                 .findByRoomIdAndUserId(roomId, targetUserId)
                 .orElseThrow(() ->
@@ -108,6 +120,14 @@ public class RoomService {
                         )
                 );
 
+        if (memberRole.getRole().getName() == RoleName.OWNER) {
+            throw new ForbiddenException("Cannot change the role of the OWNER");
+        }
+
+        if (memberRole.getRole().getName() == newRoleName) {
+            throw new BadRequestException("New role is the same as the current role");
+        }
+
         memberRole.setRole(newRole);
         memberRoleRepository.save(memberRole);
     }
@@ -121,11 +141,11 @@ public class RoomService {
             throw new NotFoundException("Room not found with id: " + roomId);
         }
 
-        if (!canManageMembers(roomId, userId)) {
+        if (!canManageMembers(roomId, userId) && room.getType() == RoomType.GROUP) {
             throw new ForbiddenException("User does not have permission to update this room");
         }
 
-        if (room.getName().equals(request.name())) {
+        if (room.getName() != null && room.getName().equals(request.name())) {
             throw new BadRequestException("New room name is the same as the current name");
         }
 
@@ -171,7 +191,12 @@ public class RoomService {
         .toList();
     }
 
-    private boolean canDeleteRoom(Long roomId, UUID userId) {
+    private boolean canDeleteRoom(Long roomId, UUID userId, Room room) {
+        
+        if (room.getType() == RoomType.DM) {
+            return true; // DM rooms can be deleted by any member
+        }
+
         return memberRoleRepository.existsByRoomMemberRoomIdAndRoomMemberUserIdAndRoleName(
                 roomId,
                 userId,
@@ -188,7 +213,7 @@ public class RoomService {
             throw new NotFoundException("Room not found with id: " + roomId);
         }
 
-        if (!canDeleteRoom(roomId, userId)) {
+        if (!canDeleteRoom(roomId, userId, room)) {
             throw new ForbiddenException("User does not have permission to delete this room");
         }
 
@@ -249,9 +274,6 @@ public class RoomService {
 
     @Transactional
     public void addMember(Long roomId, UUID actorId, UUID targetUserId) {
-        
-        // check if target user with that id exists in identity service
-        // ... later, for now we assume the user exists
 
         Room room = roomRepository.findById(roomId)
                 .orElseThrow(() ->
@@ -272,6 +294,10 @@ public class RoomService {
             throw new BadRequestException(
                     "Target user is already a member of this room"
             );
+        }
+
+        if (!identityServiceClient.userExists(targetUserId)) {
+                throw new NotFoundException("Target user not found with id: " + targetUserId);
         }
 
         Role memberRole = roleRepository
@@ -321,20 +347,31 @@ public class RoomService {
         return new RoomResponse(room.getId(), room.getName(), room.getCreatedAt(), room.getType(), room.getUpdatedAt());
     }
 
-    @Transactional
     public RoomResponse createDirectMessageRoom(UUID creatorId, UUID targetUserId) {
         if (creatorId.equals(targetUserId)) {
             throw new BadRequestException("Cannot create a direct message room with yourself");
         }
 
-        Optional<Room> existingRoom =
-        roomRepository.findDirectMessageRoomBetweenUsers(
-                creatorId,
-                targetUserId
+        UUID dmUser1;
+        UUID dmUser2;
+
+        if (creatorId.compareTo(targetUserId) < 0) {
+            dmUser1 = creatorId;
+            dmUser2 = targetUserId;
+        } else {
+            dmUser1 = targetUserId;
+            dmUser2 = creatorId;
+        }
+
+        Optional<Room> isExistingRoom =
+        roomRepository.findByTypeAndDmUser1AndDmUser2(
+                RoomType.DM,
+                dmUser1,
+                dmUser2
         );
 
-        if (existingRoom.isPresent()) {
-            Room room = existingRoom.get();
+        if (isExistingRoom.isPresent()) {
+            Room room = isExistingRoom.get();
 
             return new RoomResponse(
                     room.getId(),
@@ -345,38 +382,37 @@ public class RoomService {
             );
         }
 
-        Room room = new Room();
-        room.setType(RoomType.DM);
-        Room savedRoom = roomRepository.save(room);
+        if (!identityServiceClient.userExists(targetUserId)) {
+            throw new NotFoundException("Target user not found with id: " + targetUserId);
+        }
 
-        Role memberRole = new Role();
-        memberRole.setRoom(savedRoom);
-        memberRole.setName(RoleName.MEMBER);
-        roleRepository.save(memberRole);
+        try 
+        {
+            return directMessageCreationService.createDirectMessageRoom(
+                    dmUser1,
+                    dmUser2,
+                    creatorId,
+                    targetUserId
+            );
+        }
+        catch (DataIntegrityViolationException e)
+        {
+            Room existingRoom = roomRepository
+                    .findByTypeAndDmUser1AndDmUser2(
+                            RoomType.DM,
+                            dmUser1,
+                            dmUser2
+                    )
+                    .orElseThrow(() -> e);
 
-        RoomMember creatorRoomMember = new RoomMember();
-        creatorRoomMember.setRoom(savedRoom);
-        creatorRoomMember.setUserId(creatorId);
-        RoomMember savedCreatorRoomMember = roomMemberRepository.save(creatorRoomMember);
-
-        RoomMember targetRoomMember = new RoomMember();
-        targetRoomMember.setRoom(savedRoom);
-        targetRoomMember.setUserId(targetUserId);
-        RoomMember savedTargetRoomMember = roomMemberRepository.save(targetRoomMember);
-
-        // Assign the MEMBER role to the creator of the room
-        MemberRole creatorRoleAssignment = new MemberRole();
-        creatorRoleAssignment.setRoomMember(savedCreatorRoomMember);
-        creatorRoleAssignment.setRole(memberRole);
-        memberRoleRepository.save(creatorRoleAssignment);
-
-        // Assign the MEMBER role to the target user
-        MemberRole targetRoleAssignment = new MemberRole();
-        targetRoleAssignment.setRoomMember(savedTargetRoomMember);
-        targetRoleAssignment.setRole(memberRole);
-        memberRoleRepository.save(targetRoleAssignment);
-
-        return new RoomResponse(savedRoom.getId(), savedRoom.getName(), savedRoom.getCreatedAt(), savedRoom.getType(), savedRoom.getUpdatedAt());
+            return new RoomResponse(
+                    existingRoom.getId(),
+                    existingRoom.getName(),
+                    existingRoom.getCreatedAt(),
+                    existingRoom.getType(),
+                    existingRoom.getUpdatedAt()
+            );
+        }
     }
 
     @Transactional

@@ -10,9 +10,18 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.EnumType;
+import jakarta.persistence.UniqueConstraint;
 
 @Entity
-@Table(name = "roles")
+@Table(
+    name = "roles",
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "uk_roles_room_name",
+            columnNames = {"room_id", "name"}
+        )
+    }
+)
 public class Role {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
