@@ -11,9 +11,19 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.EnumType;
 import java.time.Instant;
+import java.util.UUID;
+import jakarta.persistence.UniqueConstraint;
 
 @Entity
-@Table(name = "rooms")
+@Table(
+    name = "rooms",
+    uniqueConstraints = {
+            @UniqueConstraint(
+            name = "uk_rooms_dm_users",
+            columnNames = {"dm_user_1", "dm_user_2"}
+        )
+    }
+)
 public class Room {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -37,6 +47,12 @@ public class Room {
         createdAt = Instant.now();
         updatedAt = createdAt;
     }
+
+    @Column(name = "dm_user_1")
+    private UUID dmUser1;
+
+    @Column(name = "dm_user_2")
+    private UUID dmUser2;
 
     @PreUpdate
     protected void onUpdate() {
@@ -70,5 +86,21 @@ public class Room {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public UUID getDmUser1() {
+        return dmUser1;
+    }
+
+    public void setDmUser1(UUID dmUser1) {
+        this.dmUser1 = dmUser1;
+    }
+
+    public UUID getDmUser2() {
+        return dmUser2;
+    }
+
+    public void setDmUser2(UUID dmUser2) {
+        this.dmUser2 = dmUser2;
     }
 }
