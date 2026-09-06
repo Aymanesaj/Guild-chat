@@ -1,24 +1,91 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+import { getMe } from "../../api/authentication.js";
 
 const ProfileOverlayContext = createContext();
 
 export function ProfileOverlayProvider({ children }) {
+  const [currentUser, setCurrentUser] = useState(null);
   const [profile, setProfile] = useState(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [roomsRefreshTick, setRoomsRefreshTick] = useState(0);
+  const [previewUser, setPreviewUser] = useState(null);
 
-  function openProfile(user) {
-    setProfile(user);
+  async function fetchCurrentUser() {
+    const user = await getMe();
+    setCurrentUser(user);
+    return user;
+  }
+
+  async function refreshProfile() {
+    setLoadingProfile(true);
+
+    try {
+      const user = await fetchCurrentUser();
+      setProfile(user);
+      return user;
+    } finally {
+      setLoadingProfile(false);
+    }
+  }
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadCurrentUser() {
+      try {
+        const user = await fetchCurrentUser();
+
+        if (active) {
+          setCurrentUser(user);
+        }
+      } catch (error) {
+        if (active) {
+          console.error("Error fetching user data:", error);
+        }
+      }
+    }
+
+    loadCurrentUser();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function openProfile() {
+    await refreshProfile();
   }
 
   function closeProfile() {
     setProfile(null);
   }
 
+  function notifyRoomsChanged() {
+    setRoomsRefreshTick((tick) => tick + 1);
+  }
+
+  function openUserPreview(username, anchorRect) {
+    setPreviewUser({ username, anchorRect });
+  }
+
+  function closeUserPreview() {
+    setPreviewUser(null);
+  }
+
   return (
     <ProfileOverlayContext.Provider
       value={{
+        currentUser,
         profile,
+        loadingProfile,
         openProfile,
         closeProfile,
+        refreshProfile,
+        roomsRefreshTick,
+        notifyRoomsChanged,
+        previewUser,
+        openUserPreview,
+        closeUserPreview,
       }}
     >
       {children}

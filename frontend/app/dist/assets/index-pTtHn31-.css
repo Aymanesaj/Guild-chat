@@ -1,0 +1,1 @@
+*{box-sizing:border-box}:root{--color-bg:#161819;--color-surface-hover:#26262d;--color-text:#b1b1b1;--color-text-muted:#d4d4d4;--color-accent:#a31d2a;--color-online:#259158}html,body,#root{min-height:100%;margin:0}body{background:var(--color-bg);color:var(--color-text-muted);font-family:Arial,sans-serif}button,input{font:inherit}button{cursor:pointer}
