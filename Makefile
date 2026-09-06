@@ -36,8 +36,8 @@ logs:
 
 run:
 	@if [ ! -f .env ]; then \
-		@echo "ERROR: .env file is missing! Please create it before running."; \
-		@exit 1; \
+		echo "ERROR: .env file is missing! Please create it before running."; \
+		exit 1; \
 	fi
 	@echo "Starting the application..."
 
