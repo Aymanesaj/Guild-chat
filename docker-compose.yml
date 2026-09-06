@@ -1,32 +1,108 @@
 services:
+
+# -----------------------------------------------------------
+# ---------------------- Reverse proxy ----------------------
+# -----------------------------------------------------------
+
   nginx:
     container_name: nginx
-    build: gateway/.
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    volumes:
+      - ./gateway/modsec/main.conf:/etc/nginx/modsec/main.conf
+      - ./gateway/modsec/modsecurity.conf:/etc/nginx/modsec/modsecurity.conf
+      - ./gateway/modsec/unicode.mapping:/etc/nginx/modsec/unicode.mapping
     ports:
       - 8000:80
     networks:
       - private
     depends_on:
-      - chat-service
       - identity-service
-      - org-service
-      - frontend
+      - chat-service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     restart: always
 
-  chat-service:
-    image: python:alpine
-    container_name: chat-service
-    command: >
-      python3 -m http.server 8081 --directory /tmp --bind 0.0.0.0
+# -----------------------------------------------------------
+# --------------------- Micro services ----------------------
+# -----------------------------------------------------------
+
+
+  org-service:
+    build: services/org-service/.
+    container_name: org-service
+    environment:
+      PORT: 8082
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/org_service_db
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
     networks:
       - private
-    volumes:
-      - ./services/chat-service/index.html:/tmp/index.html
+    expose:
+      - "8082"
+    ports:
+      - "8082:8082"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/healthz"]
+      interval: 20s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy
+    env_file:
+      - ./.env
+    restart: always
+
+
+  chat-service:
+    build:
+      context: ./services/
+      dockerfile: ./chat-service/Dockerfile
+    container_name: chat-service
+    environment:
+      PORT: 8081
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/actuator/health || exit 1"]
+      interval: 20s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - private
+    env_file:
+      - ./.env
+    depends_on:
+      mongodb:
+        condition: service_healthy
     expose:
       - "8081"
+    restart: always
+
+  mongodb:
+    image: mongo:7
+    container_name: mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+    volumes:
+      - mongo_data:/data/db
+    expose:
+      - "27017"
+    networks:
+      - private
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: always
 
   identity-service:
@@ -34,15 +110,14 @@ services:
     container_name: identity-service
     networks:
       - private
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/appdb
-      SPRING_DATASOURCE_USERNAME: admin
-      SPRING_DATASOURCE_PASSWORD: admin
-      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-secret-with-at-least-32-chars}
-      JWT_ISSUER: ft-transcendence
-      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
-      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
-      GITHUB_REDIRECT_URI: ${GITHUB_REDIRECT_URI:-http://localhost:8000/api/users/oauth/github/callback}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health/readiness"]
+      interval: 20s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    env_file:
+      - ./.env
     volumes:
       - identity_avatars:/tmp/identity-avatars
     depends_on:
@@ -52,49 +127,112 @@ services:
       - "8083:8083"
     restart: always
 
-  org-service:
-    image: python:alpine
-    command: >
-      python3 -m http.server 8082 --directory /tmp --bind 0.0.0.0
-    container_name: org-service
-    networks:
-      - private
-    volumes:
-      - ./services/org-service/index.html:/tmp/index.html
-    depends_on:
-      postgres:
-        condition: service_healthy
-    expose:
-      - "8082"
-    restart: always
 
-  frontend:
-    build: frontend/.
-    image: frontend:latest
-    pull_policy: never
-    networks:
-      - private
-    expose:
-      - "8080"
-    restart: always
-  
+# -----------------------------------------------------------
+# --------------------- Data exporters ----------------------
+# -----------------------------------------------------------
 
   docker-exporter:
     container_name: docker-exporter
-    image: ghcr.io/seraph919/docker-exporter:v2.1
+    # build: ./infra/exporter/
+    image: seraph919/docker-exporter:v2.4
     expose:
     - "8090"
     volumes:
-    - /var/run/user/${UID}/docker.sock:/var/run/docker.sock:ro
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
     networks:
     - private
+    env_file:
+    - ./.env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://docker-exporter:8090/metrics.prom"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: always
+  
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    volumes:
+      - /goinfre/${USER}/docker/containers:/goinfre/${USER}/docker/containers:ro
+      - /var/run/user/${UID}/docker.sock:/var/run/user/${UID}/docker.sock:ro
+      - ./infra/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+    entrypoint: >
+      /bin/sh -c "
+      apt-get update && apt-get install -y gettext-base &&
+      envsubst < /etc/promtail/config.yml > /tmp/config.yml &&
+      exec /usr/bin/promtail -config.file=/tmp/config.yml
+      "
+    #uses port 8093 internally with promitheus
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'printf \"GET / HTTP/1.1\n\n\" > /dev/tcp/127.0.0.1/8093; exit $?;'"]
+      interval: 20s
+      retries: 30
+      timeout: 10s
+      start_period: 10s
+    env_file:
+      - ./.env
+    networks:
+    - private
+    depends_on:
+      - loki
     restart: always
 
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    command: -config.file=/etc/loki/local-config.yaml
+    expose:
+      - "3100"
+    networks:
+      - private
+    restart: always
+
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus
+    expose:
+      - "9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.external-url=http://localhost/prometheus/'
+      - '--web.route-prefix=/'
+    volumes: 
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./infra/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
+      - prometheus_data:/prometheus
+    networks:
+      - private
+    restart: always
+
+
+  alertmanager:
+    container_name: alertmanager
+    image: prom/alertmanager:latest
+    volumes:
+      - ./infra/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+    expose:
+      - "9093"
+    networks:
+      - private
+    restart: always
+    
+
+# -----------------------------------------------------------
+# -------------------- Data visualization -------------------
+# -----------------------------------------------------------
+  # add healthcheck later
   grafana:
-    image: grafana/grafana
+    build: ./infra/grafana/
     container_name: grafana
-    ports:
-    - "3000:3000"
+    expose:
+    - "3000"
     networks:
     - private
     user : "root"
@@ -102,46 +240,36 @@ services:
     - grafana_data:/var/lib/grafana
     - ./infra/grafana/:/etc/grafana/provisioning:ro
     - database:/var/lib/postgresql/data
-    environment:
-    - GF_SECURITY_ADMIN_USER=admin
-    - GF_SECURITY_ADMIN_PASSWORD=admin
-    - GF_USERS_ALLOW_SIGN_UP=false
-    - DS_PROMETHEUS=prometheus
+    env_file:
+      - ./.env
     restart: always
 
-  prometheus:
-    container_name: prometheus
-    image: prom/prometheus
-    ports:
-      - "9090:9090"
-    volumes: 
-      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
-    networks:
-      - private
-    restart: always
+
+# -----------------------------------------------------------
+# ------------------------ Data Base ------------------------
+# -----------------------------------------------------------
 
   postgres:
     image: postgres:16-alpine
     container_name: postgres
     volumes:
       - database:/var/lib/postgresql/data
-    environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin
-      POSTGRES_DB: appdb
-    ports:
-      - "5432:5432"
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    env_file:
+      - ./.env
+    expose:
+      - "5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d appdb"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 15
+    restart: always
     networks:
       - private
   
-  # vault:
-  #   image: hashicorp/vault:latest
+  # # vault:
+  # #   image: hashicorp/vault:latest
 
 volumes:
   database:
@@ -152,7 +280,8 @@ volumes:
     name: "grafana_data"
   identity_avatars:
     name: "identity_avatars"
-
+  mongo_data:
+    name: "mongo_data"
 networks:
   private:
     name: private

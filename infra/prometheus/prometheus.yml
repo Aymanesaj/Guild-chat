@@ -2,11 +2,24 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - "alertmanager:9093"
+
 scrape_configs:
   - job_name: 'prometheus'
     static_configs:
       - targets: ['prometheus:9090']
 
-  - job_name: "docker-exporter"
+  - job_name: 'docker-exporter'
+    metrics_path: /metrics.prom
     static_configs:
-      - targets: ["docker-exporter:8090"]
+      - targets: ['docker-exporter:8090']
+  - job_name: "promtail"
+    static_configs:
+      - targets: ["promtail:8093"]
+
+rule_files:
+  - "alert_rules.yml"
