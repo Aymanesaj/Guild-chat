@@ -1,11 +1,41 @@
 /**
  * Shared HTTP plumbing for the api layer.
  *
- * Every module used to carry its own copy of parseJsonResponse; this is the one
- * place that knows about cookies, the refresh dance and the backend's error
- * envelope ({ "message": "..." }, set by main.py's exception handlers).
+ * Every api/*.js module goes through here, so this is the one place that knows
+ * about cookies, the refresh dance and the backend's error envelope.
+ *
+ * ---------------------------------------------------------------------------
+ * CONTRACT FOR THE BACKEND TEAM
+ * ---------------------------------------------------------------------------
+ * Auth is COOKIE based. There is no Authorization header and no token in
+ * localStorage anywhere in this app. Every request is sent with
+ * `credentials: "include"`, so each service must:
+ *
+ *   - Set the session cookies as HttpOnly (+ SameSite=Lax, and Secure in prod).
+ *   - Read the access token from the cookie, never from a header.
+ *   - Answer 401 (not 403) when the access token is missing/expired, so the
+ *     refresh-and-retry below can kick in.
+ *
+ * All URLs are ROOT-RELATIVE (`/api/...`). The app is served from the same
+ * origin as the nginx gateway, which is what makes the cookies work. Do not
+ * introduce absolute URLs to a service host — that breaks cookie auth.
+ *
+ * Error envelope every service must return on a non-2xx:
+ *
+ *   { "message": "Human readable reason shown directly to the user" }
+ *
+ * `{ "detail": "..." }` is accepted as a fallback, and a bare string body is
+ * used as-is. Anything else falls back to the caller's generic message.
+ * ---------------------------------------------------------------------------
  */
 
+/**
+ * POST /auth/refresh   (identity-service, via /api/users/)
+ *
+ * Rotates the access token cookie using the refresh token cookie. Takes no
+ * body. Returns 2xx (body ignored) on success, 401 when the refresh token is
+ * also dead — at which point the user is fully logged out.
+ */
 const REFRESH_URL = "/api/users/auth/refresh";
 
 export class ApiError extends Error {
@@ -34,6 +64,7 @@ function errorMessage(data, fallback) {
   return data.message || data.detail || fallback;
 }
 
+/** Builds "?a=1&b=2", skipping undefined/null/empty values. */
 export function buildQuery(params = {}) {
   const query = new URLSearchParams();
 
@@ -46,6 +77,7 @@ export function buildQuery(params = {}) {
   return queryString ? `?${queryString}` : "";
 }
 
+/** Spread into a fetch init to send `payload` as a JSON body. */
 export function jsonBody(payload) {
   return {
     headers: { "Content-Type": "application/json" },
@@ -78,7 +110,14 @@ export function refreshSession() {
   return refreshPromise;
 }
 
-/** fetch + cookies, retried once through /auth/refresh on a 401. */
+/**
+ * fetch + cookies, retried once through /auth/refresh on a 401.
+ *
+ * Backend note: this means a single expired-access-token 401 is invisible to
+ * the user. Only return 401 for an actually-invalid session; use 403 for
+ * "authenticated but not allowed", otherwise every permission error costs a
+ * pointless refresh round-trip.
+ */
 export async function authedFetch(url, init = {}) {
   const requestInit = { ...init, credentials: "include" };
 

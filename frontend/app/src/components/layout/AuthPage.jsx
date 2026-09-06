@@ -134,9 +134,10 @@ function LoginView({ setView, onLogin, values, onChange, error, loading }) {
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
-	e.preventDefault();
-	await onLogin(values.email, values.password);
-	navigate("/app");
+    e.preventDefault();
+    // onLogin resolves to false when the request failed; the error is already
+    // on screen, so we just stay put.
+    if (await onLogin(values.email, values.password)) navigate("/app");
   };
 
   return (
@@ -166,10 +167,6 @@ function LoginView({ setView, onLogin, values, onChange, error, loading }) {
         </PrimaryButton>
       </Form>
 
-      <TextButton type="button" onClick={() => setView("forgot")}>
-        Forgot Password?
-      </TextButton>
-
       <Footer>
         Don't have an account?
         <Accent onClick={() => setView("signup")}>Sign Up</Accent>
@@ -182,9 +179,14 @@ function SignupView({ setView, onSignup, values, onChange, error, loading }) {
   const navigate = useNavigate();
 
   const handleSignup = async (e) => {
-	e.preventDefault();
-	await onSignup(values.username, values.email, values.password, values.confirmPassword);
-	navigate("/app");
+    e.preventDefault();
+    const created = await onSignup(
+      values.username,
+      values.email,
+      values.password,
+      values.confirmPassword,
+    );
+    if (created) navigate("/app");
   };
 
   return (
@@ -235,25 +237,14 @@ function SignupView({ setView, onSignup, values, onChange, error, loading }) {
   );
 }
 
-function ForgotView({ setView }) {
-  return (
-    <>
-      <Subtitle>
-        Enter your email and we'll send you a reset link.
-      </Subtitle>
+// Password reset is not implemented on the backend, so there is no "forgot"
+// view. Add one here (plus POST /auth/password-reset in identity-service) if
+// the team decides to support it.
 
-      <Form>
-        <Input type="email" placeholder="Email" required />
-        <PrimaryButton type="submit">Send Reset Link</PrimaryButton>
-      </Form>
-
-      <Footer>
-        Remember your password?
-        <Accent onClick={() => setView("login")}>Login</Accent>
-      </Footer>
-    </>
-  );
-}
+const TITLES = {
+  login: "Welcome Back",
+  signup: "Create Account",
+};
 
 function AuthPage( { onLogin } ) {
   const [view, setView] = useState("login");
@@ -280,13 +271,16 @@ function AuthPage( { onLogin } ) {
     try {
       await loginUser(email, password);
       onLogin();
+      return true;
     } catch (err) {
-		if (err?.response?.status >= 500) {
-			setError("Something went wrong. Please try again later.");
-		} else {
-			setError(err.message);
-		}
-      throw err;
+      // ApiError exposes `status` directly (see api/http.js) — don't reach for
+      // an axios-shaped err.response here, this app uses fetch.
+      if (err?.status >= 500) {
+        setError("Something went wrong. Please try again later.");
+      } else {
+        setError(err.message);
+      }
+      return false;
     } finally {
       setLoading(false);
     }
@@ -295,22 +289,25 @@ function AuthPage( { onLogin } ) {
   const handleSignup = async (username, email, password, confirmPassword) => {
     if (password !== confirmPassword) {
       setError("Passwords do not match");
-      return;
+      return false;
     }
 
     setLoading(true);
     setError("");
 
     try {
+      // register is expected to issue the session cookies itself, which is why
+      // there is no follow-up loginUser call here. See api/authentication.js.
       await registerUser(username, email, password);
       onLogin();
+      return true;
     } catch (err) {
-      if (err?.response?.status >= 500) {
+      if (err?.status >= 500) {
         setError("Something went wrong. Please try again later.");
       } else {
         setError(err.message);
       }
-      throw err;
+      return false;
     } finally {
       setLoading(false);
     }
@@ -329,8 +326,6 @@ function AuthPage( { onLogin } ) {
             loading={loading}
           />
         );
-      // case "forgot":
-      //   return <ForgotView setView={setView} />;
       default:
         return (
           <LoginView
@@ -349,13 +344,7 @@ function AuthPage( { onLogin } ) {
     <Container>
       <Card>
         <Logo>CHATAPP</Logo>
-        <Title>
-          {view === "login"
-            ? "Welcome Back"
-            : view === "signup"
-            /*? "Create Account"
-            : "Reset Password"*/}
-        </Title>
+        <Title>{TITLES[view] ?? TITLES.login}</Title>
 
         {renderView()}
       </Card>
