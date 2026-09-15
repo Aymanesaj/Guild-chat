@@ -20,11 +20,18 @@ public class AuthService {
 	private final UserRepository userRepository;
 	private final PasswordEncoder passwordEncoder;
 	private final JwtService jwtService;
+	private final RefreshTokenService refreshTokenService;
 
-	public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService) {
+	public AuthService(
+		UserRepository userRepository,
+		PasswordEncoder passwordEncoder,
+		JwtService jwtService,
+		RefreshTokenService refreshTokenService
+	) {
 		this.userRepository = userRepository;
 		this.passwordEncoder = passwordEncoder;
 		this.jwtService = jwtService;
+		this.refreshTokenService = refreshTokenService;
 	}
 
 	@Transactional
@@ -46,7 +53,7 @@ public class AuthService {
 		user.setAuthProvider(AuthProvider.LOCAL);
 
 		UserEntity saved = userRepository.save(user);
-		return AuthResponse.bearer(jwtService.issue(saved), UserResponse.from(saved));
+		return buildResponse(saved);
 	}
 
 	@Transactional(readOnly = true)
@@ -59,7 +66,21 @@ public class AuthService {
 		if (user.getPasswordHash() == null || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
 			throw new BadCredentialsException("Invalid credentials");
 		}
-		return AuthResponse.bearer(jwtService.issue(user), UserResponse.from(user));
+		return buildResponse(user);
+	}
+
+	@Transactional
+	public AuthResponse refresh(String presentedRefreshToken) {
+		RefreshTokenService.RefreshResult result = refreshTokenService.rotate(presentedRefreshToken);
+		return buildResponse(result.user(), result.newRefreshToken());
+	}
+
+	private AuthResponse buildResponse(UserEntity user) {
+		return buildResponse(user, refreshTokenService.issue(user));
+	}
+
+	private AuthResponse buildResponse(UserEntity user, String refreshToken) {
+		return AuthResponse.bearer(jwtService.issue(user), refreshToken, UserResponse.from(user));
 	}
 
 	private String normalizeUsername(String username) {
