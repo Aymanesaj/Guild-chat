@@ -33,6 +33,7 @@ public class SecurityConfig {
 				.requestMatchers(
 					"/register",
 					"/login",
+					"/auth/refresh",
 					"/oauth/**",
 					"/avatars/**",
 					"/actuator/health",

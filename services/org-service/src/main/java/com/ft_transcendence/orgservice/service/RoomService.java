@@ -23,7 +23,7 @@ import java.util.UUID;
 import com.ft_transcendence.orgservice.exception.ForbiddenException;
 import com.ft_transcendence.orgservice.dto.MemberResponse;
 import com.ft_transcendence.orgservice.dto.UpdateRoomRequest;
-import com.ft_transcendence.orgservice.client.IdentityServiceClient;
+import com.ft_transcendence.orgservice.client.IdentityGrpcClient;
 
 @Service
 public class RoomService {
@@ -31,7 +31,7 @@ public class RoomService {
     private final RoomMemberRepository roomMemberRepository;
     private final RoleRepository roleRepository;
     private final MemberRoleRepository memberRoleRepository;
-    private final IdentityServiceClient identityServiceClient;
+    private final IdentityGrpcClient IdentityGrpcClient;
     private final DirectMessageCreationService directMessageCreationService;
 
     public RoomService(
@@ -39,14 +39,14 @@ public class RoomService {
             RoomMemberRepository roomMemberRepository, 
             RoleRepository roleRepository, 
             MemberRoleRepository memberRoleRepository,
-            IdentityServiceClient identityServiceClient,
+            IdentityGrpcClient IdentityGrpcClient,
             DirectMessageCreationService directMessageCreationService
     ) {
         this.roomRepository = roomRepository;
         this.roomMemberRepository = roomMemberRepository;
         this.roleRepository = roleRepository;
         this.memberRoleRepository = memberRoleRepository;
-        this.identityServiceClient = identityServiceClient;
+        this.IdentityGrpcClient = IdentityGrpcClient;
         this.directMessageCreationService = directMessageCreationService;
     }
 
@@ -296,7 +296,7 @@ public class RoomService {
             );
         }
 
-        if (!identityServiceClient.userExists(targetUserId)) {
+        if (!IdentityGrpcClient.userExists(targetUserId)) {
                 throw new NotFoundException("Target user not found with id: " + targetUserId);
         }
 
@@ -382,7 +382,7 @@ public class RoomService {
             );
         }
 
-        if (!identityServiceClient.userExists(targetUserId)) {
+        if (!IdentityGrpcClient.userExists(targetUserId)) {
             throw new NotFoundException("Target user not found with id: " + targetUserId);
         }
 
