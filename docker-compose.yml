@@ -165,7 +165,8 @@ services:
       envsubst < /etc/promtail/config.yml > /tmp/config.yml &&
       exec /usr/bin/promtail -config.file=/tmp/config.yml
       "
-    #uses port 8093 internally with promitheus
+    expose:
+      - "8093"
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'printf \"GET / HTTP/1.1\n\n\" > /dev/tcp/127.0.0.1/8093; exit $?;'"]
       interval: 20s
@@ -270,6 +271,13 @@ services:
   # # vault:
   # #   image: hashicorp/vault:latest
 
+
+
+# -----------------------------------------------------------
+# ------------------------ Volumes ------------------------
+# -----------------------------------------------------------
+
+
 volumes:
   database:
     name: "database"
@@ -281,6 +289,12 @@ volumes:
     name: "identity_avatars"
   mongo_data:
     name: "mongo_data"
+
+# -----------------------------------------------------------
+# ------------------------ Networks ------------------------
+# -----------------------------------------------------------
+
+
 networks:
   private:
     name: private
