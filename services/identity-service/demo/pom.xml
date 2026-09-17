@@ -31,7 +31,17 @@
 		<grpc.version>1.84.0</grpc.version>
 		<protobuf.version>4.31.1</protobuf.version>
 	</properties>
-
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>io.grpc</groupId>
+				<artifactId>grpc-bom</artifactId>
+				<version>${grpc.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -74,8 +84,6 @@
 			<artifactId>grpc-stub</artifactId>
 			<version>1.84.0</version>
 		</dependency>
-
-		
 		<dependency>
 			<groupId>net.devh</groupId>
 			<artifactId>grpc-server-spring-boot-starter</artifactId>

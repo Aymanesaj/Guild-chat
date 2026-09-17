@@ -2,6 +2,9 @@ package com.fttranscendence.identity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fttranscendence.identity.dto.AuthResponse;
@@ -13,6 +16,7 @@ import com.fttranscendence.identity.model.UserEntity;
 import com.fttranscendence.identity.repository.UserRepository;
 import com.fttranscendence.identity.security.JwtService;
 import com.fttranscendence.identity.service.AuthService;
+import com.fttranscendence.identity.service.RefreshTokenService;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
@@ -30,15 +34,19 @@ class AuthServiceTests {
 	private AuthService authService;
 	private UserRepository userRepository;
 	private PasswordEncoder passwordEncoder;
+	private RefreshTokenService refreshTokenService;
 
 	@BeforeEach
 	void setUp() {
 		userRepository = fakeRepository();
 		passwordEncoder = new BCryptPasswordEncoder();
+		refreshTokenService = mock(RefreshTokenService.class);
+		when(refreshTokenService.issue(any(UserEntity.class))).thenReturn("test-refresh-token");
 		authService = new AuthService(
 			userRepository,
 			passwordEncoder,
-			new JwtService(new ObjectMapper(), "test-secret-with-more-than-thirty-two-characters", "identity-service-test", 3600)
+			new JwtService(new ObjectMapper(), "test-secret-with-more-than-thirty-two-characters", "identity-service-test", 3600),
+			refreshTokenService
 		);
 	}
 
@@ -68,6 +76,16 @@ class AuthServiceTests {
 
 		assertThatThrownBy(() -> authService.login(new LoginRequest("login@example.com", "wrong-password")))
 			.isInstanceOf(BadCredentialsException.class);
+	}
+
+	@Test
+	void registerReturnsBothAccessAndRefreshTokens() {
+		AuthResponse response = authService.register(new RegisterRequest("testuser", "test@example.com", "password123", "Test User"));
+
+		assertThat(response.tokenType()).isEqualTo("Bearer");
+		assertThat(response.accessToken()).isNotBlank();
+		assertThat(response.refreshToken()).isNotBlank();
+		assertThat(response.user().username()).isEqualTo("testuser");
 	}
 
 	private UserRepository fakeRepository() {
