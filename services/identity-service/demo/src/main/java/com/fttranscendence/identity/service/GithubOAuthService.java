@@ -24,6 +24,7 @@ import org.springframework.web.client.RestClient;
 public class GithubOAuthService {
 	private final UserRepository userRepository;
 	private final JwtService jwtService;
+	private final RefreshTokenService refreshTokenService;
 	private final RestClient restClient;
 	private final String clientId;
 	private final String clientSecret;
@@ -32,12 +33,14 @@ public class GithubOAuthService {
 	public GithubOAuthService(
 		UserRepository userRepository,
 		JwtService jwtService,
+		RefreshTokenService refreshTokenService,
 		@Value("${app.oauth.github.client-id}") String clientId,
 		@Value("${app.oauth.github.client-secret}") String clientSecret,
 		@Value("${app.oauth.github.redirect-uri}") String redirectUri
 	) {
 		this.userRepository = userRepository;
 		this.jwtService = jwtService;
+		this.refreshTokenService = refreshTokenService;
 		this.restClient = RestClient.create();
 		this.clientId = clientId;
 		this.clientSecret = clientSecret;
@@ -62,7 +65,11 @@ public class GithubOAuthService {
 			.orElseGet(() -> createGithubUser(githubUser));
 		user.setAvatarUrl(githubUser.avatarUrl());
 		UserEntity saved = userRepository.save(user);
-		return AuthResponse.bearer(jwtService.issue(saved), UserResponse.from(saved));
+		return AuthResponse.bearer(
+			jwtService.issue(saved),
+			refreshTokenService.issue(saved),
+			UserResponse.from(saved)
+		);
 	}
 
 	private String exchangeCodeForAccessToken(String code) {
