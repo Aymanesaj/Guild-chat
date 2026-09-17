@@ -3,16 +3,62 @@ syntax = "proto3";
 package org;
 
 option java_multiple_files = true;
-option java_package = "com.ft.orgservice.grpc";
-
-message HelloRequest {
-  string name = 1;
-}
-
-message HelloResponse {
-  string message = 1;
-}
+option java_package = "com.fttranscendence.org.grpc";
+option java_outer_classname = "OrgProto";
 
 service OrgService {
-  rpc SayHello(HelloRequest) returns (HelloResponse);
+  rpc CheckMembership(CheckMembershipRequest) returns (CheckMembershipResponse);
+  rpc GetRoom(GetRoomRequest) returns (RoomResponse);
+  rpc ListRoomMembers(ListRoomMembersRequest) returns (ListRoomMembersResponse);
+  rpc ListUserRooms(ListUserRoomsRequest) returns (ListUserRoomsResponse);
+  rpc CreateRoom(CreateRoomRequest) returns (RoomResponse);
+}
+
+message CheckMembershipRequest {
+  string room_id = 1;
+  string user_id = 2;
+}
+
+message CheckMembershipResponse {
+  bool is_member = 1;
+}
+
+message GetRoomRequest {
+  string room_id = 1;
+  string user_id = 2;
+}
+
+message ListRoomMembersRequest {
+  string room_id = 1;
+  string user_id = 2;
+}
+
+message ListRoomMembersResponse {
+  repeated MemberResponse members = 1;
+}
+
+message ListUserRoomsRequest {
+  string user_id = 1;
+}
+
+message ListUserRoomsResponse {
+  repeated RoomResponse rooms = 1;
+}
+
+message CreateRoomRequest {
+  string name = 1;
+  string creator_id = 2;
+}
+
+message RoomResponse {
+  string id = 1;
+  string name = 2;
+  string created_at = 3;
+  string type = 4;
+  string updated_at = 5;
+}
+
+message MemberResponse {
+  string user_id = 1;
+  string role = 2;
 }
