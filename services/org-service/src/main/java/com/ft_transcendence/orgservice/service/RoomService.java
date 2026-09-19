@@ -156,7 +156,8 @@ public class RoomService {
                 room.getName(),
                 room.getCreatedAt(),
                 room.getType(),
-                room.getUpdatedAt()
+                room.getUpdatedAt(),
+                room.getType() == RoomType.DM ? room.getDmUser1().equals(userId) ? room.getDmUser2() : room.getDmUser1() : null
         );
     }
 
@@ -330,7 +331,10 @@ public class RoomService {
     public List<RoomResponse> getRoomsByUserId(UUID userId) {
         List<RoomMember> roomMembers = roomMemberRepository.findByUserId(userId);
         return roomMembers.stream()
-                .map(roomMember -> new RoomResponse(roomMember.getRoom().getId(), roomMember.getRoom().getName(), roomMember.getRoom().getCreatedAt(), roomMember.getRoom().getType(), roomMember.getRoom().getUpdatedAt()))
+                .map(roomMember -> new RoomResponse(roomMember.getRoom().getId(), 
+                            roomMember.getRoom().getName(), roomMember.getRoom().getCreatedAt(),
+                            roomMember.getRoom().getType(), roomMember.getRoom().getUpdatedAt(),
+                            roomMember.getRoom().getType() == RoomType.DM ? roomMember.getRoom().getDmUser1().equals(userId) ? roomMember.getRoom().getDmUser2() : roomMember.getRoom().getDmUser1() : null))
                 .toList();
     }
 
@@ -344,7 +348,8 @@ public class RoomService {
         if (!isUserInRoom(roomId, userId)) {
             throw new ForbiddenException("User does not have permission to access this room");
         }
-        return new RoomResponse(room.getId(), room.getName(), room.getCreatedAt(), room.getType(), room.getUpdatedAt());
+        return new RoomResponse(room.getId(), room.getName(), room.getCreatedAt(), room.getType(), room.getUpdatedAt(),
+                room.getType() == RoomType.DM ? room.getDmUser1().equals(userId) ? room.getDmUser2() : room.getDmUser1() : null);
     }
 
     public RoomResponse createDirectMessageRoom(UUID creatorId, UUID targetUserId) {
@@ -378,7 +383,8 @@ public class RoomService {
                     room.getName(),
                     room.getCreatedAt(),
                     room.getType(),
-                    room.getUpdatedAt()
+                    room.getUpdatedAt(),
+                    room.getDmUser1().equals(creatorId) ? room.getDmUser2() : room.getDmUser1()
             );
         }
 
@@ -410,7 +416,8 @@ public class RoomService {
                     existingRoom.getName(),
                     existingRoom.getCreatedAt(),
                     existingRoom.getType(),
-                    existingRoom.getUpdatedAt()
+                    existingRoom.getUpdatedAt(),
+                    existingRoom.getDmUser1().equals(creatorId) ? existingRoom.getDmUser2() : existingRoom.getDmUser1()
             );
         }
     }
@@ -452,6 +459,6 @@ public class RoomService {
         memberRoleRepository.save(memberRoleAssignment);
 
         return new RoomResponse(savedRoom.getId(), savedRoom.getName(), savedRoom.getCreatedAt()
-            , savedRoom.getType(), savedRoom.getUpdatedAt());
+            , savedRoom.getType(), savedRoom.getUpdatedAt(), null);
     }
 }

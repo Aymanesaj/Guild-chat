@@ -66,6 +66,8 @@ public class DirectMessageCreationService {
             targetRoleAssignment.setRoomMember(savedTargetRoomMember);
             targetRoleAssignment.setRole(memberRole);
             memberRoleRepository.save(targetRoleAssignment);
-            return new RoomResponse(savedRoom.getId(), savedRoom.getName(), savedRoom.getCreatedAt(), savedRoom.getType(), savedRoom.getUpdatedAt());
+            return new RoomResponse(savedRoom.getId(), savedRoom.getName(), 
+            savedRoom.getCreatedAt(), savedRoom.getType(), savedRoom.getUpdatedAt(), 
+            savedRoom.getDmUser1().equals(creatorId) ? savedRoom.getDmUser2() : savedRoom.getDmUser1());
     }
 }
