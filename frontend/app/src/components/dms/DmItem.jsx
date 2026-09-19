@@ -91,6 +91,7 @@ function DmItem({ conversation }) {
 	const initial = conversation.username?.charAt(0)?.toUpperCase() || "?";
 	const openPreview = useOpenUserPreview();
 	const { navigateToRoom } = useRoomNavigation();
+	const peer = { id: conversation.userId, username: conversation.username };
 
 	function openConversation() {
 		navigateToRoom({
@@ -108,13 +109,13 @@ function DmItem({ conversation }) {
 	return (
 	  <DmItemRoot>
 		<DmItemButton type="button" onClick={openConversation}>
-		  <DmAvatar onClick={openPreview(conversation.username)}>
+		  <DmAvatar onClick={openPreview(peer)}>
 			{initial}
 			<DmStatus $online={conversation.status === "online"} aria-label={conversation.status} />
 		  </DmAvatar>
 
 		  <DmDetails>
-			<strong onClick={openPreview(conversation.username)}>{conversation.username}</strong>
+			<strong onClick={openPreview(peer)}>{conversation.username}</strong>
 			<span>
 				{conversation.lastMessage.length < 42 ? conversation.lastMessage : `${conversation.lastMessage.substring(0, 39)}...`}
 			</span>

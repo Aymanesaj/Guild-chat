@@ -99,18 +99,19 @@ function RoomContent({ roomChat, state, roomName, isDm }) {
 
 function MessageItem({ message }) {
   const openPreview = useOpenUserPreview();
-  const canPreview = Boolean(message.sender_username);
+  const sender = { id: message.sender_id, username: message.sender_username };
+  const canPreview = Boolean(sender.id);
 
   return (
     <MessageItemRoot>
-      <MessageAvatar onClick={canPreview ? openPreview(message.sender_username) : undefined}>
+      <MessageAvatar onClick={canPreview ? openPreview(sender) : undefined}>
         {message.sender_username?.[0] ?? "?"}
       </MessageAvatar>
 
       <MessageBody>
         <MessageMeta>
           <ProfileName
-            onClick={canPreview ? openPreview(message.sender_username) : undefined}
+            onClick={canPreview ? openPreview(sender) : undefined}
             style={canPreview ? { cursor: "pointer" } : undefined}
           >
             {message.sender_username ?? "Unknown user"}

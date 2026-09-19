@@ -96,7 +96,7 @@ function MemberItem({ member, canKick, onKick }) {
 	  <MemberItemRoot>
 		<MemberStatus $online={member.status === "online"} aria-label={member.status} />
 
-		<MemberIdentity type="button" onClick={openPreview(member.username)}>
+		<MemberIdentity type="button" onClick={openPreview(member)}>
 		  <MemberAvatar>{member.username?.charAt(0)?.toUpperCase() || "?"}</MemberAvatar>
 		  <MemberName>{member.username}</MemberName>
 		</MemberIdentity>

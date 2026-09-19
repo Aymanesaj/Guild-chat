@@ -4,13 +4,15 @@ import { TbCheck, TbSend, TbUserCheck, TbUserPlus, TbX } from "react-icons/tb";
 
 import { useAvatarUrl } from "../../hooks/useAvatarUrl";
 import { useRoomNavigation } from "../layout/RoomNavigationContext";
-import { getUserByUsername } from "../../api/profile";
+import { getUserById } from "../../api/profile";
 import {
   acceptFriendRequest,
   cancelFriendRequest,
   declineFriendRequest,
+  getFriendshipStatus,
   sendFriendRequest,
 } from "../../api/friends";
+import { getCurrentUserId } from "../../api/tokens";
 import { getOrCreateDm } from "../../api/rooms";
 import { sendMessage } from "../../api/messages";
 
@@ -61,9 +63,15 @@ export default function ProfilePreviewPopover({ target, onClose }) {
     setError("");
     setUser(null);
 
-    getUserByUsername(target.username)
-      .then((data) => {
-        if (!cancelled) setUser(data);
+    // identity doesn't embed the friendship on the user; derive it alongside.
+    const isSelf = target.id === getCurrentUserId();
+
+    Promise.all([
+      getUserById(target.id),
+      isSelf ? { friendship_status: "self", friendship_id: null } : getFriendshipStatus(target.id),
+    ])
+      .then(([data, friendship]) => {
+        if (!cancelled) setUser({ ...data, ...friendship });
       })
       .catch((err) => {
         if (!cancelled) setError(err?.message || "Failed to load profile.");
@@ -75,7 +83,7 @@ export default function ProfilePreviewPopover({ target, onClose }) {
     return () => {
       cancelled = true;
     };
-  }, [target.username]);
+  }, [target.id]);
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -91,8 +99,8 @@ export default function ProfilePreviewPopover({ target, onClose }) {
     setActionError("");
 
     try {
-      await sendFriendRequest(user.id);
-      setUser((u) => ({ ...u, friendship_status: "pending_outgoing" }));
+      const request = await sendFriendRequest(user.id);
+      setUser((u) => ({ ...u, friendship_status: "pending_outgoing", friendship_id: request?.id ?? null }));
     } catch (err) {
       setActionError(err?.message || "Failed to send friend request.");
     } finally {
@@ -105,7 +113,7 @@ export default function ProfilePreviewPopover({ target, onClose }) {
     setActionError("");
 
     try {
-      await cancelFriendRequest(user.friendship_id);
+      await cancelFriendRequest(user.id);
       setUser((u) => ({ ...u, friendship_status: "none", friendship_id: null }));
     } catch (err) {
       setActionError(err?.message || "Failed to cancel friend request.");
