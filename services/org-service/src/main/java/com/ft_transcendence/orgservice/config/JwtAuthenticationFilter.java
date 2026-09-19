@@ -66,9 +66,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             SecurityContextHolder.getContext()
                     .setAuthentication(authentication);
-
-            filterChain.doFilter(request, response);
-
         } catch (Exception e) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json");
@@ -76,6 +73,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     "{\"error\": \"Unable to validate JWT token\"}"
             );
         }
+        filterChain.doFilter(request, response);
     }
 
     @Override
