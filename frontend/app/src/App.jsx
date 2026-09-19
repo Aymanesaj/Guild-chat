@@ -2,37 +2,40 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import AppShell from "./components/layout/AppShell.jsx";
 import AuthPage from "./components/layout/AuthPage.jsx";
-import { getMe, logoutUser } from "./api/authentication.js";
+import { getMe, hasSession, logoutUser, LOGOUT_EVENT } from "./api/authentication.js";
 
 function App() {
-  const [isAuth, setIsAuth] = useState(null);
+  // The signed-in user, from login/register or /me on boot. null = signed out.
+  const [user, setUser] = useState(null);
+  const [checking, setChecking] = useState(hasSession);
+
+  // Fired by the api layer when a refresh is rejected — the session is gone.
+  useEffect(() => {
+    const handleLogout = () => setUser(null);
+    window.addEventListener(LOGOUT_EVENT, handleLogout);
+    return () => window.removeEventListener(LOGOUT_EVENT, handleLogout);
+  }, []);
 
   useEffect(() => {
+    if (!hasSession()) return undefined;
+
     let active = true;
 
-    async function initializeAuth() {
-      try {
-        await getMe();
-        if (active) {
-          setIsAuth(true);
-        }
-      } catch {
-        if (active) {
-          setIsAuth(false);
-        }
-      }
-    }
-
-    initializeAuth();
+    getMe()
+      .then((me) => {
+        if (active) setUser(me);
+      })
+      .catch((error) => {
+        console.error("Failed to restore session:", error);
+      })
+      .finally(() => {
+        if (active) setChecking(false);
+      });
 
     return () => {
       active = false;
     };
   }, []);
-
-  const logIn = () => {
-    setIsAuth(true);
-  };
 
   const logOut = async () => {
     try {
@@ -40,13 +43,15 @@ function App() {
     } catch (error) {
       console.error("Failed to log out cleanly:", error);
     } finally {
-      setIsAuth(false);
+      setUser(null);
     }
-  }
+  };
 
-  if (isAuth === null) {
+  if (checking) {
     return null;
   }
+
+  const isAuth = Boolean(user);
 
   return (
     <BrowserRouter>
@@ -56,19 +61,19 @@ function App() {
           element={
             isAuth
               ? <Navigate to="/app" replace />
-              : <AuthPage onLogin={logIn} />
+              : <AuthPage onLogin={setUser} />
           }
         />
-      
+
         <Route
           path="/app/*"
           element={
             isAuth
-              ? <AppShell onLogout={logOut} />
+              ? <AppShell user={user} onLogout={logOut} />
               : <Navigate to="/auth" replace />
           }
         />
-      
+
         <Route
           path="*"
           element={<Navigate to={isAuth ? "/app" : "/auth"} replace />}

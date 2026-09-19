@@ -257,6 +257,8 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: postgres
+    ports:
+      - "5432:5432" # temporary, for local dev only
     volumes:
       - database:/var/lib/postgresql/data
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro

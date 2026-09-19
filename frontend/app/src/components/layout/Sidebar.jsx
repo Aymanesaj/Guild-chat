@@ -5,6 +5,7 @@ import { IoMdAdd } from "react-icons/io";
 import { useProfileOverlay } from "./ProfileOverlayContext";
 import { getRooms, createRoom } from "../../api/rooms";
 import CreateRoomInput from "./CreateRoomInput";
+import { useAvatarUrl } from "../../hooks/useAvatarUrl";
 
 const SidebarRoot = styled.aside`
   display: flex;
@@ -167,8 +168,16 @@ const Avatar = styled.div`
   height: 36px;
   border-radius: 50%;
   place-items: center;
+  overflow: hidden;
+  flex-shrink: 0;
   background: var(--color-accent);
   font-weight: bold;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
 `;
 
 export const ProfileName = styled.button`
@@ -355,6 +364,8 @@ function DirectMessagesButton({ isDirectMessages, onDirectMessages }) {
 
 function ProfilePreview({ onLogout }) {
   const { currentUser, openProfile } = useProfileOverlay();
+  const { avatarUrl } = useAvatarUrl(currentUser?.avatar);
+  const name = currentUser?.display_name || currentUser?.username;
 
   function openPrfl() {
     openProfile();
@@ -362,12 +373,14 @@ function ProfilePreview({ onLogout }) {
 
   return (
     <ProfilePreviewBox>
-      <Avatar>{currentUser?.username?.charAt(0)}</Avatar>
+      <Avatar>
+        {avatarUrl ? <img src={avatarUrl} alt="" /> : name?.charAt(0)?.toUpperCase()}
+      </Avatar>
 
       <div>
         <ProfileName onClick={openPrfl} >
-          {currentUser?.username}</ProfileName>
-        <span>Online</span>
+          {name}</ProfileName>
+        <span>@{currentUser?.username}</span>
       </div>
       <LogoutButton onClick={onLogout} >
         <HiArrowLeftStartOnRectangle />
