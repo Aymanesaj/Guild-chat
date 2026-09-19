@@ -65,7 +65,7 @@ Spring's default entry point returns 403. The frontend works around it, but 401 
 
 Only the token check should be inside the `try`.
 
-**2. Include the members in DM rooms.**
+**2. Include the members in DM rooms.**(Fixed)
 
 `GET /rooms` doesn't say who a DM is with, so the frontend calls `GET /rooms/{id}/members` once per DM to find the other person. Adding the member IDs (or just the other user's ID) to `RoomResponse` would remove those extra calls.
 
