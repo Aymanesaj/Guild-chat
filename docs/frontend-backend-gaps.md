@@ -56,7 +56,7 @@ Spring's default entry point returns 403. The frontend works around it, but 401 
 
 ## org-service TODO
 
-**1. Bug: changing a member's role always returns `401`.**
+**1. Bug: changing a member's role always returns `401`.**(Fixed)
 
 `PATCH /rooms/{roomId}/members/{userId}/roles` answers `401 "Unable to validate JWT token"`, even with a valid token. There are two causes:
 
@@ -69,4 +69,4 @@ Only the token check should be inside the `try`.
 
 `GET /rooms` doesn't say who a DM is with, so the frontend calls `GET /rooms/{id}/members` once per DM to find the other person. Adding the member IDs (or just the other user's ID) to `RoomResponse` would remove those extra calls.
 
-**3. Nice to have:** `limit` and `offset` on `GET /rooms`. The frontend pages the list itself for now.
+**3. Nice to have:** `limit` and `offset` on `GET /rooms`. The frontend pages the list itself for now.(that's cute)
