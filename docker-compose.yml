@@ -17,9 +17,15 @@ services:
       - 8000:80
     networks:
       - private
+    # every upstream{} host is resolved at config-load time, so nginx exits with
+    # "host not found in upstream" unless all of them exist first
     depends_on:
       - identity-service
       - chat-service
+      - org-service
+      - grafana
+      - prometheus
+      - docker-exporter
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
