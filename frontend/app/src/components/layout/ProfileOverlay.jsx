@@ -22,20 +22,18 @@ import {
 
 import {
   acceptFriendRequest,
+  cancelFriendRequest,
   declineFriendRequest,
   getFriendRequests,
   getFriendsList,
+  getSentFriendRequests,
   removeFriend,
   sendFriendRequest,
 } from "../../api/friends";
 
-import {
-  acceptRoomInvite,
-  declineRoomInvite,
-  getRoomInvites,
-  getRooms,
-  leaveRoom,
-} from "../../api/rooms";
+import { getRooms, leaveRoom } from "../../api/rooms";
+
+import { isAvailable } from "../../api/features";
 
 
 const DEBOUNCE_MS = 400;
@@ -64,6 +62,13 @@ export function useUsernameAvailability(username, currentUsername) {
 
     if (!USERNAME_RE.test(username)) {
       setStatus("invalid");
+      return;
+    }
+
+    // No availability endpoint yet — identity answers 409 on save instead,
+    // so don't block saving on a check that can't succeed.
+    if (!isAvailable("usernameCheck")) {
+      setStatus("idle");
       return;
     }
 
@@ -207,9 +212,9 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
   const [roomsOffset, setRoomsOffset] = useState(0);
   const [roomsHasMore, setRoomsHasMore] = useState(false);
 
-  const [roomInvites, setRoomInvites] = useState([]);
-  const [invitesOffset, setInvitesOffset] = useState(0);
-  const [invitesHasMore, setInvitesHasMore] = useState(false);
+  const [sentRequests, setSentRequests] = useState([]);
+  const [sentOffset, setSentOffset] = useState(0);
+  const [sentHasMore, setSentHasMore] = useState(false);
 
   const [loadingSection, setLoadingSection] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -426,30 +431,30 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
     }
   };
 
-  const loadInvitesPage = async (reset = false) => {
-    const nextOffset = reset ? 0 : invitesOffset;
+  const loadSentPage = async (reset = false) => {
+    const nextOffset = reset ? 0 : sentOffset;
 
     reset ? setLoadingSection(true) : setLoadingMore(true);
     setSectionError("");
 
     try {
-      const data = await getRoomInvites({
+      const data = await getSentFriendRequests({
         limit: MANAGEMENT_PAGE_SIZE,
         offset: nextOffset,
       });
 
       const batch = Array.isArray(data) ? data : [];
 
-      setRoomInvites((prev) =>
+      setSentRequests((prev) =>
         reset ? batch : [...prev, ...batch]
       );
-      setInvitesOffset(nextOffset + batch.length);
-      setInvitesHasMore(batch.length === MANAGEMENT_PAGE_SIZE);
+      setSentOffset(nextOffset + batch.length);
+      setSentHasMore(batch.length === MANAGEMENT_PAGE_SIZE);
     } catch (error) {
-      console.error("Failed to load room invites:", error);
+      console.error("Failed to load sent requests:", error);
 
       setSectionError(
-        error?.message || "Failed to load invites."
+        error?.message || "Failed to load sent requests."
       );
     } finally {
       reset ? setLoadingSection(false) : setLoadingMore(false);
@@ -475,13 +480,11 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
         loadFriendsPage(true);
       } else if (managementTab === "requests") {
         loadRequestsPage(true);
+      } else if (managementTab === "sent") {
+        loadSentPage(true);
       }
     } else {
-      if (managementTab === "rooms") {
-        loadRoomsPage(true);
-      } else if (managementTab === "invites") {
-        loadInvitesPage(true);
-      }
+      loadRoomsPage(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, previewSection, managementSection, managementTab, user.id]);
@@ -524,13 +527,13 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
   };
 
 
-  const requestDeclineRoomInvite = (invite) => {
+  const requestCancelSentRequest = (request) => {
     setConfirmError("");
 
     setConfirmAction({
-      type: "decline-room-invite",
-      id: invite.id,
-      label: invite.room_name || "this invite",
+      type: "cancel-friend-request",
+      id: request.receiver?.id,
+      label: request.receiver?.username || "this user",
     });
   };
 
@@ -549,15 +552,13 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
     if (managementSection === "friends") {
       if (managementTab === "friends") {
         await loadFriendsPage(true);
-      } else {
+      } else if (managementTab === "requests") {
         await loadRequestsPage(true);
+      } else if (managementTab === "sent") {
+        await loadSentPage(true);
       }
     } else {
-      if (managementTab === "rooms") {
-        await loadRoomsPage(true);
-      } else {
-        await loadInvitesPage(true);
-      }
+      await loadRoomsPage(true);
     }
   };
 
@@ -580,12 +581,12 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       }
 
       if (confirmAction.type === "leave-room") {
-        await leaveRoom(confirmAction.id, user.id);
+        await leaveRoom(confirmAction.id);
         notifyRoomsChanged();
       }
 
-      if (confirmAction.type === "decline-room-invite") {
-        await declineRoomInvite(confirmAction.id);
+      if (confirmAction.type === "cancel-friend-request") {
+        await cancelFriendRequest(confirmAction.id);
       }
 
       await refreshProfile();
@@ -702,13 +703,13 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
           items.map((room) => (
             <ListRow key={room.id}>
               <RowAvatar>
-                {(room.name || "DM")
+                {(room.name || room.peer?.username || "DM")
                   .charAt(0)
                   .toUpperCase()}
               </RowAvatar>
 
               <RowName>
-                {room.name || "Direct message"}
+                {room.name || room.peer?.username || "Direct message"}
               </RowName>
 
               {!isPreview && (
@@ -854,6 +855,58 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       );
     }
 
+    if (managementTab === "sent") {
+      return (
+        <ExpandedListPanel>
+          {sentRequests.length > 0 ? (
+            sentRequests.map((request) => (
+              <RequestRow key={request.friendship_id}>
+                <RowAvatar>
+                  {request.receiver?.username
+                    ?.charAt(0)
+                    ?.toUpperCase() || "?"}
+                </RowAvatar>
+
+                <RowName>
+                  {request.receiver?.username}
+                </RowName>
+
+                <RequestActions>
+                  <ActionButton
+                    type="button"
+                    onClick={() =>
+                      requestCancelSentRequest(request)
+                    }
+                    aria-label={`Cancel request to ${
+                      request.receiver?.username
+                    }`}
+                  >
+                    <TbX size={16} />
+                  </ActionButton>
+                </RequestActions>
+              </RequestRow>
+            ))
+          ) : (
+            <EmptyState>
+              No sent requests
+            </EmptyState>
+          )}
+
+          {sentHasMore && (
+            <CenteredButtonWrap>
+              <PillButton
+                type="button"
+                onClick={() => loadSentPage(false)}
+                disabled={loadingMore}
+              >
+                {loadingMore ? "Loading..." : "Load more"}
+              </PillButton>
+            </CenteredButtonWrap>
+          )}
+        </ExpandedListPanel>
+      );
+    }
+
     return (
       <AddPanel onSubmit={handleFriendSearchAdd}>
         <AddRow>
@@ -883,98 +936,15 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
 
   const renderRoomsManagement = () => {
-    if (managementTab === "rooms") {
-      return (
-        <ExpandedListPanel>
-          {renderRoomRows(rooms, false)}
-
-          {roomsHasMore && (
-            <CenteredButtonWrap>
-              <PillButton
-                type="button"
-                onClick={() => loadRoomsPage(false)}
-                disabled={loadingMore}
-              >
-                {loadingMore ? "Loading..." : "Load more"}
-              </PillButton>
-            </CenteredButtonWrap>
-          )}
-        </ExpandedListPanel>
-      );
-    }
-
     return (
       <ExpandedListPanel>
-        {roomInvites.length > 0 ? (
-          roomInvites.map((invite) => (
-            <RequestRow key={invite.id}>
-              <RowAvatar>
-                {(invite.room_name || "DM")
-                  .charAt(0)
-                  .toUpperCase()}
-              </RowAvatar>
+        {renderRoomRows(rooms, false)}
 
-              <RowName>
-                {invite.room_name ||
-                  "Direct message"}
-              </RowName>
-
-              <RequestActions>
-                <ActionButton
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      await acceptRoomInvite(
-                        invite.id
-                      );
-
-                      await Promise.all([
-                        refreshProfile(),
-                        loadInvitesPage(true),
-                      ]);
-
-                      notifyRoomsChanged();
-                    } catch (error) {
-                      setSectionError(
-                        error?.message ||
-                          "Failed to accept invite."
-                      );
-                    }
-                  }}
-                  aria-label={`Accept invite for ${
-                    invite.room_name || "room"
-                  }`}
-                >
-                  <TbCheck size={16} />
-                </ActionButton>
-
-                <ActionButton
-                  type="button"
-                  onClick={() =>
-                    requestDeclineRoomInvite(
-                      invite
-                    )
-                  }
-                  aria-label={`Decline invite for ${
-                    invite.room_name || "room"
-                  }`}
-                >
-                  <TbX size={16} />
-                </ActionButton>
-              </RequestActions>
-            </RequestRow>
-          ))
-        ) : (
-          <EmptyState>
-            No pending invites
-          </EmptyState>
-        )}
-
-        {invitesHasMore && (
+        {roomsHasMore && (
           <CenteredButtonWrap>
             <PillButton
               type="button"
-              onClick={() => loadInvitesPage(false)}
+              onClick={() => loadRoomsPage(false)}
               disabled={loadingMore}
             >
               {loadingMore ? "Loading..." : "Load more"}
@@ -1285,7 +1255,21 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                         )
                       }
                     >
-                      Requests
+                      Incoming
+                    </ManagementTab>
+
+                    <ManagementTab
+                      type="button"
+                      $active={
+                        managementTab === "sent"
+                      }
+                      onClick={() =>
+                        setManagementTab(
+                          "sent"
+                        )
+                      }
+                    >
+                      Sent
                     </ManagementTab>
 
                     <ManagementTab
@@ -1318,20 +1302,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                       Rooms
                     </ManagementTab>
 
-                    <ManagementTab
-                      type="button"
-                      $active={
-                        managementTab ===
-                        "invites"
-                      }
-                      onClick={() =>
-                        setManagementTab(
-                          "invites"
-                        )
-                      }
-                    >
-                      Invites
-                    </ManagementTab>
                   </>
                 )}
               </ManagementTabs>
@@ -1385,8 +1355,8 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                   "Leave room?"}
 
                 {confirmAction.type ===
-                  "decline-room-invite" &&
-                  "Decline invite?"}
+                  "cancel-friend-request" &&
+                  "Cancel request?"}
               </ConfirmTitle>
 
               <ConfirmText>
@@ -1403,8 +1373,8 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                   `Leave ${confirmAction.label}?`}
 
                 {confirmAction.type ===
-                  "decline-room-invite" &&
-                  `Decline the invite for ${confirmAction.label}?`}
+                  "cancel-friend-request" &&
+                  `Cancel your friend request to @${confirmAction.label}?`}
               </ConfirmText>
 
               {confirmError && (

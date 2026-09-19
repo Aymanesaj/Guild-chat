@@ -1,14 +1,9 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
-import { TbArrowLeft, TbCheck, TbUserPlus } from "react-icons/tb";
+import { TbArrowLeft, TbUserPlus } from "react-icons/tb";
 
 import MemberList from "./MemberList";
-import {
-  getRoomMembers,
-  getRoomPendingInvites,
-  inviteToRoom,
-  removeMember,
-} from "../../api/rooms";
+import { addMember, getRoomMembers, removeMember } from "../../api/rooms";
 import { getFriendsList } from "../../api/friends";
 import { useProfileOverlay } from "../layout/ProfileOverlayContext";
 
@@ -152,8 +147,8 @@ function MembersSidebar({ roomId }) {
 
   const [friendsLoading, setFriendsLoading] = useState("idle");
   const [friends, setFriends] = useState([]);
-  const [pendingInviteIds, setPendingInviteIds] = useState(new Set());
-  const [invitingId, setInvitingId] = useState(null);
+  const [addingId, setAddingId] = useState(null);
+  const [addError, setAddError] = useState(null);
 
   useEffect(() => {
     const fetchMembers = async () => {
@@ -176,31 +171,21 @@ function MembersSidebar({ roomId }) {
       return;
     }
 
-    const fetchFriendsAndInvites = async () => {
+    const fetchFriends = async () => {
       setFriendsLoading("loading");
 
       try {
-        const [friendsData, pendingInvites] = await Promise.all([
-          getFriendsList({ limit: 100, offset: 0 }),
-          getRoomPendingInvites(roomId),
-        ]);
-
+        const friendsData = await getFriendsList();
         setFriends(Array.isArray(friendsData) ? friendsData : []);
-
-        const pendingIds = Array.isArray(pendingInvites)
-          ? pendingInvites.map((invite) => invite.user_id)
-          : [];
-
-        setPendingInviteIds(new Set(pendingIds));
         setFriendsLoading("success");
       } catch (error) {
-        console.error("Error fetching friends/invites:", error);
+        console.error("Error fetching friends:", error);
         setFriendsLoading("error");
       }
     };
 
-    fetchFriendsAndInvites();
-  }, [view, roomId]);
+    fetchFriends();
+  }, [view]);
 
   const memberIds = new Set(members.map((member) => member.id));
   const invitableFriends = friends.filter(
@@ -210,7 +195,9 @@ function MembersSidebar({ roomId }) {
   const currentUserRole = members.find(
     (member) => member.id === currentUser?.id
   )?.role;
-  const canInvite = currentUserRole === "owner" || currentUserRole === "admin";
+  // org-service has no invites: owners/admins add members directly.
+  const canAddMembers =
+    currentUserRole === "owner" || currentUserRole === "admin";
 
   const handleKick = async (member) => {
     if (!window.confirm(`Remove ${member.username} from this room?`)) return;
@@ -225,17 +212,21 @@ function MembersSidebar({ roomId }) {
     }
   };
 
-  const handleInvite = async (friend) => {
-    setInvitingId(friend.id);
+  const handleAdd = async (friend) => {
+    setAddingId(friend.id);
+    setAddError(null);
 
     try {
-      await inviteToRoom(roomId, friend.id);
-
-      setPendingInviteIds((prev) => new Set(prev).add(friend.id));
+      await addMember(roomId, friend.id);
+      setMembers((prev) => [
+        ...prev,
+        { ...friend, role: "member" },
+      ]);
     } catch (error) {
-      console.error("Error sending room invite:", error);
+      console.error("Error adding member:", error);
+      setAddError(error?.message || `Couldn't add ${friend.username}.`);
     } finally {
-      setInvitingId(null);
+      setAddingId(null);
     }
   };
 
@@ -248,7 +239,7 @@ function MembersSidebar({ roomId }) {
             : `Friends — ${invitableFriends.length}`}
         </MembersTitle>
 
-        {(view !== "members" || canInvite) && (
+        {(view !== "members" || canAddMembers) && (
           <ToggleButton
             type="button"
             onClick={() =>
@@ -256,7 +247,7 @@ function MembersSidebar({ roomId }) {
             }
             aria-label={
               view === "members"
-                ? "Invite friends"
+                ? "Add friends"
                 : "Back to members"
             }
           >
@@ -287,11 +278,11 @@ function MembersSidebar({ roomId }) {
         <>
           {friendsLoading === "loading" && <p>Loading friends...</p>}
           {friendsLoading === "error" && <p>Error loading friends.</p>}
+          {addError && <p role="alert">{addError}</p>}
           {friendsLoading === "success" &&
             (invitableFriends.length > 0 ? (
               invitableFriends.map((friend) => {
-                const isPending = pendingInviteIds.has(friend.id);
-                const isInviting = invitingId === friend.id;
+                const isAdding = addingId === friend.id;
 
                 return (
                   <FriendRow key={friend.id}>
@@ -307,21 +298,17 @@ function MembersSidebar({ roomId }) {
 
                     <InviteButton
                       type="button"
-                      onClick={() => handleInvite(friend)}
-                      disabled={isPending || isInviting}
-                      aria-label={
-                        isPending
-                          ? `Invite pending for ${friend.username}`
-                          : `Invite ${friend.username}`
-                      }
+                      onClick={() => handleAdd(friend)}
+                      disabled={isAdding}
+                      aria-label={`Add ${friend.username} to the room`}
                     >
-                      {isPending ? <TbCheck size={14} /> : "+"}
+                      +
                     </InviteButton>
                   </FriendRow>
                 );
               })
             ) : (
-              <p>No friends to invite.</p>
+              <p>{friends.length === 0 ? "No friends yet." : "All your friends are already here."}</p>
             ))}
         </>
       )}

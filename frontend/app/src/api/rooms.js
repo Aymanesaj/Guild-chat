@@ -1,65 +1,129 @@
 import { buildQuery, jsonBody, request } from "./http";
+import { getCurrentUserId } from "./tokens";
+import { resolveUsers } from "./users";
 
-const ROOMS = "/api/rooms";
+/**
+ * Rooms, DMs, members and roles are owned by org-service (gateway prefix
+ * /api/orgs). There are no invites: an owner/admin adds a member directly.
+ */
+const ROOMS = "/api/orgs/rooms";
 
-export async function getRooms({ limit, offset } = {}) {
-  return request(`${ROOMS}${buildQuery({ limit, offset })}`, {}, "Failed to fetch rooms");
+function page(items, { limit, offset = 0 } = {}) {
+  return limit ? items.slice(offset, offset + limit) : items.slice(offset);
+}
+
+/** org-service RoomResponse -> the shape the UI renders. */
+function normalizeRoom(room) {
+  return {
+    id: room.id,
+    name: room.name ?? null,
+    type: String(room.type || "").toLowerCase(), // "dm" | "group"
+    created_at: room.createdAt ?? null,
+    updated_at: room.updatedAt ?? null,
+    peer: null,
+  };
+}
+
+/** org roles are OWNER | ADMIN | MEMBER; the UI compares lowercase. */
+async function listMembers(roomId) {
+  const members = await request(`${ROOMS}/${roomId}/members`, {}, "Failed to fetch room members");
+  return (members || []).map((member) => ({
+    userId: member.userId,
+    role: String(member.role || "").toLowerCase(),
+  }));
 }
 
 /**
- * Invites addressed to the current user.
- * Needs the new `GET /rooms/invites` route (declared above `GET /{room_id}`,
- * otherwise FastAPI reads "invites" as a room id and 422s).
+ * DMs have no name, and RoomResponse carries no members — fetch them to find
+ * the other person.
  */
-export async function getRoomInvites({ limit = 50, offset = 0 } = {}) {
-  return request(
-    `${ROOMS}/invites${buildQuery({ limit, offset })}`,
-    {},
-    "Failed to fetch room invites",
+async function withPeers(rooms) {
+  const me = getCurrentUserId();
+
+  const peerIds = await Promise.all(
+    rooms.map(async (room) => {
+      if (room.type !== "dm") return null;
+      try {
+        const members = await listMembers(room.id);
+        return members.find((member) => member.userId !== me)?.userId ?? null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  const users = await resolveUsers(peerIds);
+  return rooms.map((room, index) =>
+    room.type === "dm" ? { ...room, peer: users.get(peerIds[index]) ?? null } : room,
   );
 }
 
+export async function getRooms(options) {
+  const rooms = await request(ROOMS, {}, "Failed to fetch rooms");
+  return page(await withPeers((rooms || []).map(normalizeRoom)), options);
+}
+
 export async function getRoom(roomId) {
-  return request(`${ROOMS}/${roomId}`, {}, "Failed to fetch room");
+  const room = await request(`${ROOMS}/${roomId}`, {}, "Failed to fetch room");
+  const [withPeer] = await withPeers([normalizeRoom(room)]);
+  return withPeer;
 }
 
 export async function createRoom(name) {
-  return request(
+  const room = await request(
     ROOMS,
     { method: "POST", ...jsonBody({ name }) },
     "Failed to create room",
   );
+  return normalizeRoom(room);
 }
 
 /** Opens (or reuses) the DM room with another user. */
 export async function getOrCreateDm(userId) {
-  return request(
+  const room = await request(
     `${ROOMS}/dm`,
-    { method: "POST", ...jsonBody({ user_id: userId }) },
+    { method: "POST", ...jsonBody({ userId }) },
     "Failed to open conversation",
   );
+  const [withPeer] = await withPeers([normalizeRoom(room)]);
+  return withPeer;
 }
 
-export async function updateRoom(roomId, payload) {
-  return request(
+export async function updateRoom(roomId, { name }) {
+  const room = await request(
     `${ROOMS}/${roomId}`,
-    { method: "PATCH", ...jsonBody(payload) },
+    { method: "PATCH", ...jsonBody({ name }) },
     "Failed to update room",
   );
+  return normalizeRoom(room);
 }
 
 export async function deleteRoom(roomId) {
   return request(`${ROOMS}/${roomId}`, { method: "DELETE" }, "Failed to delete room");
 }
 
+/** -> [{ id, username, display_name, status, role: "owner" | "admin" | "member" }] */
 export async function getRoomMembers(roomId) {
-  return request(`${ROOMS}/${roomId}/members`, {}, "Failed to fetch room members");
+  const members = await listMembers(roomId);
+  const users = await resolveUsers(members.map((member) => member.userId));
+
+  return members.map(({ userId, role }) => {
+    const user = users.get(userId);
+    return {
+      id: userId,
+      username: user?.username ?? "Unknown user",
+      display_name: user?.display_name ?? null,
+      status: user?.status ?? "offline",
+      role,
+    };
+  });
 }
 
+/** Owner/admin only. The user joins right away — org-service has no invites. */
 export async function addMember(roomId, userId) {
   return request(
     `${ROOMS}/${roomId}/members`,
-    { method: "POST", ...jsonBody({ user_id: userId }) },
+    { method: "POST", ...jsonBody({ userId }) },
     "Failed to add member",
   );
 }
@@ -72,46 +136,21 @@ export async function removeMember(roomId, userId) {
   );
 }
 
-/** Leaving is removing yourself. */
-export async function leaveRoom(roomId, userId) {
-  return removeMember(roomId, userId);
+/** The owner can't leave (org answers 403 "Owner cannot leave the room."). */
+export async function leaveRoom(roomId) {
+  return request(`${ROOMS}/${roomId}/members/me`, { method: "DELETE" }, "Failed to leave room");
 }
 
+/** role: "admin" | "member" — OWNER can't be assigned. */
 export async function assignRole(roomId, userId, role) {
   return request(
     `${ROOMS}/${roomId}/members/${userId}/roles`,
-    { method: "POST", ...jsonBody({ role }) },
+    { method: "PATCH", ...jsonBody({ roleName: String(role).toUpperCase() }) },
     "Failed to assign role",
   );
 }
 
-export async function getRoomPendingInvites(roomId) {
-  return request(`${ROOMS}/${roomId}/invites`, {}, "Failed to fetch pending invites");
-}
-
-export async function inviteToRoom(roomId, userId) {
-  return request(
-    `${ROOMS}/${roomId}/invites`,
-    { method: "POST", ...jsonBody({ user_id: userId }) },
-    "Failed to send invite",
-  );
-}
-
-export async function acceptRoomInvite(inviteId) {
-  return request(
-    `${ROOMS}/invites/${inviteId}/accept`,
-    { method: "POST" },
-    "Failed to accept invite",
-  );
-}
-
-export async function declineRoomInvite(inviteId) {
-  return request(
-    `${ROOMS}/invites/${inviteId}`,
-    { method: "DELETE" },
-    "Failed to decline invite",
-  );
-}
+// --- DM list ----------------------------------------------------------------
 
 export function formatTimestamp(value) {
   if (!value) return "";
@@ -132,11 +171,7 @@ export function formatTimestamp(value) {
   return sent.toLocaleDateString([], { day: "2-digit", month: "short" });
 }
 
-/**
- * The DM list shape the UI actually renders. `peer` and `last_message` come
- * from the widened /rooms payload — the old code read conversation.username off
- * a room object that only ever had id/name/type/created_at/modified_at.
- */
+/** The DM list shape the UI renders, from a room that went through withPeers. */
 export function toConversation(room) {
   const peer = room.peer ?? null;
   const last = room.last_message ?? null;
@@ -151,7 +186,26 @@ export function toConversation(room) {
   };
 }
 
+/** DM rooms with their newest message attached, newest conversation first. */
 export async function listDmConversations() {
-  const rooms = await getRooms();
-  return (rooms || []).filter((room) => room.type === "dm").map(toConversation);
+  const rooms = (await getRooms()).filter((room) => room.type === "dm");
+
+  const withLast = await Promise.all(
+    rooms.map(async (room) => {
+      try {
+        const [last] = await request(
+          `/api/rooms/${room.id}/messages${buildQuery({ page: 0, size: 1 })}`,
+          {},
+          "Failed to load messages",
+        );
+        return { ...room, last_message: last ? { content: last.content, sent_at: last.sentAt } : null };
+      } catch {
+        return { ...room, last_message: null };
+      }
+    }),
+  );
+
+  const sortKey = (room) =>
+    new Date(room.last_message?.sent_at ?? room.updated_at ?? room.created_at ?? 0).getTime();
+  return withLast.sort((a, b) => sortKey(b) - sortKey(a)).map(toConversation);
 }

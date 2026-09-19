@@ -77,9 +77,9 @@ function AppShellContent({ onLogout }) {
   );
 }
 
-function AppShell({ onLogout }) {
+function AppShell({ user, onLogout }) {
   return (
-    <ProfileOverlayProvider>
+    <ProfileOverlayProvider user={user}>
       <AppShellContent onLogout={onLogout} />
     </ProfileOverlayProvider>
   );
