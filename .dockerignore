@@ -1,0 +1,7 @@
+.git
+**/node_modules
+**/dist
+**/target
+**/npm-debug.log
+.vscode
+.idea
