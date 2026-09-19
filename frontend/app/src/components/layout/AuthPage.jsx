@@ -15,8 +15,8 @@ export const Container = styled.div`
 export const Card = styled.div`
   width: 100%;
   max-width: 420px;
-  background: var(--color-surface-hover);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: #202324;
+  border: 1px solid #161819;
   border-radius: 16px;
   padding: 32px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
@@ -145,8 +145,8 @@ function LoginView({ setView, onLogin, values, onChange, error, loading }) {
 
       <Form onSubmit={handleLogin}>
         <Input
-          type="email"
-          placeholder="Email"
+          type="text"
+          placeholder="Email or username"
           required
           value={values.email}
           onChange={(e) => onChange("email", e.target.value)}
@@ -199,8 +199,8 @@ function SignupView({ setView, onSignup, values, onChange, error, loading }) {
           onChange={(e) => onChange("username", e.target.value)}
         />
         <Input
-          type="email"
-          placeholder="Email"
+          type="text"
+          placeholder="Email or username"
           required
           value={values.email}
           onChange={(e) => onChange("email", e.target.value)}
@@ -278,10 +278,13 @@ function AuthPage( { onLogin } ) {
     setError("");
 
     try {
-      await loginUser(email, password);
-      onLogin();
+      onLogin(await loginUser(email, password));
     } catch (err) {
-      setError(err.message);
+		if (err?.status >= 500) {
+			setError("Something went wrong. Please try again later.");
+		} else {
+			setError(err.message);
+		}
       throw err;
     } finally {
       setLoading(false);
@@ -298,10 +301,13 @@ function AuthPage( { onLogin } ) {
     setError("");
 
     try {
-      await registerUser(username, email, password);
-      onLogin();
+      onLogin(await registerUser(username, email, password));
     } catch (err) {
-      setError(err.message);
+      if (err?.status >= 500) {
+        setError("Something went wrong. Please try again later.");
+      } else {
+        setError(err.message);
+      }
       throw err;
     } finally {
       setLoading(false);
@@ -340,7 +346,7 @@ function AuthPage( { onLogin } ) {
   return (
     <Container>
       <Card>
-        <Logo>WHATEVER</Logo>
+        <Logo>CHATAPP</Logo>
         <Title>
           {view === "login"
             ? "Welcome Back"

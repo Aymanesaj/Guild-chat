@@ -3,8 +3,9 @@ import styled from "styled-components";
 import { HiArrowLeftStartOnRectangle } from "react-icons/hi2";
 import { IoMdAdd } from "react-icons/io";
 import { useProfileOverlay } from "./ProfileOverlayContext";
-import { getRooms } from "../../api/rooms";
-import { getMe } from "../../api/authentication.js";
+import { getRooms, createRoom } from "../../api/rooms";
+import CreateRoomInput from "./CreateRoomInput";
+import { useAvatarUrl } from "../../hooks/useAvatarUrl";
 
 const SidebarRoot = styled.aside`
   display: flex;
@@ -167,8 +168,16 @@ const Avatar = styled.div`
   height: 36px;
   border-radius: 50%;
   place-items: center;
+  overflow: hidden;
+  flex-shrink: 0;
   background: var(--color-accent);
   font-weight: bold;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
 `;
 
 export const ProfileName = styled.button`
@@ -213,8 +222,10 @@ function Sidebar({
   onDirectMessages,
   onLogout
 }) {
+  const { roomsRefreshTick } = useProfileOverlay();
   const [rooms, setRooms] = useState([]);
   const [loaded, setLoaded] = useState("loading");
+  const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
     async function loadRooms() {
@@ -229,7 +240,19 @@ function Sidebar({
     }
 
     loadRooms();
-  }, []);
+  }, [roomsRefreshTick]);
+
+  async function handleCreateRoom(name) {
+    try {
+      const newRoom = await createRoom(name);
+      setRooms((prev) => [newRoom, ...prev]);
+      setCreateOpen(false);
+      if (onRoomChange) onRoomChange(newRoom);
+    } catch (err) {
+      console.error("Failed to create room:", err);
+      window.alert(err?.message || "Failed to create room");
+    }
+  }
 
   return (
     <SidebarRoot>
@@ -247,6 +270,10 @@ function Sidebar({
         activeRoomId={activeRoomId}
         onRoomChange={onRoomChange}
         state={loaded}
+        onCreate={() => setCreateOpen((s) => !s)}
+        createOpen={createOpen}
+        onSubmitCreate={handleCreateRoom}
+        onCancelCreate={() => setCreateOpen(false)}
       />
 
       <ProfilePreview onLogout={onLogout} />
@@ -262,16 +289,35 @@ function SidebarHeader() {
   );
 }
 
-function RoomsSection({ rooms, isDirectMessages, activeRoomId, onRoomChange, state }) {
+function RoomsSection({
+  rooms, isDirectMessages, activeRoomId, onRoomChange, state,
+  onCreate, createOpen, onSubmitCreate, onCancelCreate,
+}) {
   return (
     <SidebarSection>
-      <SectionTitle title="Rooms" actionLabel="Create room" />
+      <SectionTitle
+        title="Rooms"
+        actionLabel="Create room"
+        onCreate={onCreate}
+      />
 
-      {state === "loading" && <StatusMessage>Loading rooms...</StatusMessage>}
-      {state === "error" && <StatusMessage>Error loading rooms.</StatusMessage>}
+      {createOpen && (
+        <CreateRoomInput
+          onCreate={onSubmitCreate}
+          onCancel={onCancelCreate}
+        />
+      )}
+
+      {state === "loading" && (
+        <StatusMessage>Loading rooms...</StatusMessage>
+      )}
+
+      {state === "error" && (
+        <StatusMessage>Error loading rooms.</StatusMessage>
+      )}
 
       <RoomListNav aria-label="Rooms">
-        {rooms.map((room) => (
+        {rooms.filter((room) => room.type !== "dm").map((room) => (
           <RoomButton
             key={room.id}
             room={room}
@@ -284,11 +330,11 @@ function RoomsSection({ rooms, isDirectMessages, activeRoomId, onRoomChange, sta
   );
 }
 
-function SectionTitle({ title, actionLabel }) {
+function SectionTitle({ title, actionLabel, onCreate }) {
   return (
     <SectionTitleRow>
       <span>{title}</span>
-      <SectionActionButton type="button" aria-label={actionLabel}>
+      <SectionActionButton type="button" aria-label={actionLabel} onClick={onCreate}>
         <IoMdAdd />
       </SectionActionButton>
     </SectionTitleRow>
@@ -317,37 +363,24 @@ function DirectMessagesButton({ isDirectMessages, onDirectMessages }) {
 }
 
 function ProfilePreview({ onLogout }) {
-
-  const [user, setUser] = useState(null);
-  const { openProfile } = useProfileOverlay();
-
-  useEffect(() => {
-    async function fetchUser() {
-      const token = localStorage.getItem("token");
-      if (token) {
-        try {
-          const userData = await getMe(token);
-          setUser(userData);
-        } catch (error) {
-          console.error("Error fetching user data:", error);
-        }
-      }
-    }
-    fetchUser();
-  }, []);
+  const { currentUser, openProfile } = useProfileOverlay();
+  const { avatarUrl } = useAvatarUrl(currentUser?.avatar);
+  const name = currentUser?.display_name || currentUser?.username;
 
   function openPrfl() {
-    openProfile(user);
-    console.log("shoudl be opened!");
+    openProfile();
   }
+
   return (
     <ProfilePreviewBox>
-      <Avatar>{user?.username?.charAt(0)}</Avatar>
+      <Avatar>
+        {avatarUrl ? <img src={avatarUrl} alt="" /> : name?.charAt(0)?.toUpperCase()}
+      </Avatar>
 
       <div>
         <ProfileName onClick={openPrfl} >
-          {user?.username}</ProfileName>
-        <span>Online</span>
+          {name}</ProfileName>
+        <span>@{currentUser?.username}</span>
       </div>
       <LogoutButton onClick={onLogout} >
         <HiArrowLeftStartOnRectangle />

@@ -1,7 +1,7 @@
 import DmList from "./DmList";
 import { useEffect, useState } from "react";
 import styled from "styled-components";
-import { getDirectMessages } from "../../api/directMessages";
+import { listDmConversations } from "../../api/rooms";
 
 const DmViewShell = styled.section`
   display: flex;
@@ -29,8 +29,7 @@ function DmView() {
   useEffect(() => {
     async function loadMessages() {
       try {
-        const data = await getDirectMessages();
-        setConversations(data);
+        setConversations(await listDmConversations());
         setLoading("success");
       } catch (error) {
         console.error(error);

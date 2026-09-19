@@ -17,9 +17,15 @@ services:
       - 8000:80
     networks:
       - private
+    # every upstream{} host is resolved at config-load time, so nginx exits with
+    # "host not found in upstream" unless all of them exist first
     depends_on:
       - identity-service
       - chat-service
+      - org-service
+      - grafana
+      - prometheus
+      - docker-exporter
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
@@ -252,6 +258,8 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: postgres
+    ports:
+      - "5432:5432" # temporary, for local dev only
     volumes:
       - database:/var/lib/postgresql/data
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
