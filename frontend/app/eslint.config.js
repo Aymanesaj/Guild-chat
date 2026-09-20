@@ -18,4 +18,11 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },
+  {
+    // Shared styled-components primitives: these modules intentionally export
+    // several styled helpers alongside a component, which is not a fast-refresh
+    // boundary the way a route/page module is.
+    files: ['src/components/ui/**/*.{js,jsx}'],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
 ])
