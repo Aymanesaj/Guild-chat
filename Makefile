@@ -24,7 +24,7 @@ fclean:
 	docker system prune -a
 
 ps:
-	docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+	@docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
 restart:
 	docker compose restart
