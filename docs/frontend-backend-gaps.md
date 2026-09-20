@@ -9,7 +9,7 @@ Browser ──► nginx :8000
              └─ /api/rooms/*, /ws  ─► chat-service       (messages, being reworked by its owner)
 ```
 
-- **Auth.** Login and register return `accessToken` and `refreshToken`. The frontend stores them and sends `Authorization: Bearer <accessToken>` on every request, refreshing through `POST /api/users/auth/refresh` before the token expires.
+- **Auth.** `POST /api/users/login` and `/register` return `accessToken` and `refreshToken`. The frontend stores them and sends `Authorization: Bearer <accessToken>` on every request, refreshing through `POST /api/users/auth/refresh` before the token expires.
 - **User IDs.** org-service returns bare user UUIDs. The frontend turns them into names and avatars with identity's `GET /api/users/{id}`.
 - **Unfinished UI stays visible.** If a feature needs an endpoint that doesn't exist yet, the UI still shows it. Using it shows a message naming the endpoint it needs (for example *"Not available yet: needs identity-service: GET /by-username"*). The list lives in [`frontend/app/src/api/features.js`](../frontend/app/src/api/features.js).
 
@@ -55,26 +55,34 @@ Spring's default entry point returns 403. The frontend works around it, but 401 
 
 ---
 
-## org-service
+## org-service TODO
 
-### Fixed on the backend — frontend work still open
+**Nice to have:** `limit` and `offset` on `GET /rooms`. The frontend pages the list client-side in `page()` for now.
 
-**1. Changing a member's role no longer returns `401`.** ✅ backend · ⬜ frontend
+---
 
-Both causes are gone: the `@Size(max = 100)` on the `RoleName` enum in `UpdateMemberRoleRequest` was dropped, and `JwtAuthenticationFilter` no longer wraps `filterChain.doFilter(...)` in its `try/catch`, so exceptions from further down stop surfacing as 401s.
+## My TODOs (frontend)
 
-`PATCH /rooms/{roomId}/members/{userId}/roles` is therefore usable now. The frontend client already exists — `assignRole(roomId, userId, role)` in [`src/api/rooms.js`](../frontend/app/src/api/rooms.js) — but **nothing calls it**: there is no promote/demote control in the UI.
+Nothing here is blocked — the backend is ready for all of it.
 
-To finish it: add the action to the member row in [`src/components/rooms/MemberItem.jsx`](../frontend/app/src/components/rooms/MemberItem.jsx), next to the existing kick button, shown under the same owner/admin check `MembersSidebar` already computes (`currentUserRole`). Note `OWNER` can't be assigned — only `ADMIN` and `MEMBER`.
+**1. Use `userIdIfDm` instead of the per-DM member lookup.**
 
-**2. `RoomResponse` now carries `userIdIfDm`.** ✅ backend · ⬜ frontend
+`withPeers()` in [`src/api/rooms.js`](../frontend/app/src/api/rooms.js) still fires one `GET /rooms/{id}/members` per DM to find the peer — an N+1 on every `getRooms()`, which the sidebar and `listDmConversations()` both sit on. org-service now returns the peer directly on `RoomResponse`.
 
-The DM's other participant is returned directly, so the per-DM member lookup is no longer needed.
+Read `room.userIdIfDm` in `normalizeRoom()` and use it in `withPeers()`, falling back to the member lookup only when it's absent. `resolveUsers()` still batches the ID into a name/avatar, so only the per-room fetch goes away. Delete the stale comment above `withPeers()` ("RoomResponse carries no members").
 
-The frontend **does not read the field yet**. `withPeers()` in [`src/api/rooms.js`](../frontend/app/src/api/rooms.js) still issues one `GET /rooms/{id}/members` per DM to find the peer — an N+1 on every `getRooms()` call, which is also what `listDmConversations()` and the sidebar are built on.
+**2. Add a promote/demote control.**
 
-To finish it: read `room.userIdIfDm` in `normalizeRoom()` and let `withPeers()` use it, falling back to the member lookup only when the field is absent. The existing `resolveUsers()` batch call still turns the ID into a name/avatar, so only the per-room fetch goes away. The stale comment above `withPeers()` ("RoomResponse carries no members") should go with it.
+`assignRole(roomId, userId, role)` exists in [`src/api/rooms.js`](../frontend/app/src/api/rooms.js) and nothing calls it — the 401 bug that blocked it is fixed.
 
-### Still open
+Put the action on the member row in [`src/components/rooms/MemberItem.jsx`](../frontend/app/src/components/rooms/MemberItem.jsx) next to the kick button, behind the owner/admin check `MembersSidebar` already computes (`currentUserRole`). `OWNER` can't be assigned — only `ADMIN` and `MEMBER`.
 
-**3. Nice to have:** `limit` and `offset` on `GET /rooms`. The frontend still pages the list client-side in `page()` in [`src/api/rooms.js`](../frontend/app/src/api/rooms.js).
+**3. Surface the socket connection status.**
+
+`useRoomMessages` tracks `connection` and returns it, but [`RoomView.jsx`](../frontend/app/src/components/rooms/RoomView.jsx) destructures only `{ messages, state, sending, send }`, so a dropped socket is invisible. Show a reconnecting banner in the room header.
+
+**4. Room settings: rename and delete.**
+
+`getRoom`, `updateRoom` and `deleteRoom` are written in [`src/api/rooms.js`](../frontend/app/src/api/rooms.js) and wired to nothing. Owner-only, and `ConfirmDialog` already exists for the delete.
+
+**5. When the identity endpoints land**, clear the matching entry in [`src/api/features.js`](../frontend/app/src/api/features.js) (set it to `null`) and the disabled UI turns itself on: Friends → Add, the live username hint, and remove-avatar (`deleteAvatar()` is already written). Drop the 403-for-401 workarounds in `http.js` / `tokens.js` once that one is fixed too.
