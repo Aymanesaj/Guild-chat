@@ -64,6 +64,8 @@ const Button = styled.button`
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
+  /* Keeps the UA underline off when rendered as a link via the as prop. */
+  text-decoration: none;
   transition:
     background var(--dur-fast) var(--ease),
     border-color var(--dur-fast) var(--ease),
