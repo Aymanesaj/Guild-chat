@@ -4,6 +4,8 @@ import Sidebar from "./Sidebar";
 import MainPanel from "./MainPanel";
 import ProfileOverlay from "./ProfileOverlay";
 import { ProfileOverlayProvider, useProfileOverlay } from "./ProfileOverlayContext";
+import { RoomNavigationProvider } from "./RoomNavigationContext";
+import ProfilePreviewPopover from "../profile/ProfilePreviewPopover";
 
 const AppShellRoot = styled.div`
   display: flex;
@@ -15,7 +17,7 @@ const MainContent = styled.main`
   position: relative;
   min-width: 0;
   flex: 1;
-  background: var(--color-bg);
+  background: var(--bg-base);
 
   &::before {
     position: absolute;
@@ -25,7 +27,7 @@ const MainContent = styled.main`
     width: 42px;
     content: "";
     pointer-events: none;
-    background: linear-gradient(to right, rgba(0, 0, 0, 0.1), transparent);
+    background: linear-gradient(to right, rgba(0, 0, 0, 0.18), transparent);
   }
 `;
 
@@ -33,7 +35,7 @@ function AppShellContent({ onLogout }) {
   const [isDirectMessages, setIsDirectMessages] = useState(true);
   const [activeRoomId, setActiveRoomId] = useState(null);
 
-  const { profile, closeProfile } = useProfileOverlay();
+  const { profile, closeProfile, previewUser, closeUserPreview } = useProfileOverlay();
 
   function handleRoomChange(roomId) {
     setActiveRoomId(roomId);
@@ -41,7 +43,7 @@ function AppShellContent({ onLogout }) {
   }
 
   return (
-    <>
+    <RoomNavigationProvider navigateToRoom={handleRoomChange}>
       <AppShellRoot>
         <Sidebar
           isDirectMessages={isDirectMessages}
@@ -64,13 +66,20 @@ function AppShellContent({ onLogout }) {
           onClose={closeProfile}
         />
       )}
-    </>
+
+      {previewUser && (
+        <ProfilePreviewPopover
+          target={previewUser}
+          onClose={closeUserPreview}
+        />
+      )}
+    </RoomNavigationProvider>
   );
 }
 
-function AppShell({ onLogout }) {
+function AppShell({ user, onLogout }) {
   return (
-    <ProfileOverlayProvider>
+    <ProfileOverlayProvider user={user}>
       <AppShellContent onLogout={onLogout} />
     </ProfileOverlayProvider>
   );

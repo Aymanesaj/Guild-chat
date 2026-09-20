@@ -1,42 +1,56 @@
 import styled from "styled-components";
+import { TbHash, TbMessageCircle, TbUsers } from "react-icons/tb";
+import { Button } from "../ui";
 
 const PanelHeader = styled.header`
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	padding: 0 16px;
-	border-bottom: 1px solid var(--color-text);
-
-	h2 {
-		transform: translateY(-8px);
-		margin: 10px 0;
-		font-size: 16px;
-	}
-
-	button {
-		transform: translateY(-8px);
-		border: 0;
-		border-radius: 4px;
-		padding: 8px 12px;
-		background: transparent;
-		color: var(--color-text-muted);
-	}
-
-	button:hover {
-		background: var(--color-accent);
-	}
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
 `;
 
-function RoomHeader({ roomName, onToggleMembers }) {
-	return (
-	  <PanelHeader>
-		<h2># {roomName}</h2>
+const HeaderTitle = styled.div`
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--text-tertiary);
 
-		<button type="button" onClick={onToggleMembers}>
-		Members
-		</button>
-	  </PanelHeader>
-	);
-	}
+  h2 {
+    overflow: hidden;
+    margin: 0;
+    color: var(--text-primary);
+    font-size: var(--text-lg);
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+`;
 
-	export default RoomHeader;
+function RoomHeader({ roomName, isDm, onToggleMembers }) {
+  const TitleIcon = isDm ? TbMessageCircle : TbHash;
+
+  return (
+    <PanelHeader>
+      <HeaderTitle>
+        <TitleIcon size={20} />
+        <h2>{roomName}</h2>
+      </HeaderTitle>
+
+      <Button
+        type="button"
+        $variant="ghost"
+        $size="sm"
+        onClick={onToggleMembers}
+        title="Toggle members"
+      >
+        <TbUsers size={18} />
+        Members
+      </Button>
+    </PanelHeader>
+  );
+}
+
+export default RoomHeader;

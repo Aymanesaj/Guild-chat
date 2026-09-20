@@ -15,11 +15,31 @@ services:
       - ./gateway/modsec/unicode.mapping:/etc/nginx/modsec/unicode.mapping
     ports:
       - 8000:80
+      - 8443:443
     networks:
       - private
+    # every upstream{} host is resolved at config-load time, so nginx exits with
+    # "host not found in upstream" unless all of them exist first
     depends_on:
       - identity-service
       - chat-service
+      - org-service
+    # depends_on:
+    #   identity-service:
+    #     condition: service_healthy
+    #   chat-service:
+    #     condition: service_healthy
+    #   org-service:
+    #     condition: service_healthy
+    #   grafana:
+    #     condition: service_started
+    #   prometheus:
+    #     condition: service_started
+    #   docker-exporter:
+    #     condition: service_healthy
+      - grafana
+      - prometheus
+      - docker-exporter
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
@@ -44,8 +64,6 @@ services:
       - private
     expose:
       - "8082"
-    ports:
-      - "8082:8082"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8082/healthz"]
       interval: 20s
@@ -122,8 +140,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    ports:
-      - "8083:8083"
     restart: always
 
 
@@ -165,7 +181,8 @@ services:
       envsubst < /etc/promtail/config.yml > /tmp/config.yml &&
       exec /usr/bin/promtail -config.file=/tmp/config.yml
       "
-    #uses port 8093 internally with promitheus
+    expose:
+      - "8093"
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'printf \"GET / HTTP/1.1\n\n\" > /dev/tcp/127.0.0.1/8093; exit $?;'"]
       interval: 20s
@@ -270,6 +287,13 @@ services:
   # # vault:
   # #   image: hashicorp/vault:latest
 
+
+
+# -----------------------------------------------------------
+# ------------------------ Volumes ------------------------
+# -----------------------------------------------------------
+
+
 volumes:
   database:
     name: "database"
@@ -281,6 +305,12 @@ volumes:
     name: "identity_avatars"
   mongo_data:
     name: "mongo_data"
+
+# -----------------------------------------------------------
+# ------------------------ Networks ------------------------
+# -----------------------------------------------------------
+
+
 networks:
   private:
     name: private # why would you name this by private , it can be another networks type ...
