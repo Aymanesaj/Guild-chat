@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import AppShell from "./components/layout/AppShell.jsx";
 import AuthPage from "./components/layout/AuthPage.jsx";
+import Landing from "./components/landing/Landing.jsx";
 import { getMe, hasSession, logoutUser, LOGOUT_EVENT } from "./api/authentication.js";
 
 function App() {
@@ -47,36 +48,43 @@ function App() {
     }
   };
 
-  if (checking) {
-    return null;
-  }
-
   const isAuth = Boolean(user);
+
+  // While the session is being restored we know tokens were present, so the
+  // landing page can show the signed-in call to action straight away instead
+  // of waiting on /me. The authenticated routes still wait for the real answer.
+  const hasLikelySession = isAuth || checking;
 
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<Landing isAuth={hasLikelySession} />} />
+
         <Route
           path="/auth"
           element={
-            isAuth
-              ? <Navigate to="/app" replace />
-              : <AuthPage onLogin={setUser} />
+            checking
+              ? null
+              : isAuth
+                ? <Navigate to="/app" replace />
+                : <AuthPage onLogin={setUser} />
           }
         />
 
         <Route
           path="/app/*"
           element={
-            isAuth
-              ? <AppShell user={user} onLogout={logOut} />
-              : <Navigate to="/auth" replace />
+            checking
+              ? null
+              : isAuth
+                ? <AppShell user={user} onLogout={logOut} />
+                : <Navigate to="/auth" replace />
           }
         />
 
         <Route
           path="*"
-          element={<Navigate to={isAuth ? "/app" : "/auth"} replace />}
+          element={<Navigate to={hasLikelySession ? "/app" : "/"} replace />}
         />
       </Routes>
     </BrowserRouter>

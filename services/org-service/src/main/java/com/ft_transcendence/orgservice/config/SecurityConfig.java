@@ -36,9 +36,7 @@ public class SecurityConfig {
             .httpBasic(httpBasic -> httpBasic.disable())
             .formLogin(formLogin -> formLogin.disable())
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/healthz",
-                                "/actuator/**"
-                ).permitAll()
+                .requestMatchers("/healthz").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(

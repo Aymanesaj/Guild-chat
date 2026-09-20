@@ -18,12 +18,3 @@ spring:
 
 server:
   port: ${PORT:8082}
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,prometheus
-  endpoint:
-    prometheus:
-      enabled: true

@@ -56,7 +56,7 @@ public class AuthService {
 		return buildResponse(saved);
 	}
 
-	@Transactional(readOnly = true)
+	@Transactional
 	public AuthResponse login(LoginRequest request) {
 		String identifier = request.identifier().trim();
 		UserEntity user = userRepository.findByEmailIgnoreCase(identifier)
