@@ -6,9 +6,15 @@ tmp/*
 .vscode/
 *.sh
 *.md
+<<<<<<< HEAD
 config/
 services/chat-service/target/
 
+=======
+
+services/chat-service/target/
+
+>>>>>>> main
 
 notes/*
 
@@ -23,7 +29,11 @@ node_modules/
 frontend/app/dist/
 
 
+<<<<<<< HEAD
+tasks.md
+=======
 tasks.md
 
 # local dev DB seeding (not for the repo)
 scripts/seed-users.sh
+>>>>>>> main

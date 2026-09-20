@@ -24,6 +24,19 @@ services:
       - identity-service
       - chat-service
       - org-service
+    # depends_on:
+    #   identity-service:
+    #     condition: service_healthy
+    #   chat-service:
+    #     condition: service_healthy
+    #   org-service:
+    #     condition: service_healthy
+    #   grafana:
+    #     condition: service_started
+    #   prometheus:
+    #     condition: service_started
+    #   docker-exporter:
+    #     condition: service_healthy
       - grafana
       - prometheus
       - docker-exporter
