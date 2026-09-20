@@ -85,19 +85,6 @@ export const PrimaryButton = styled(Button)`
   margin-top: 6px;
 `;
 
-export const TextButton = styled.button`
-  margin-top: var(--space-3);
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  transition: color var(--dur-fast) var(--ease);
-
-  &:hover {
-    color: var(--text-primary);
-  }
-`;
-
 export const Footer = styled.div`
   margin-top: 18px;
   text-align: center;
@@ -183,10 +170,6 @@ function LoginView({ setView, onLogin, values, onChange, error, loading }) {
         </PrimaryButton>
       </Form>
 
-      <TextButton type="button" onClick={() => setView("forgot")}>
-        Forgot Password?
-      </TextButton>
-
       <Footer>
         Don't have an account?
         <Accent onClick={() => setView("signup")}>Sign Up</Accent>
@@ -242,26 +225,6 @@ function SignupView({ setView, onSignup, values, onChange, error, loading }) {
 
       <Footer>
         Already have an account?
-        <Accent onClick={() => setView("login")}>Login</Accent>
-      </Footer>
-    </>
-  );
-}
-
-function ForgotView({ setView }) {
-  return (
-    <>
-      <Subtitle>
-        Enter your email and we'll send you a reset link.
-      </Subtitle>
-
-      <Form>
-        <Input type="email" placeholder="Email" required />
-        <PrimaryButton type="submit" $full>Send Reset Link</PrimaryButton>
-      </Form>
-
-      <Footer>
-        Remember your password?
         <Accent onClick={() => setView("login")}>Login</Accent>
       </Footer>
     </>
@@ -340,8 +303,6 @@ function AuthPage( { onLogin } ) {
             loading={loading}
           />
         );
-      // case "forgot":
-      //   return <ForgotView setView={setView} />;
       default:
         return (
           <LoginView
@@ -359,13 +320,9 @@ function AuthPage( { onLogin } ) {
   return (
     <Container>
       <Card>
-        <Logo>CHATAPP</Logo>
+        <Logo>FT_TRANSCENDENCE</Logo>
         <Title>
-          {view === "login"
-            ? "Welcome Back"
-            : view === "signup"
-            /*? "Create Account"
-            : "Reset Password"*/}
+          {view === "login" ? "Welcome Back" : "Create Account"}
         </Title>
 
         {renderView()}
