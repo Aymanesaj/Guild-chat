@@ -359,7 +359,7 @@ function AuthPage( { onLogin } ) {
   return (
     <Container>
       <Card>
-        <Logo>CHATAPP</Logo>
+        <Logo>FT_TRANSCENDENCE</Logo>
         <Title>
           {view === "login"
             ? "Welcome Back"

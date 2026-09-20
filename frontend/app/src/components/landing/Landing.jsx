@@ -21,6 +21,13 @@ const Brand = styled(Link)`
   letter-spacing: 0.18em;
   color: var(--accent-500);
   text-decoration: none;
+  white-space: nowrap;
+
+  /* The name is long; ease off the tracking before it crowds the nav button. */
+  @media (max-width: 480px) {
+    font-size: var(--text-xs);
+    letter-spacing: 0.1em;
+  }
 `;
 
 const Closing = styled(Section)`
@@ -53,7 +60,7 @@ function Landing({ isAuth }) {
     <Page>
       <Container>
         <Nav>
-          <Brand to="/">CHATAPP</Brand>
+          <Brand to="/">FT_TRANSCENDENCE</Brand>
           <Button as={Link} to={target} $variant="secondary" $size="sm">
             {isAuth ? "Open app" : "Sign in"}
           </Button>
@@ -79,7 +86,7 @@ function Landing({ isAuth }) {
       </Closing>
 
       <Footer>
-        <Container>ChatApp — built for ft_transcendence</Container>
+        <Container>FT_TRANSCENDENCE</Container>
       </Footer>
     </Page>
   );

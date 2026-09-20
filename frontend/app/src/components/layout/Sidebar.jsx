@@ -263,7 +263,7 @@ function Sidebar({
 function SidebarHeader() {
   return (
     <SidebarHeaderBox>
-      <SidebarTitle>AppName</SidebarTitle>
+      <SidebarTitle>FT_TRANSCENDENCE</SidebarTitle>
     </SidebarHeaderBox>
   );
 }

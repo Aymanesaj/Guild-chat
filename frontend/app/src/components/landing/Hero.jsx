@@ -80,7 +80,7 @@ function Hero({ isAuth }) {
     <Wrapper>
       <Container>
         <Eyebrows>
-          <Eyebrow>ChatApp</Eyebrow>
+          <Eyebrow>FT_TRANSCENDENCE</Eyebrow>
         </Eyebrows>
 
         <Title>
