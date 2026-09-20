@@ -24,3 +24,6 @@ frontend/app/dist/
 
 
 tasks.md
+
+# local dev DB seeding (not for the repo)
+scripts/seed-users.sh
