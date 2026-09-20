@@ -109,6 +109,19 @@
 			<artifactId>grpc-netty-shaded</artifactId>
 			<scope>runtime</scope>
 		</dependency>
+		<dependency>
+		    <groupId>io.micrometer</groupId>
+		    <artifactId>micrometer-registry-prometheus</artifactId>
+		</dependency>
+
+		<!-- Source: https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-actuator -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+			<version>4.2.0-M1</version>
+			<scope>compile</scope>
+		</dependency>
+
 	</dependencies>
 
 	<build>
