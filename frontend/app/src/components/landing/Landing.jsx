@@ -86,7 +86,7 @@ function Landing({ isAuth }) {
       </Closing>
 
       <Footer>
-        <Container>FT_TRANSCENDENCE</Container>
+        <Container>CHATAPP — Built for ft_transcendence</Container>
       </Footer>
     </Page>
   );
