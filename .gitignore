@@ -6,7 +6,7 @@ tmp/*
 .vscode/
 *.sh
 *.md
-
+config/
 services/chat-service/target/
 
 

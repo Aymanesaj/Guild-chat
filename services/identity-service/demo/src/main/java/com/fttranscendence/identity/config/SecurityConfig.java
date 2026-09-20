@@ -37,7 +37,8 @@ public class SecurityConfig {
 					"/oauth/**",
 					"/avatars/**",
 					"/actuator/health",
-					"/actuator/health/**"
+					"/actuator/health/**",
+					"/actuator/prometheus"
 				).permitAll()
 				.anyRequest().authenticated()
 			)
