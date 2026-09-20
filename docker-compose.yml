@@ -18,28 +18,19 @@ services:
       - 8443:443
     networks:
       - private
-    # every upstream{} host is resolved at config-load time, so nginx exits with
-    # "host not found in upstream" unless all of them exist first
     depends_on:
-      - identity-service
-      - chat-service
-      - org-service
-    # depends_on:
-    #   identity-service:
-    #     condition: service_healthy
-    #   chat-service:
-    #     condition: service_healthy
-    #   org-service:
-    #     condition: service_healthy
-    #   grafana:
-    #     condition: service_started
-    #   prometheus:
-    #     condition: service_started
-    #   docker-exporter:
-    #     condition: service_healthy
-      - grafana
-      - prometheus
-      - docker-exporter
+      identity-service:
+        condition: service_healthy
+      chat-service:
+        condition: service_healthy
+      org-service:
+        condition: service_healthy
+      grafana:
+        condition: service_started
+      prometheus:
+        condition: service_started
+      docker-exporter:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
@@ -57,9 +48,8 @@ services:
     container_name: org-service
     environment:
       PORT: 8082
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/org_service_db
-      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+    env_file:
+      - ./.env
     networks:
       - private
     expose:
@@ -73,8 +63,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    env_file:
-      - ./.env
     restart: always
 
 
@@ -105,9 +93,8 @@ services:
   mongodb:
     image: mongo:7
     container_name: mongodb
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+    env_file:
+      - ./.env
     volumes:
       - mongo_data:/data/db
     expose:
@@ -165,6 +152,17 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+    restart: always
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.1.0
+    container_name: nginx-exporter
+    command:
+      - -nginx.scrape-uri=http://nginx:80/nginx_status
+    networks:
+      - private
+    depends_on:
+      - nginx
     restart: always
   
 
