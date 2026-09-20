@@ -150,7 +150,7 @@ services:
       retries: 5
       start_period: 5s
     restart: always
-  
+
 
   promtail:
     image: grafana/promtail:latest
@@ -200,7 +200,7 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--web.external-url=http://localhost/prometheus/'
       - '--web.route-prefix=/'
-    volumes: 
+    volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./infra/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
       - prometheus_data:/prometheus
@@ -221,7 +221,7 @@ services:
     networks:
       - private
     restart: always
-    
+
 
 # -----------------------------------------------------------
 # -------------------- Data visualization -------------------
@@ -266,7 +266,7 @@ services:
     restart: always
     networks:
       - private
-  
+
   # # vault:
   # #   image: hashicorp/vault:latest
 
@@ -283,4 +283,4 @@ volumes:
     name: "mongo_data"
 networks:
   private:
-    name: private
+    name: private # why would you name this by private , it can be another networks type ...
