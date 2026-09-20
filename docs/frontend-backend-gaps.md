@@ -21,6 +21,7 @@ Browser ──► nginx :8000
 - [x] Rooms (org-service): create, list, leave, view members with roles
 - [x] Room members: owners and admins add friends directly (no invites) and kick members
 - [x] DMs (org-service): open or create one, list them with the other person's name
+- [x] Shared UI layer: design tokens in [`src/index.css`](../frontend/app/src/index.css) and reusable components in [`src/components/ui/`](../frontend/app/src/components/ui/) (Button, IconButton, Avatar, StatusDot, Card, Input, Tabs, Feedback, ConfirmDialog, Skeleton). New UI should compose these rather than redefine buttons/avatars per file. `ConfirmDialog` also replaced the last `window.confirm`/`window.alert` calls.
 
 ---
 
@@ -54,19 +55,26 @@ Spring's default entry point returns 403. The frontend works around it, but 401 
 
 ---
 
-## org-service TODO
+## org-service
 
-**1. Bug: changing a member's role always returns `401`.**(Fixed)
+### Fixed on the backend — frontend work still open
 
-`PATCH /rooms/{roomId}/members/{userId}/roles` answers `401 "Unable to validate JWT token"`, even with a valid token. There are two causes:
+**1. Changing a member's role no longer returns `401`.** ✅ backend · ⬜ frontend
 
-- `@Size(max = 100)` on the `RoleName` enum in `UpdateMemberRoleRequest` makes validation throw.
-- `JwtAuthenticationFilter` wraps `filterChain.doFilter(...)` in its `try/catch`, so *any* exception thrown further down comes back as a 401.
+Both causes are gone: the `@Size(max = 100)` on the `RoleName` enum in `UpdateMemberRoleRequest` was dropped, and `JwtAuthenticationFilter` no longer wraps `filterChain.doFilter(...)` in its `try/catch`, so exceptions from further down stop surfacing as 401s.
 
-Only the token check should be inside the `try`.
+`PATCH /rooms/{roomId}/members/{userId}/roles` is therefore usable now. The frontend client already exists — `assignRole(roomId, userId, role)` in [`src/api/rooms.js`](../frontend/app/src/api/rooms.js) — but **nothing calls it**: there is no promote/demote control in the UI.
 
-**2. Include the members in DM rooms.**(Fixed)
+To finish it: add the action to the member row in [`src/components/rooms/MemberItem.jsx`](../frontend/app/src/components/rooms/MemberItem.jsx), next to the existing kick button, shown under the same owner/admin check `MembersSidebar` already computes (`currentUserRole`). Note `OWNER` can't be assigned — only `ADMIN` and `MEMBER`.
 
-`GET /rooms` doesn't say who a DM is with, so the frontend calls `GET /rooms/{id}/members` once per DM to find the other person. Adding the member IDs (or just the other user's ID) to `RoomResponse` would remove those extra calls.
+**2. `RoomResponse` now carries `userIdIfDm`.** ✅ backend · ⬜ frontend
 
-**3. Nice to have:** `limit` and `offset` on `GET /rooms`. The frontend pages the list itself for now.(that's cute)
+The DM's other participant is returned directly, so the per-DM member lookup is no longer needed.
+
+The frontend **does not read the field yet**. `withPeers()` in [`src/api/rooms.js`](../frontend/app/src/api/rooms.js) still issues one `GET /rooms/{id}/members` per DM to find the peer — an N+1 on every `getRooms()` call, which is also what `listDmConversations()` and the sidebar are built on.
+
+To finish it: read `room.userIdIfDm` in `normalizeRoom()` and let `withPeers()` use it, falling back to the member lookup only when the field is absent. The existing `resolveUsers()` batch call still turns the ID into a name/avatar, so only the per-room fetch goes away. The stale comment above `withPeers()` ("RoomResponse carries no members") should go with it.
+
+### Still open
+
+**3. Nice to have:** `limit` and `offset` on `GET /rooms`. The frontend still pages the list client-side in `page()` in [`src/api/rooms.js`](../frontend/app/src/api/rooms.js).
