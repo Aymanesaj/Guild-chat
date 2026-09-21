@@ -24,6 +24,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.http.HttpStatus;
 
 import com.fttranscendence.chatservice.exception.ApiException;
+import com.fttranscendence.chatservice.grpc.OrgClient;
 import com.fttranscendence.chatservice.model.Message;
 import com.fttranscendence.chatservice.repository.MessageRepository;
 
@@ -37,11 +38,20 @@ class MessageServiceTest {
     private static final long ROOM = 42L;
     private static final String CURSOR = new ObjectId().toHexString();
 
+    private static final String USER = "a215c5f8-d810-4518-ad4c-8d551eb6dfc4";
+
     @Mock
     private MessageRepository messageRepository;
 
+    @Mock
+    private OrgClient orgClient;
+
     @InjectMocks
     private MessageService messageService;
+
+    private void isMember(boolean member) {
+        when(orgClient.isMember(USER, ROOM)).thenReturn(member);
+    }
 
     private Message message(String content) {
         return Message.create(ROOM, "a215c5f8-d810-4518-ad4c-8d551eb6dfc4",
@@ -51,10 +61,11 @@ class MessageServiceTest {
     @Test
     @DisplayName("no cursor: reads the newest page with the default limit of 50")
     void newestPageUsesDefaultLimit() {
+        isMember(true);
         when(messageRepository.findByRoomIdOrderByIdDesc(eq(ROOM), any()))
                 .thenReturn(List.of(message("hello")));
 
-        List<Message> result = messageService.history(ROOM, null, null);
+        List<Message> result = messageService.history(USER, ROOM, null, null);
 
         assertThat(result).hasSize(1);
 
@@ -69,9 +80,10 @@ class MessageServiceTest {
     @Test
     @DisplayName("blank cursor is treated as no cursor, not as a bad one")
     void blankCursorIsTreatedAsNoCursor() {
+        isMember(true);
         when(messageRepository.findByRoomIdOrderByIdDesc(eq(ROOM), any())).thenReturn(List.of());
 
-        messageService.history(ROOM, "   ", null);
+        messageService.history(USER, ROOM, "   ", null);
 
         verify(messageRepository).findByRoomIdOrderByIdDesc(eq(ROOM), any());
     }
@@ -79,10 +91,11 @@ class MessageServiceTest {
     @Test
     @DisplayName("with a cursor: reads the page before it, honouring the requested limit")
     void olderPageUsesCursorAndLimit() {
+        isMember(true);
         when(messageRepository.findByRoomIdAndIdLessThanOrderByIdDesc(eq(ROOM), eq(CURSOR), any()))
                 .thenReturn(List.of(message("older")));
 
-        messageService.history(ROOM, CURSOR, 10);
+        messageService.history(USER, ROOM, CURSOR, 10);
 
         ArgumentCaptor<Limit> limit = ArgumentCaptor.forClass(Limit.class);
         verify(messageRepository)
@@ -93,7 +106,8 @@ class MessageServiceTest {
     @Test
     @DisplayName("a cursor that is not an ObjectId is a 400, not a 500 from the driver")
     void rejectsMalformedCursor() {
-        assertThatThrownBy(() -> messageService.history(ROOM, "not-an-object-id", null))
+        isMember(true);
+        assertThatThrownBy(() -> messageService.history(USER, ROOM, "not-an-object-id", null))
                 .isInstanceOfSatisfying(ApiException.class, e -> {
                     assertThat(e.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(e.getCode()).isEqualTo("INVALID_CURSOR");
@@ -105,7 +119,8 @@ class MessageServiceTest {
     @Test
     @DisplayName("limit above the maximum is rejected: ?limit=1000000 must not be a free DoS")
     void rejectsTooLargeLimit() {
-        assertThatThrownBy(() -> messageService.history(ROOM, null, MessageService.MAX_LIMIT + 1))
+        isMember(true);
+        assertThatThrownBy(() -> messageService.history(USER, ROOM, null, MessageService.MAX_LIMIT + 1))
                 .isInstanceOfSatisfying(ApiException.class, e -> {
                     assertThat(e.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(e.getCode()).isEqualTo("INVALID_LIMIT");
@@ -117,9 +132,10 @@ class MessageServiceTest {
     @Test
     @DisplayName("limit of zero or negative is rejected")
     void rejectsNonPositiveLimit() {
-        assertThatThrownBy(() -> messageService.history(ROOM, null, 0))
+        isMember(true);
+        assertThatThrownBy(() -> messageService.history(USER, ROOM, null, 0))
                 .isInstanceOf(ApiException.class);
-        assertThatThrownBy(() -> messageService.history(ROOM, null, -5))
+        assertThatThrownBy(() -> messageService.history(USER, ROOM, null, -5))
                 .isInstanceOf(ApiException.class);
 
         verifyNoInteractions(messageRepository);
@@ -128,12 +144,48 @@ class MessageServiceTest {
     @Test
     @DisplayName("the maximum limit itself is allowed (boundary)")
     void acceptsTheMaximumLimit() {
+        isMember(true);
         when(messageRepository.findByRoomIdOrderByIdDesc(eq(ROOM), any())).thenReturn(List.of());
 
-        messageService.history(ROOM, null, MessageService.MAX_LIMIT);
+        messageService.history(USER, ROOM, null, MessageService.MAX_LIMIT);
 
         ArgumentCaptor<Limit> limit = ArgumentCaptor.forClass(Limit.class);
         verify(messageRepository).findByRoomIdOrderByIdDesc(eq(ROOM), limit.capture());
         assertThat(limit.getValue().max()).isEqualTo(MessageService.MAX_LIMIT);
+    }
+
+    @Test
+    @DisplayName("a non-member gets 403, so an outsider cannot tell an empty room from a private one")
+    void nonMemberIsForbidden() {
+        isMember(false);
+
+        assertThatThrownBy(() -> messageService.history(USER, ROOM, null, null))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(e.getCode()).isEqualTo("NOT_A_MEMBER");
+                });
+    }
+
+    @Test
+    @DisplayName("a non-member's request never reaches MongoDB: the check precedes the query")
+    void nonMemberNeverTouchesTheDatabase() {
+        isMember(false);
+
+        assertThatThrownBy(() -> messageService.history(USER, ROOM, null, 10))
+                .isInstanceOf(ApiException.class);
+
+        verifyNoInteractions(messageRepository);
+    }
+
+    @Test
+    @DisplayName("membership is checked before the cursor is validated, so errors cannot probe a room")
+    void membershipIsCheckedBeforeCursorValidation() {
+        isMember(false);
+
+        assertThatThrownBy(() -> messageService.history(USER, ROOM, "not-an-object-id", null))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getCode())
+                                .as("a non-member must see NOT_A_MEMBER, not INVALID_CURSOR")
+                                .isEqualTo("NOT_A_MEMBER"));
     }
 }
