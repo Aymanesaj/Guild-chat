@@ -14,6 +14,10 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 /**
  * One connection per browser tab, covering every room the user is in.
  *
@@ -29,6 +33,17 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     /** One user, many connections: laptop, phone, three tabs. */
     private final Map<String , Set<WebSocketSession>> sessionsByUser = new ConcurrentHashMap<>();
+
+
+    private final FrameSender frameSender ;
+    private final ObjectMapper objectMapper;
+    public ChatWebSocketHandler(FrameSender frameSender,  ObjectMapper objectMapper) {
+        this.frameSender = frameSender;
+        this.objectMapper = objectMapper;
+    }
+
+
+
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
@@ -46,8 +61,34 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws IOException {
         // Next step: subscribe / unsubscribe / typing.
+        JsonNode frame;
+        try {
+            frame = objectMapper.readTree(message.getPayload());
+        } catch (JsonProcessingException e) {
+            frameSender.sendError(session, "INVALID_JSON" , "Frame is not valid JSON");
+            return ;
+        }
+
+        String event = frame.path("event").asText(null);
+        JsonNode data = frame.path("data");
+
+        if (event == null || event.isBlank()) {
+            frameSender.sendError(session, "MISSING_EVENT" , "Frame is missing 'event' field");
+            return ;
+        }
+
+        switch (event) {
+            case WsEvents.SUBSCRIBE ->
+            // subscribe(session, data);
+            log.debug("event={} from user={} (not handled yet)", event , userId(session));
+            case WsEvents.UNSUBSCRIBE ->
+            // unsubscribe(session, data);
+            log.debug("event={} from user={} (not handled yet)", event , userId(session));
+            default -> frameSender.sendError(session, "UNKNOWN_EVENT" , "Unknown event: "+ event);
+        }
         log.debug("frame from user={} length={}", userId(session), message.getPayloadLength());
     }
+
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) {
         log.warn("WebSocket transport error for user={}", userId(session), exception);
