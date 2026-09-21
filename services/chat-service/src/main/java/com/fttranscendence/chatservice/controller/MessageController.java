@@ -5,10 +5,12 @@ import java.util.List;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.fttranscendence.chatservice.auth.AuthenticationFilter;
 import com.fttranscendence.chatservice.dto.MessageResponse;
 import com.fttranscendence.chatservice.service.MessageService;
 
@@ -31,10 +33,11 @@ public class MessageController {
     @GetMapping
     public List<MessageResponse> history(
             @PathVariable Long roomId,
+            @RequestAttribute(AuthenticationFilter.USER_ID_ATTRIBUTE) String userId,
             @RequestParam(required = false) String before,
             @RequestParam(required = false) Integer limit) {
 
-        return messageService.history(roomId, before, limit)
+        return messageService.history(userId ,roomId, before, limit)
                 .stream()
                 .map(MessageResponse::from) // short hand .map(message -> MessageResponse.from(message))
                 .toList();

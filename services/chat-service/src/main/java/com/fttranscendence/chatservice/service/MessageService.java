@@ -7,6 +7,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 
 import com.fttranscendence.chatservice.exception.ApiException;
+import com.fttranscendence.chatservice.grpc.OrgClient;
 import com.fttranscendence.chatservice.model.Message;
 import com.fttranscendence.chatservice.repository.MessageRepository;
 
@@ -22,9 +23,11 @@ public class MessageService {
     static final int MAX_LIMIT = 100;
 
     private final MessageRepository messageRepository;
+    private final OrgClient orgClient;
 
-    public MessageService(MessageRepository messageRepository) {
+    public MessageService(MessageRepository messageRepository, OrgClient orgClient) {
         this.messageRepository = messageRepository;
+        this.orgClient = orgClient;
     }
 
     /**
@@ -33,7 +36,12 @@ public class MessageService {
      * @param before message id to read strictly before, or null for the newest page
      * @param limit  page size, or null for the default
      */
-    public List<Message> history(Long roomId, String before, Integer limit) {
+    public List<Message> history(String userId, Long roomId, String before, Integer limit) {
+        // NEW: membership first — before validation, so error codes cannot be
+        // used to probe rooms the caller has no access to.
+        if(!orgClient.isMember(userId, roomId)) {
+            throw ApiException.forbidden("NOT_A_MEMBER", "User is not a member of the room");
+        }
         Limit pageSize = Limit.of(validateLimit(limit));
 
         if (before == null || before.isBlank()) {
