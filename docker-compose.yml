@@ -170,14 +170,12 @@ services:
     image: grafana/promtail:latest
     container_name: promtail
     volumes:
-      - /goinfre/${USER}/docker/containers:/goinfre/${USER}/docker/containers:ro
-      - /var/run/user/${UID}/docker.sock:/var/run/user/${UID}/docker.sock:ro
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - ./infra/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
     entrypoint: >
       /bin/sh -c "
-      apt-get update && apt-get install -y gettext-base &&
-      envsubst < /etc/promtail/config.yml > /tmp/config.yml &&
-      exec /usr/bin/promtail -config.file=/tmp/config.yml
+      exec /usr/bin/promtail -config.file=/etc/promtail/config.yml
       "
     expose:
       - "8093"
