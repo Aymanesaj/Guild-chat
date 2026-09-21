@@ -9,10 +9,10 @@ services:
     build:
       context: .
       dockerfile: gateway/Dockerfile
-    volumes:
-      - ./gateway/modsec/main.conf:/etc/nginx/modsec/main.conf
-      - ./gateway/modsec/modsecurity.conf:/etc/nginx/modsec/modsecurity.conf
-      - ./gateway/modsec/unicode.mapping:/etc/nginx/modsec/unicode.mapping
+    environment:
+      - PARANOIA=1
+      - BLOCKING_PARANOIA=1
+      - MODSEC_RULE_ENGINE=on
     ports:
       - 8000:80
       - 8443:443
