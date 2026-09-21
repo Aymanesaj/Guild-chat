@@ -19,7 +19,10 @@ import com.fttranscendence.chatservice.support.MongoTestSupport;
  * names — and, because the app really starts, it also proves that the startup
  * index creation runs.
  */
-@SpringBootTest
+// A real servlet container, not the mock one: the WebSocket container bean
+// (ServletServerContainerFactoryBean) needs a real jakarta.websocket
+// ServerContainer, exactly as production does.
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ChatServiceApplicationTests extends MongoTestSupport {
 
     @Autowired
