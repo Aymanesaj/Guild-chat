@@ -1,12 +1,14 @@
 
 package com.fttranscendence.chatservice.exception;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -45,5 +47,18 @@ public class ApiExceptionHandler {
 
     private Map<String, Object> body(String code, String message) {
         return Map.of("error", Map.of("code", code, "message", message));
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, Object>> HandleValidation(MethodArgumentNotValidException e) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        e.getBindingResult().getFieldErrors()
+        .forEach(error -> details.put(error.getField() ,error.getDefaultMessage()));
+
+        return ResponseEntity.badRequest().body(Map.of("error" ,Map.of(
+            "code", "VALIDATION_ERROR",
+            "message", "Request body is invalid",
+            "details" , details
+         )));
     }
 }

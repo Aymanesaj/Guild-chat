@@ -9,7 +9,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import org.bson.types.ObjectId;
@@ -37,6 +39,7 @@ class MessageServiceTest {
 
     private static final long ROOM = 42L;
     private static final String CURSOR = new ObjectId().toHexString();
+    private static final long OTHER_ROOM = 99L;
 
     private static final String USER = "a215c5f8-d810-4518-ad4c-8d551eb6dfc4";
 
@@ -45,6 +48,12 @@ class MessageServiceTest {
 
     @Mock
     private OrgClient orgClient;
+
+    /** Fixed so created_at can be asserted exactly, with no sleeping. */
+    private static final Instant NOW = Instant.parse("2026-09-21T10:00:00Z");
+
+    @org.mockito.Spy
+    private Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
     @InjectMocks
     private MessageService messageService;
@@ -186,6 +195,132 @@ class MessageServiceTest {
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getCode())
                                 .as("a non-member must see NOT_A_MEMBER, not INVALID_CURSOR")
+                                .isEqualTo("NOT_A_MEMBER"));
+    }
+
+    // ---------------------------------------------------------------- send()
+
+    @Test
+    @DisplayName("stores the message with the sender from the token and the clock's timestamp")
+    void sendStoresMessage() {
+        isMember(true);
+        when(messageRepository.save(any(Message.class))).thenAnswer(i -> i.getArgument(0));
+
+        Message saved = messageService.send(USER, ROOM, "hello", null);
+
+        assertThat(saved.getContent()).isEqualTo("hello");
+        assertThat(saved.getSenderId()).isEqualTo(USER);
+        assertThat(saved.getRoomId()).isEqualTo(ROOM);
+        assertThat(saved.getContentType()).isEqualTo("text");
+        assertThat(saved.getCreatedAt()).isEqualTo(NOW);
+        assertThat(saved.getReplyToId()).isNull();
+        assertThat(saved.getEditedAt()).isNull();
+        assertThat(saved.isDeleted()).isFalse();
+    }
+
+    @Test
+    @DisplayName("a non-member cannot send, and nothing is written")
+    void sendRejectsNonMember() {
+        isMember(false);
+
+        assertThatThrownBy(() -> messageService.send(USER, ROOM, "hello", null))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(e.getCode()).isEqualTo("NOT_A_MEMBER");
+                });
+
+        verifyNoInteractions(messageRepository);
+    }
+
+    @Test
+    @DisplayName("a valid reply in the same room is stored")
+    void sendAcceptsReplyInSameRoom() {
+        isMember(true);
+        String replyId = new ObjectId().toHexString();
+        when(messageRepository.findById(replyId)).thenReturn(java.util.Optional.of(message("original")));
+        when(messageRepository.save(any(Message.class))).thenAnswer(i -> i.getArgument(0));
+
+        Message saved = messageService.send(USER, ROOM, "me too", replyId);
+
+        assertThat(saved.getReplyToId()).isEqualTo(replyId);
+    }
+
+    @Test
+    @DisplayName("replying across rooms is rejected: it would leak a message from a room you cannot read")
+    void sendRejectsReplyFromAnotherRoom() {
+        isMember(true);
+        String replyId = new ObjectId().toHexString();
+        Message otherRoomMessage = Message.create(OTHER_ROOM, USER, null, "secret", "text", NOW);
+        when(messageRepository.findById(replyId)).thenReturn(java.util.Optional.of(otherRoomMessage));
+
+        assertThatThrownBy(() -> messageService.send(USER, ROOM, "quoting", replyId))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getCode()).isEqualTo("REPLY_WRONG_ROOM"));
+
+        verify(messageRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("replying to a missing message is rejected")
+    void sendRejectsMissingReply() {
+        isMember(true);
+        String replyId = new ObjectId().toHexString();
+        when(messageRepository.findById(replyId)).thenReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> messageService.send(USER, ROOM, "hi", replyId))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getCode()).isEqualTo("REPLY_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("replying to a deleted message is rejected")
+    void sendRejectsDeletedReply() {
+        isMember(true);
+        String replyId = new ObjectId().toHexString();
+        Message deleted = message("gone");
+        deleted.markDeleted(NOW);
+        when(messageRepository.findById(replyId)).thenReturn(java.util.Optional.of(deleted));
+
+        assertThatThrownBy(() -> messageService.send(USER, ROOM, "hi", replyId))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getCode()).isEqualTo("REPLY_DELETED"));
+    }
+
+    @Test
+    @DisplayName("a malformed reply id is a 400, and no lookup is attempted")
+    void sendRejectsMalformedReplyId() {
+        isMember(true);
+
+        assertThatThrownBy(() -> messageService.send(USER, ROOM, "hi", "not-an-id"))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(e.getCode()).isEqualTo("INVALID_REPLY_ID");
+                });
+
+        verify(messageRepository, never()).findById(any());
+    }
+
+    @Test
+    @DisplayName("a blank reply id means 'no reply', not an error")
+    void sendTreatsBlankReplyIdAsNoReply() {
+        isMember(true);
+        when(messageRepository.save(any(Message.class))).thenAnswer(i -> i.getArgument(0));
+
+        Message saved = messageService.send(USER, ROOM, "hello", "   ");
+
+        assertThat(saved.getReplyToId()).isNull();
+        verify(messageRepository, never()).findById(any());
+    }
+
+    @Test
+    @DisplayName("membership is checked before the reply is resolved")
+    void sendChecksMembershipFirst() {
+        isMember(false);
+
+        assertThatThrownBy(() -> messageService.send(USER, ROOM, "hi", "also-invalid"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getCode())
+                                .as("a non-member must not learn anything about reply ids")
                                 .isEqualTo("NOT_A_MEMBER"));
     }
 }

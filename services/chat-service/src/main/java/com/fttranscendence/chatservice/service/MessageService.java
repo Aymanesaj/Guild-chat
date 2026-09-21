@@ -1,5 +1,6 @@
 package com.fttranscendence.chatservice.service;
 
+import java.time.Clock;
 import java.util.List;
 
 import org.bson.types.ObjectId;
@@ -24,10 +25,60 @@ public class MessageService {
 
     private final MessageRepository messageRepository;
     private final OrgClient orgClient;
+    private final Clock clock;
 
-    public MessageService(MessageRepository messageRepository, OrgClient orgClient) {
+    public MessageService(MessageRepository messageRepository, OrgClient orgClient, Clock clock) {
         this.messageRepository = messageRepository;
         this.orgClient = orgClient;
+        this.clock = clock;
+    }
+
+
+    private static final String DEFAULT_CONTENT_TYPE = "text";
+    /**
+     * Stores a message. The sender is the authenticated caller, never a value
+     * taken from the request body.
+     */
+
+    public Message send(String userId, Long roomId, String content,  String replyToId) {
+        if (!orgClient.isMember(userId, roomId)){
+            throw ApiException.forbidden("NOT_A_MEMBER", "User is not a member of the room");
+        }
+
+        String reply = resolveReplyToId(roomId, replyToId);
+
+        Message message =  Message.create( roomId , userId ,  reply , content ,DEFAULT_CONTENT_TYPE , clock.instant());
+
+        return messageRepository.save(message);
+    }
+
+    /**
+     * A reply must point at a live message in the SAME room. MongoDB enforces
+     * no such thing, so without this check a reply could quote a message from
+     * a room the sender cannot read.
+     */
+
+    private String resolveReplyToId(Long roomId, String replyToId) {
+        if (replyToId == null ||  replyToId.isBlank()) {
+            return null;
+        }
+
+        if(!ObjectId.isValid(replyToId)){
+            throw ApiException.badRequest("INVALID_REPLY_ID", "'reply_to_id' is not a valid message id");
+        }
+
+        Message target = messageRepository.findById(replyToId)
+        .orElseThrow(() -> ApiException.badRequest("REPLY_NOT_FOUND", "Replied-to message does not exist"));
+
+        if (!target.getRoomId().equals(roomId)) {
+            throw ApiException.badRequest("REPLY_WRONG_ROOM","Replied-to message belongs to a different room");
+        }
+
+        if (target.isDeleted()) {
+            throw ApiException.badRequest("REPLY_DELETED", "Replied-to message has been deleted");
+        }
+
+        return replyToId;
     }
 
     /**

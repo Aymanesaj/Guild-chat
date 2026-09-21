@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -18,6 +19,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.fttranscendence.chatservice.auth.AuthenticationFilter;
@@ -45,6 +47,14 @@ class MessageControllerTest {
     private static org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder
             authenticatedGet(String path) {
         return get(path).requestAttr(AuthenticationFilter.USER_ID_ATTRIBUTE, SENDER);
+    }
+
+    private static org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder
+            authenticatedPost(String path, String json) {
+        return post(path)
+                .requestAttr(AuthenticationFilter.USER_ID_ATTRIBUTE, SENDER)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json);
     }
 
     @Autowired
@@ -160,5 +170,102 @@ class MessageControllerTest {
                 .andExpect(status().is5xxServerError());
 
         org.mockito.Mockito.verifyNoInteractions(messageService);
+    }
+
+    // ------------------------------------------------- POST /rooms/:id/messages
+
+    @Test
+    @DisplayName("sending returns 201 with the created message in snake_case")
+    void sendReturnsCreated() throws Exception {
+        when(messageService.send(eq(SENDER), eq(ROOM), eq("hello"), any()))
+                .thenReturn(message("hello"));
+
+        mockMvc.perform(authenticatedPost("/rooms/42/messages", "{\"content\":\"hello\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.content").value("hello"))
+                .andExpect(jsonPath("$.room_id").value(42))
+                .andExpect(jsonPath("$.sender_id").value(SENDER))
+                .andExpect(jsonPath("$.created_at").exists());
+    }
+
+    @Test
+    @DisplayName("reply_to_id from the body reaches the service")
+    void sendPassesReplyToId() throws Exception {
+        when(messageService.send(eq(SENDER), eq(ROOM), eq("me too"), eq("6a75d60a586b1c7be1750ad3")))
+                .thenReturn(message("me too"));
+
+        mockMvc.perform(authenticatedPost("/rooms/42/messages",
+                        "{\"content\":\"me too\",\"reply_to_id\":\"6a75d60a586b1c7be1750ad3\"}"))
+                .andExpect(status().isCreated());
+
+        org.mockito.Mockito.verify(messageService)
+                .send(SENDER, ROOM, "me too", "6a75d60a586b1c7be1750ad3");
+    }
+
+    @Test
+    @DisplayName("a sender_id in the body is ignored: the sender always comes from the token")
+    void senderIdInBodyIsIgnored() throws Exception {
+        when(messageService.send(eq(SENDER), eq(ROOM), eq("spoof"), any()))
+                .thenReturn(message("spoof"));
+
+        mockMvc.perform(authenticatedPost("/rooms/42/messages",
+                        "{\"content\":\"spoof\",\"sender_id\":\"11111111-1111-1111-1111-111111111111\"}"))
+                .andExpect(status().isCreated());
+
+        // the service is called with the authenticated user, not the body value
+        org.mockito.Mockito.verify(messageService).send(SENDER, ROOM, "spoof", null);
+    }
+
+    @Test
+    @DisplayName("blank content is a 400 VALIDATION_ERROR naming the field")
+    void blankContentIsRejected() throws Exception {
+        mockMvc.perform(authenticatedPost("/rooms/42/messages", "{\"content\":\"  \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.error.details.content").exists());
+
+        org.mockito.Mockito.verifyNoInteractions(messageService);
+    }
+
+    @Test
+    @DisplayName("missing content is a 400, not a 500")
+    void missingContentIsRejected() throws Exception {
+        mockMvc.perform(authenticatedPost("/rooms/42/messages", "{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    @DisplayName("content over 4000 characters is rejected before reaching the service")
+    void oversizedContentIsRejected() throws Exception {
+        String tooLong = "x".repeat(4001);
+
+        mockMvc.perform(authenticatedPost("/rooms/42/messages", "{\"content\":\"" + tooLong + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+
+        org.mockito.Mockito.verifyNoInteractions(messageService);
+    }
+
+    @Test
+    @DisplayName("exactly 4000 characters is allowed (boundary)")
+    void maximumContentIsAccepted() throws Exception {
+        String atLimit = "x".repeat(4000);
+        when(messageService.send(eq(SENDER), eq(ROOM), eq(atLimit), any())).thenReturn(message(atLimit));
+
+        mockMvc.perform(authenticatedPost("/rooms/42/messages", "{\"content\":\"" + atLimit + "\"}"))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @DisplayName("a service rejection keeps the spec envelope (403 for a non-member)")
+    void serviceRejectionUsesEnvelope() throws Exception {
+        when(messageService.send(eq(SENDER), eq(ROOM), any(), any()))
+                .thenThrow(new ApiException(HttpStatus.FORBIDDEN, "NOT_A_MEMBER",
+                        "User is not a member of the room"));
+
+        mockMvc.perform(authenticatedPost("/rooms/42/messages", "{\"content\":\"hi\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("NOT_A_MEMBER"));
     }
 }
