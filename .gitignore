@@ -1,4 +1,5 @@
 Docs/
+docs/
 .env
 infra/exporter/
 test.js
@@ -21,3 +22,11 @@ CLAUDE.md
 
 node_modules/
 frontend/app/dist/
+
+# backup dumps directory
+backups/
+
+# track project scripts
+!gateway/script.sh
+!scripts/*.sh
+!infra/backup/*.sh

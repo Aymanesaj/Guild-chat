@@ -31,6 +31,8 @@ services:
         condition: service_started
       docker-exporter:
         condition: service_healthy
+      status-page:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
@@ -279,9 +281,38 @@ services:
     restart: always
     networks:
       - private
-  
-  # # vault:
-  # #   image: hashicorp/vault:latest
+
+# -----------------------------------------------------------
+# --------- Health Status Page & Automated Backups ----------
+# -----------------------------------------------------------
+
+  status-page:
+    image: twinproduction/gatus:latest
+    container_name: status-page
+    volumes:
+      - ./infra/status/config.yaml:/config/config.yaml:ro
+    expose:
+      - "8080"
+    networks:
+      - private
+    restart: always
+
+  backup-service:
+    build: ./infra/backup
+    container_name: backup-service
+    volumes:
+      - ./backups:/backups
+    env_file:
+      - ./.env
+    networks:
+      - private
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    restart: always
+
 
 
 
