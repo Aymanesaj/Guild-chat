@@ -21,8 +21,8 @@ services:
     depends_on:
       identity-service:
         condition: service_healthy
-      # chat-service:
-      #   condition: service_healthy
+      chat-service:
+        condition: service_healthy
       org-service:
         condition: service_healthy
       grafana:
@@ -37,7 +37,7 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
       timeout: 5s
-      retries: 3
+      retries: 5
     restart: always
 
 # -----------------------------------------------------------
@@ -60,7 +60,7 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8082/healthz"]
       interval: 20s
       timeout: 3s
-      retries: 3
+      retries: 5
       start_period: 10s
     depends_on:
       postgres:
@@ -79,7 +79,7 @@ services:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/actuator/health || exit 1"]
       interval: 20s
       timeout: 3s
-      retries: 3
+      retries: 5
       start_period: 10s
     networks:
       - private
@@ -120,7 +120,7 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health/readiness"]
       interval: 20s
       timeout: 3s
-      retries: 3
+      retries: 5
       start_period: 15s
     env_file:
       - ./.env
@@ -184,7 +184,7 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'printf \"GET / HTTP/1.1\n\n\" > /dev/tcp/127.0.0.1/8093; exit $?;'"]
       interval: 20s
-      retries: 30
+      retries: 50
       timeout: 10s
       start_period: 10s
     env_file:
