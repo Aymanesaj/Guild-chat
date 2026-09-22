@@ -36,7 +36,8 @@ public class SecurityConfig {
 					"/auth/refresh",
 					"/oauth/**",
 					"/avatars/**",
-					"/actuator/**"
+					"/actuator/health",
+					"/actuator/health/**"
 				).permitAll()
 				.anyRequest().authenticated()
 			)
