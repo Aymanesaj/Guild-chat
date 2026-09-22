@@ -19,8 +19,8 @@ Rooms, DMs and membership now belong to **org-service**, not chat-service.
 
 REST: `GET/POST /rooms/:id/messages`, `GET/PATCH/DELETE /messages/:id`.
 WebSocket: one connection at `/ws/chat`; client events `subscribe`,
-`unsubscribe`, `typing`; server events `message.new`, `message.edited`,
-`message.deleted`, `typing`, `presence`.
+`unsubscribe`; server events `message.new`, `message.edited`,
+`message.deleted`, `presence` (deferred). `typing` was removed from scope on 2026-09-22.
 
 Gateway paths, the WebSocket envelope shape and JSON casing are still open team
 decisions. This file will describe each endpoint only once it is implemented
