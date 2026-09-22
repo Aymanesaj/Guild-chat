@@ -49,6 +49,12 @@ public class UserController {
 	public UserResponse getUser(@PathVariable UUID id) {
 		return userService.getUser(id);
 	}
+	
+	@Transactional(readOnly = true)
+	@GetMapping("/username/{username}")
+	public UserResponse getUserByUsername(@PathVariable String username){
+		return userService.getUserByUsername(username);
+	}
 
 	@GetMapping("/avatars/{filename:.+}")
 	public ResponseEntity<Resource> avatar(@PathVariable String filename) {
