@@ -158,6 +158,7 @@
             "uid": "prometheus"
           },
           "expr": "sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[1m])) by (job)",
+          "expr": "sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[1m])) by (job) or (0 * sum(rate(http_server_requests_seconds_count[1m])) by (job))",
           "legendFormat": "{{job}} - 5xx",
           "refId": "A"
         }
@@ -169,6 +170,7 @@
             "lineInterpolation": "smooth",
             "lineWidth": 2
           },
+          "noValue": "0",
           "unit": "reqps"
         }
       }
@@ -231,7 +233,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "container_cpu_usage_percentage{container=~\"identity-service|chat-service|org-service|nginx\"}",
+          "expr": "rate(container_cpu_usage_total_nanoseconds{container=~\"identity-service|chat-service|org-service|nginx\"}[1m]) / 1000000000 * 100",
           "legendFormat": "{{container}} CPU %",
           "refId": "A"
         }
