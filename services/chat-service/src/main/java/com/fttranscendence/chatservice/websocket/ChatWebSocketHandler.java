@@ -17,6 +17,8 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fttranscendence.chatservice.exception.ApiException;
+import com.fttranscendence.chatservice.grpc.OrgClient;
 
 /**
  * One connection per browser tab, covering every room the user is in.
@@ -31,19 +33,25 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class ChatWebSocketHandler extends TextWebSocketHandler {
     private static final Logger log = LoggerFactory.getLogger(ChatWebSocketHandler.class);
 
+
+    /** The write-serialising wrapper for this connection, created once at connect. */
+    static final String GUARDED_SESSION_ATTRIBUTE = "chat.guardedSession";
     /** One user, many connections: laptop, phone, three tabs. */
     private final Map<String , Set<WebSocketSession>> sessionsByUser = new ConcurrentHashMap<>();
 
 
     private final FrameSender frameSender ;
     private final ObjectMapper objectMapper;
-    public ChatWebSocketHandler(FrameSender frameSender,  ObjectMapper objectMapper) {
+
+    private final SubscriptionRegistry subscriptionRegistry;
+    private final OrgClient orgClient;
+
+    public ChatWebSocketHandler(FrameSender frameSender,  ObjectMapper objectMapper , SubscriptionRegistry subscriptionRegistry, OrgClient orgClient) {
         this.frameSender = frameSender;
         this.objectMapper = objectMapper;
+        this.subscriptionRegistry = subscriptionRegistry;
+        this.orgClient = orgClient;
     }
-
-
-
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
@@ -56,16 +64,16 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         Set<WebSocketSession> sessions = sessionsByUser.computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet());
         sessions.add(guarded);
         log.debug("WebSocket opened: user={} sessions={}" , userId, sessions.size());
+        session.getAttributes().put(GUARDED_SESSION_ATTRIBUTE, guarded);
     }
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws IOException {
-        // Next step: subscribe / unsubscribe / typing.
         JsonNode frame;
         try {
             frame = objectMapper.readTree(message.getPayload());
         } catch (JsonProcessingException e) {
-            frameSender.sendError(session, "INVALID_JSON" , "Frame is not valid JSON");
+            frameSender.sendError(guarded(session), "INVALID_JSON" , "Frame is not valid JSON");
             return ;
         }
 
@@ -73,18 +81,14 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         JsonNode data = frame.path("data");
 
         if (event == null || event.isBlank()) {
-            frameSender.sendError(session, "MISSING_EVENT" , "Frame is missing 'event' field");
+            frameSender.sendError(guarded(session), "MISSING_EVENT" , "Frame is missing 'event' field");
             return ;
         }
 
         switch (event) {
-            case WsEvents.SUBSCRIBE ->
-            // subscribe(session, data);
-            log.debug("event={} from user={} (not handled yet)", event , userId(session));
-            case WsEvents.UNSUBSCRIBE ->
-            // unsubscribe(session, data);
-            log.debug("event={} from user={} (not handled yet)", event , userId(session));
-            default -> frameSender.sendError(session, "UNKNOWN_EVENT" , "Unknown event: "+ event);
+            case WsEvents.SUBSCRIBE -> subscribe(session, data);
+            case WsEvents.UNSUBSCRIBE -> unsubscribe(session, data);
+            default -> frameSender.sendError(guarded(session), "UNKNOWN_EVENT" , "Unknown event: "+ event);
         }
         log.debug("frame from user={} length={}", userId(session), message.getPayloadLength());
     }
@@ -103,6 +107,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     /** Idempotent, and must not leave empty sets behind: a hard drop may never call this. */
     private void remove(WebSocketSession session) {
+        subscriptionRegistry.removeSession(session);
         String userId = userId(session);
         if (userId == null) {
             return;
@@ -129,5 +134,70 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         return sessions == null ? 0 : sessions.size();
     }
 
+    /** Joining a room's live feed. The membership check that matters: without
+     * it, any authenticated user could listen to any room in real time.
+     */
+    private void subscribe(WebSocketSession session, JsonNode data) {
+        Long roomId = roomId(session, data);
+        if (roomId == null) {
+            return;
+        }
+        String userId = userId(session);
 
+        try {
+            if (!orgClient.isMember(userId, roomId)) {
+                frameSender.sendError(guarded(session), "NOT_A_MEMBER", "You are not a member of this room");
+                return;
+            }
+        } catch (ApiException e) {
+            // org unreachable: refuse rather than guess. Guessing "member"
+            // leaks a room; guessing "not a member" hides a real one.
+            frameSender.sendError(guarded(session), e.getCode(), e.getMessage());
+            return;
+        }
+
+        WebSocketSession target = guarded(session);
+        subscriptionRegistry.subscribe(roomId, target);
+        // The gRPC call above can take up to its deadline. If the socket closed
+        // meanwhile, afterConnectionClosed has already cleaned up and nothing
+        // would ever remove this entry.
+        if (!session.isOpen()) {
+            subscriptionRegistry.unsubscribe(roomId, target);
+            return;
+        }
+        log.debug("user={} subscribed to room={}", userId, roomId);
+    }
+
+    /** No membership check: leaving is always allowed, even after being kicked. */
+    private void unsubscribe(WebSocketSession session, JsonNode data) {
+        Long roomId = roomId(session, data);
+        if (roomId == null) {
+            return;
+        }
+        subscriptionRegistry.unsubscribe(roomId, guarded(session));
+        log.debug("user={} unsubscribed from room={}", userId(session), roomId);
+    }
+
+    /** Reads data.room_id, or sends an error frame and returns null. */
+    private Long roomId(WebSocketSession session, JsonNode data) {
+        JsonNode roomId = data.path("room_id");
+
+        if (roomId.isMissingNode() || roomId.isNull()) {
+            frameSender.sendError(guarded(session), "MISSING_ROOM_ID", "'room_id' is required");
+            return null;
+        }
+        // isIntegralNumber rejects "42" (a string) and 42.7, which
+        // canConvertToLong alone would silently truncate to room 42.
+        if (!roomId.isIntegralNumber() || !roomId.canConvertToLong()) {
+            frameSender.sendError(guarded(session), "INVALID_ROOM_ID", "'room_id' must be an integer");
+            return null;
+        }
+        return roomId.asLong();
+    }
+
+    /** The write-serialising wrapper, so no write ever goes to the raw session. */
+    private WebSocketSession guarded(WebSocketSession session) {
+        Object guarded = session.getAttributes().get(GUARDED_SESSION_ATTRIBUTE);
+        return guarded instanceof WebSocketSession wrapped ? wrapped : session;
+    }
 }

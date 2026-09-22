@@ -23,6 +23,7 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fttranscendence.chatservice.grpc.IdentityClient;
+import com.fttranscendence.chatservice.grpc.OrgClient;
 import com.fttranscendence.chatservice.support.MongoTestSupport;
 
 /**
@@ -43,6 +44,10 @@ class WebSocketFrameTest extends MongoTestSupport {
 
     @MockBean
     private IdentityClient identityClient;
+
+    /** subscribe now calls org; this class only tests the envelope, so allow it. */
+    @MockBean
+    private OrgClient orgClient;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final StandardWebSocketClient client = new StandardWebSocketClient();
@@ -141,8 +146,10 @@ class WebSocketFrameTest extends MongoTestSupport {
     }
 
     @Test
-    @DisplayName("subscribe and unsubscribe are accepted silently for now (no error frame)")
+    @DisplayName("subscribe and unsubscribe from a member are accepted silently (no error frame)")
     void knownEventsProduceNoError() throws Exception {
+        when(orgClient.isMember(ALICE, 42L)).thenReturn(true);
+
         alice.sendMessage(new TextMessage("{\"event\":\"subscribe\",\"data\":{\"room_id\":42}}"));
         assertThat(aliceClient.receivedNothing()).isTrue();
 
