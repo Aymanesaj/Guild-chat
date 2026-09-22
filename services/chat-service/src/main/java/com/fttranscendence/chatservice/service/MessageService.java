@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.util.List;
 
 import org.bson.types.ObjectId;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 
@@ -15,7 +16,7 @@ import com.fttranscendence.chatservice.repository.MessageRepository;
 /**
  * The rules live here, not in the controller, because the WebSocket handler
  * must reach exactly the same logic without going through Spring MVC.
- */
+*/
 
 @Service
 public class MessageService {
@@ -26,11 +27,13 @@ public class MessageService {
     private final MessageRepository messageRepository;
     private final OrgClient orgClient;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
-    public MessageService(MessageRepository messageRepository, OrgClient orgClient, Clock clock) {
+    public MessageService(MessageRepository messageRepository, OrgClient orgClient, Clock clock , ApplicationEventPublisher events) {
         this.messageRepository = messageRepository;
         this.orgClient = orgClient;
         this.clock = clock;
+        this.events = events;
     }
 
 
@@ -48,8 +51,9 @@ public class MessageService {
         String reply = resolveReplyToId(roomId, replyToId);
 
         Message message =  Message.create( roomId , userId ,  reply , content ,DEFAULT_CONTENT_TYPE , clock.instant());
-
-        return messageRepository.save(message);
+        Message saved = messageRepository.save(message);
+        events.publishEvent(new MessageCreatedEvent(saved));
+        return saved ;
     }
 
     /**

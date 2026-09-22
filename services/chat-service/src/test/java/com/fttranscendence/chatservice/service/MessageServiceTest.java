@@ -22,6 +22,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
 import org.springframework.http.HttpStatus;
 
@@ -48,6 +49,9 @@ class MessageServiceTest {
 
     @Mock
     private OrgClient orgClient;
+
+    @Mock
+    private ApplicationEventPublisher events;
 
     /** Fixed so created_at can be asserted exactly, with no sleeping. */
     private static final Instant NOW = Instant.parse("2026-09-21T10:00:00Z");
@@ -216,6 +220,42 @@ class MessageServiceTest {
         assertThat(saved.getReplyToId()).isNull();
         assertThat(saved.getEditedAt()).isNull();
         assertThat(saved.isDeleted()).isFalse();
+    }
+
+    @Test
+    @DisplayName("a stored message is announced with exactly the saved document")
+    void sendPublishesCreatedEvent() {
+        isMember(true);
+        when(messageRepository.save(any(Message.class))).thenAnswer(i -> i.getArgument(0));
+
+        Message saved = messageService.send(USER, ROOM, "hello", null);
+
+        ArgumentCaptor<MessageCreatedEvent> event = ArgumentCaptor.forClass(MessageCreatedEvent.class);
+        verify(events).publishEvent(event.capture());
+        assertThat(event.getValue().message()).isSameAs(saved);
+    }
+
+    @Test
+    @DisplayName("a rejected send announces nothing: no socket may see a message that was never stored")
+    void rejectedSendPublishesNothing() {
+        isMember(false);
+
+        assertThatThrownBy(() -> messageService.send(USER, ROOM, "hello", null))
+                .isInstanceOf(ApiException.class);
+
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    @DisplayName("a failed save announces nothing")
+    void failedSavePublishesNothing() {
+        isMember(true);
+        when(messageRepository.save(any(Message.class))).thenThrow(new RuntimeException("mongo down"));
+
+        assertThatThrownBy(() -> messageService.send(USER, ROOM, "hello", null))
+                .isInstanceOf(RuntimeException.class);
+
+        verifyNoInteractions(events);
     }
 
     @Test
