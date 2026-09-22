@@ -3,7 +3,7 @@
  *
  * The one place that knows about bearer tokens, the refresh dance and the
  * backends' error envelopes (identity: { message }, org: { error },
- * chat: Spring's default { status, error }).
+ * chat: { error: { code, message } }).
  */
 
 import {
@@ -45,6 +45,9 @@ function errorMessage(data, fallback) {
   // identity validation: { message: "Validation failed", fields: { password: "..." } }
   const fields = data.fields && Object.entries(data.fields);
   if (fields?.length) return fields.map(([field, reason]) => `${field} ${reason}`).join(", ");
+
+  // chat: { error: { code, message } }
+  if (data.error && typeof data.error === "object") return data.error.message || fallback;
 
   return data.message || data.detail || data.error || fallback;
 }
