@@ -45,10 +45,31 @@ public class UserController {
 		return userService.updateAvatar(CurrentUser.id(), avatarUrl);
 	}
 
+	@DeleteMapping("/me/avatar")
+	public UserResponse deleteAvatar() {
+		String avatarUrl = avatarStorageService.remove(CurrentUser.id());
+		return userService.updateAvatar(CurrentUser.id(), avatarUrl);
+	}
+
 	@GetMapping("/{id}")
 	public UserResponse getUser(@PathVariable UUID id) {
 		return userService.getUser(id);
 	}
+	
+	@Transactional(readOnly = true)
+	@GetMapping("/username/get")
+	public UserResponse getUserByUsername(@RequestParam String username){
+		return userService.getUserByUsername(username);
+	}
+
+	@GetMapping("/username/available")
+    public Map<String, Object> usernameAvailable(@RequestParam String username) {
+        boolean available = userService.isUsernameAvailable(username);
+        return Map.of(
+            "available", available,
+            "message", available ? "Username is available" : "Username is taken"
+        );
+    }
 
 	@GetMapping("/avatars/{filename:.+}")
 	public ResponseEntity<Resource> avatar(@PathVariable String filename) {

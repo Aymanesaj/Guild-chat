@@ -1,49 +1,103 @@
-import { buildQuery, ensureFreshToken, LOGOUT_EVENT, refreshSession, request } from "./http";
+import { buildQuery, ensureFreshToken, jsonBody, LOGOUT_EVENT, refreshSession, request } from "./http";
 import { getAccessToken, getRefreshToken, isAccessTokenExpired } from "./tokens";
 import { resolveUsers } from "./users";
 
 /**
- * Messages. History over REST; sending and live delivery over chat-service's
- * single `/ws/chat` socket, shared by every open room. chat-service has no
- * REST send and echoes each message back to all of the sender's sessions, so a
- * sent message shows up through the subscription like anyone else's.
+ * Messages. History, sending, editing and deleting over REST; live updates
+ * over chat-service's single `/ws/chat` socket, shared by every open room.
+ *
+ * REST goes through the gateway's `/api/chat/` prefix, which is stripped
+ * before chat-service sees the path. JSON is snake_case.
+ *
+ * The socket carries `{ event, data }` frames. The client subscribes per room;
+ * the server forgets subscriptions when a socket closes, so every (re)connect
+ * subscribes again. A POST's own message also arrives as `message.new`, and
+ * the hook dedupes it by id.
  */
+
+const CHAT = "/api/chat";
 
 function normalizeMessage(message, username) {
   return {
     id: message.id,
-    room_id: message.roomId,
-    sender_id: message.senderId,
-    sender_username: message.senderUsername ?? username ?? null,
+    room_id: message.room_id,
+    sender_id: message.sender_id,
+    sender_username: username ?? null,
+    reply_to_id: message.reply_to_id ?? null,
     content: message.content,
-    sent_at: message.sentAt,
+    sent_at: message.created_at,
+    edited_at: message.edited_at ?? null,
+    deleted: Boolean(message.deleted),
   };
 }
 
-/** Oldest -> newest. chat-service pages newest-first, so the page is reversed. */
-export async function listMessages(roomId, { page = 0, size = 50 } = {}) {
-  const history = await request(
-    `/api/rooms/${roomId}/messages${buildQuery({ page, size })}`,
+/** Attaches sender usernames: chat stores ids only, names come from identity. */
+async function withUsernames(messages) {
+  const senders = await resolveUsers(messages.map((message) => message.sender_id));
+  return messages.map((message) => normalizeMessage(message, senders.get(message.sender_id)?.username));
+}
+
+/**
+ * Oldest -> newest. chat-service pages newest-first, so the page is reversed.
+ * `before` = id of the oldest message already loaded, for the page above it.
+ */
+export async function listMessages(roomId, { before, limit = 50 } = {}) {
+  const page = await request(
+    `${CHAT}/rooms/${roomId}/messages${buildQuery({ before, limit })}`,
     {},
     "Failed to load messages",
   );
+  return withUsernames([...(page || [])].reverse());
+}
 
-  // History only stores senderId — the name comes from identity.
-  const items = [...(history || [])].reverse();
-  const senders = await resolveUsers(items.map((item) => item.senderId));
+/** The stored message, as the server returned it (201). */
+export async function sendMessage(roomId, content, replyToId) {
+  const saved = await request(
+    `${CHAT}/rooms/${roomId}/messages`,
+    { method: "POST", ...jsonBody({ content, reply_to_id: replyToId }) },
+    "Failed to send message",
+  );
+  const [message] = await withUsernames([saved]);
+  return message;
+}
 
-  return items.map((item) => normalizeMessage(item, senders.get(item.senderId)?.username));
+export async function getMessage(messageId) {
+  const message = await request(`${CHAT}/messages/${messageId}`, {}, "Failed to load message");
+  const [normalized] = await withUsernames([message]);
+  return normalized;
+}
+
+/** Sender only, within 15 minutes of sending. */
+export async function editMessage(messageId, content) {
+  const message = await request(
+    `${CHAT}/messages/${messageId}`,
+    { method: "PATCH", ...jsonBody({ content }) },
+    "Failed to edit message",
+  );
+  const [normalized] = await withUsernames([message]);
+  return normalized;
+}
+
+/** The sender, or a room owner/admin. */
+export async function deleteMessage(messageId) {
+  await request(`${CHAT}/messages/${messageId}`, { method: "DELETE" }, "Failed to delete message");
 }
 
 // --- shared socket ------------------------------------------------------------
 
-const subscribers = new Map(); // roomId -> Set<handler>
+/** roomId (as a string: route params are strings, the server sends numbers) -> Set<handler> */
+const subscribers = new Map();
 const statusListeners = new Set();
 
 let socket = null;
 let status = "closed";
 let timer = null;
 let attempt = 0;
+/** Pending close after the last room left; a room switch cancels it. */
+let idleTimer = null;
+const IDLE_CLOSE_MS = 2000;
+
+const roomKey = (roomId) => String(roomId);
 
 function setStatus(next) {
   status = next;
@@ -58,6 +112,52 @@ function socketUrl() {
 
 function hasSubscribers() {
   return subscribers.size > 0;
+}
+
+/** Writes a frame if the socket is open. Closed? onopen will resubscribe. */
+function sendFrame(event, data) {
+  if (socket?.readyState !== WebSocket.OPEN) return;
+  socket.send(JSON.stringify({ event, data }));
+}
+
+/** room_id must be a JSON integer: the server rejects "42" with INVALID_ROOM_ID. */
+function sendRoomFrame(event, key) {
+  sendFrame(event, { room_id: Number(key) });
+}
+
+function dispatch(roomId, update) {
+  subscribers.get(roomKey(roomId))?.forEach((handler) => handler(update));
+}
+
+/**
+ * Every handler receives one of:
+ *   { type: "new",     message }
+ *   { type: "edited",  id, content, edited_at }
+ *   { type: "deleted", id }
+ */
+async function handleFrame(frame) {
+  const { event, data } = frame ?? {};
+  if (!data) return;
+
+  switch (event) {
+    case "message.new": {
+      const [message] = await withUsernames([data]);
+      dispatch(data.room_id, { type: "new", message });
+      break;
+    }
+    case "message.edited":
+      dispatch(data.room_id, { type: "edited", id: data.id, content: data.content, edited_at: data.edited_at });
+      break;
+    case "message.deleted":
+      dispatch(data.room_id, { type: "deleted", id: data.id });
+      break;
+    case "error":
+      // e.g. NOT_A_MEMBER after being removed from a room; the socket stays open.
+      console.warn(`chat socket: ${data.code}: ${data.message}`);
+      break;
+    default:
+      break; // unknown events are ignored so the server can add new ones
+  }
 }
 
 function connect() {
@@ -81,6 +181,8 @@ function connect() {
 
   current.onopen = () => {
     attempt = 0;
+    // A new socket starts with no subscriptions on the server.
+    subscribers.forEach((_, key) => sendRoomFrame("subscribe", key));
     setStatus("open");
   };
 
@@ -91,9 +193,7 @@ function connect() {
     } catch {
       return; // ignore frames that aren't JSON
     }
-
-    const message = normalizeMessage(frame);
-    subscribers.get(message.room_id)?.forEach((handler) => handler(message));
+    handleFrame(frame);
   };
 
   current.onerror = () => setStatus("error");
@@ -123,6 +223,8 @@ function connect() {
 function disconnect() {
   clearTimeout(timer);
   timer = null;
+  clearTimeout(idleTimer);
+  idleTimer = null;
   attempt = 0;
 
   const current = socket;
@@ -136,17 +238,31 @@ window.addEventListener(LOGOUT_EVENT, () => {
   disconnect();
 });
 
-/** Live messages for one room. Returns an unsubscribe function. */
+/** Live updates for one room. Returns an unsubscribe function. */
 export function subscribeToRoom(roomId, handler) {
-  if (!subscribers.has(roomId)) subscribers.set(roomId, new Set());
-  subscribers.get(roomId).add(handler);
+  const key = roomKey(roomId);
+  clearTimeout(idleTimer); // switching rooms: keep the socket we have
+  idleTimer = null;
+  const isNewRoom = !subscribers.has(key);
+  if (isNewRoom) subscribers.set(key, new Set());
+  subscribers.get(key).add(handler);
+
+  if (isNewRoom) sendRoomFrame("subscribe", key); // no-op until open; onopen covers it
   connect();
 
   return () => {
-    const handlers = subscribers.get(roomId);
+    const handlers = subscribers.get(key);
     handlers?.delete(handler);
-    if (handlers && handlers.size === 0) subscribers.delete(roomId);
-    if (!hasSubscribers()) disconnect();
+    if (handlers && handlers.size === 0) {
+      subscribers.delete(key);
+      sendRoomFrame("unsubscribe", key);
+    }
+    // Not at once: on a room switch React unsubscribes the old room before
+    // subscribing the new one, and closing here would open a new socket per room.
+    if (!hasSubscribers()) {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(disconnect, IDLE_CLOSE_MS);
+    }
   };
 }
 
@@ -155,39 +271,4 @@ export function onConnectionStatus(listener) {
   statusListeners.add(listener);
   listener(status);
   return () => statusListeners.delete(listener);
-}
-
-function waitForOpen(timeoutMs = 5000) {
-  if (socket?.readyState === WebSocket.OPEN) return Promise.resolve(socket);
-
-  return new Promise((resolve, reject) => {
-    const deadline = setTimeout(() => {
-      stop();
-      reject(new Error("Chat connection unavailable"));
-    }, timeoutMs);
-
-    const stop = onConnectionStatus((next) => {
-      if (next !== "open") return;
-      clearTimeout(deadline);
-      queueMicrotask(stop);
-      resolve(socket);
-    });
-  });
-}
-
-/**
- * Sends over the shared socket. Resolves once the frame is written — the
- * server doesn't ack, and silently drops messages to rooms you're not in.
- * Opens a short-lived subscription if nothing is connected yet (e.g. sending
- * a DM from a profile preview).
- */
-export async function sendMessage(roomId, content) {
-  const release = hasSubscribers() ? null : subscribeToRoom(roomId, () => {});
-
-  try {
-    const open = await waitForOpen();
-    open.send(JSON.stringify({ roomId, content }));
-  } finally {
-    release?.();
-  }
 }
