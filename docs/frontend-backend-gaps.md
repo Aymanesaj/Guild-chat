@@ -25,7 +25,7 @@ Browser ──► nginx :8000
 
 ---
 
-## identity-service TODO
+## identity-service TODO [DONE]
 
 **1. Find a user by username.** This is the most important one: without it there's no way to add a new friend.
 

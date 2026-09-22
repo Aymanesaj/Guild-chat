@@ -29,6 +29,20 @@ public class SecurityConfig {
 			.csrf(AbstractHttpConfigurer::disable)
 			.cors(Customizer.withDefaults())
 			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+			.exceptionHandling(exceptions -> exceptions
+				.authenticationEntryPoint((request, response, ex) -> {
+					response.setStatus(HttpStatus.UNAUTHORIZED.value()); // 401
+					response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+					response.getWriter().write("{\"error\":\"Unauthorized\"}");
+					response.getWriter().flush();
+				})
+				.accessDeniedHandler((request, response, ex) -> {
+					response.setStatus(HttpStatus.FORBIDDEN.value()); // keep 403
+					response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+					response.getWriter().write("{\"error\":\"Forbidden\"}");
+					response.getWriter().flush();
+				})
+			)
 			.authorizeHttpRequests(auth -> auth
 				.requestMatchers(
 					"/register",
@@ -37,7 +51,8 @@ public class SecurityConfig {
 					"/oauth/**",
 					"/avatars/**",
 					"/actuator/health",
-					"/actuator/health/**"
+					"/actuator/health/**",
+					"/actuator/prometheus"
 				).permitAll()
 				.anyRequest().authenticated()
 			)
