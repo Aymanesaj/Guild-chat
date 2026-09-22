@@ -42,17 +42,16 @@ import jakarta.annotation.PreDestroy;
   @Value("${chat.grpc.org.host}") String host,
   @Value("${chat.grpc.org.port}") int port,
   @Value("${chat.grpc.deadline-ms}") long deadlineMs) {
-
-   this.ownedChannel = ManagedChannelBuilder
+        this.ownedChannel = ManagedChannelBuilder
            .forAddress(host, port)
            .usePlaintext()
            .build();
+        this.ownedChannel.getState(true);
 
-   this.stub = OrgServiceGrpc
+        this.stub = OrgServiceGrpc
            .newBlockingStub(ownedChannel);
 
-   this.deadlineMs = deadlineMs;
-
+        this.deadlineMs = deadlineMs;
   }
 
   /**
@@ -108,7 +107,7 @@ import jakarta.annotation.PreDestroy;
   @PreDestroy
   void shutdown() {
   if (ownedChannel != null) {
-  ownedChannel.shutdown();
+        ownedChannel.shutdown();
   }
   }
   }

@@ -42,14 +42,16 @@ import jakarta.annotation.PreDestroy;
   @Value("${chat.grpc.identity.host}") String host,
   @Value("${chat.grpc.identity.port}") int port,
   @Value("${chat.grpc.deadline-ms}") long deadlineMs) {
-
-   // Plaintext: this traffic never leaves the private Docker network.
-   this.ownedChannel = ManagedChannelBuilder
+           // Plaintext: this traffic never leaves the private Docker network.
+           this.ownedChannel = ManagedChannelBuilder
            .forAddress(host, port)
            .usePlaintext()
            .build();
-
-   this.stub = IdentityServiceGrpc
+           // Connect at startup, not on the first request: the first connection
+           // (DNS, HTTP/2 handshake, Netty warm-up) took ~400 ms and blew the
+           // 500 ms deadline, so the first user request after a restart got a 503.
+           this.ownedChannel.getState(true);
+           this.stub = IdentityServiceGrpc
            .newBlockingStub(ownedChannel);
 
    this.deadlineMs = deadlineMs;
@@ -61,6 +63,7 @@ import jakarta.annotation.PreDestroy;
     */
     IdentityClient(Channel channel, long deadlineMs) {
     this.ownedChannel = null;
+
     this.stub = IdentityServiceGrpc.newBlockingStub(channel);
     this.deadlineMs = deadlineMs;
     }
