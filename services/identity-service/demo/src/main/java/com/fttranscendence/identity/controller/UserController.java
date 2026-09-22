@@ -45,6 +45,12 @@ public class UserController {
 		return userService.updateAvatar(CurrentUser.id(), avatarUrl);
 	}
 
+	@DeleteMapping("/me/avatar")
+	public UserResponse deleteAvatar() {
+		String avatarUrl = avatarStorageService.remove(CurrentUser.id());
+		return userService.updateAvatar(CurrentUser.id(), avatarUrl);
+	}
+
 	@GetMapping("/{id}")
 	public UserResponse getUser(@PathVariable UUID id) {
 		return userService.getUser(id);

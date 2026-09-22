@@ -68,4 +68,23 @@ public class AvatarStorageService {
 			throw new ApiRequestException(HttpStatus.NOT_FOUND, "Avatar not found");
 		}
 	}
+
+	public String remove(UUID userId) {
+		try {
+			for (String ext : EXTENSIONS_BY_MEDIA_TYPE.values()) {
+				Path file = storageDir.resolve(userId + ext).normalize();
+				if (Files.exists(file, NOFOLLOW)){
+					Files.delete(file);
+					return null;
+				}
+			}
+		}catch (SecurityException exception) {
+			throw new ApiRequestException(HttpStatus.FORBIDDEN, "Not allowed to remove avatar");
+		} catch (IOException exception) {
+			throw new ApiRequestException(HttpStatus.INTERNAL_SERVER_ERROR, "Unable to remove avatar");
+		}catch (Exception exception) {
+			throw new ApiRequestException(HttpStatus.INTERNAL_SERVER_ERROR, "Unable to remove avatar");
+		}
+		return null;
+	}
 }
