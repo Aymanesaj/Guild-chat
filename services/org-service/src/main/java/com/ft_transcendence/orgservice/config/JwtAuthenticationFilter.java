@@ -78,7 +78,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return request.getRequestURI().startsWith("/healthz");
+        return request.getRequestURI().startsWith("/healthz")
+            || request.getRequestURI().startsWith("/actuator");
     }
 
     private String extractToken(HttpServletRequest request) {

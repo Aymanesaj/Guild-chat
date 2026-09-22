@@ -3,8 +3,9 @@ import { listMessages, onConnectionStatus, sendMessage, subscribeToRoom } from "
 
 /**
  * One room's messages: REST history on mount, the shared chat socket for
- * anything that arrives afterwards (including our own sends, which the server
- * echoes back). `state` mirrors the "loading" | "success" | "error" convention
+ * anything that happens afterwards (new, edited, deleted). Our own sends are
+ * appended from the POST response and arrive again as message.new; both paths
+ * dedupe by id. `state` mirrors the "loading" | "success" | "error" convention
  * the views already use.
  */
 export function useRoomMessages(roomId) {
@@ -20,6 +21,31 @@ export function useRoomMessages(roomId) {
     );
   }, []);
 
+  const applyUpdate = useCallback(
+    (update) => {
+      switch (update.type) {
+        case "new":
+          appendMessage(update.message);
+          break;
+        case "edited":
+          setMessages((previous) =>
+            previous.map((item) =>
+              item.id === update.id ? { ...item, content: update.content, edited_at: update.edited_at } : item,
+            ),
+          );
+          break;
+        case "deleted":
+          setMessages((previous) =>
+            previous.map((item) => (item.id === update.id ? { ...item, content: null, deleted: true } : item)),
+          );
+          break;
+        default:
+          break;
+      }
+    },
+    [appendMessage],
+  );
+
   useEffect(() => onConnectionStatus(setConnection), []);
 
   useEffect(() => {
@@ -31,7 +57,7 @@ export function useRoomMessages(roomId) {
 
     // Subscribe first so nothing sent while history loads is lost; the merge
     // below keeps anything that arrived live and dedupes by id.
-    const unsubscribe = subscribeToRoom(roomId, appendMessage);
+    const unsubscribe = subscribeToRoom(roomId, applyUpdate);
 
     listMessages(roomId)
       .then((history) => {
@@ -50,7 +76,7 @@ export function useRoomMessages(roomId) {
       cancelled = true;
       unsubscribe();
     };
-  }, [roomId, appendMessage]);
+  }, [roomId, applyUpdate]);
 
   const send = useCallback(
     async (content) => {
@@ -59,12 +85,12 @@ export function useRoomMessages(roomId) {
 
       setSending(true);
       try {
-        await sendMessage(roomId, text);
+        appendMessage(await sendMessage(roomId, text));
       } finally {
         setSending(false);
       }
     },
-    [roomId],
+    [roomId, appendMessage],
   );
 
   return { messages, state, connection, sending, send };

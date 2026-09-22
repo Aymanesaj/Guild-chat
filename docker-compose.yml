@@ -9,32 +9,28 @@ services:
     build:
       context: .
       dockerfile: gateway/Dockerfile
-    volumes:
-      - ./gateway/modsec/main.conf:/etc/nginx/modsec/main.conf
-      - ./gateway/modsec/modsecurity.conf:/etc/nginx/modsec/modsecurity.conf
-      - ./gateway/modsec/unicode.mapping:/etc/nginx/modsec/unicode.mapping
+    environment:
+      - PARANOIA=1
+      - BLOCKING_PARANOIA=1
+      - MODSEC_RULE_ENGINE=on
     ports:
       - 8000:80
       - 8443:443
     networks:
       - private
     depends_on:
-      - identity-service
-      - chat-service
-      - org-service
-    # depends_on:
-    #   identity-service:
-    #     condition: service_healthy
-    #   chat-service:
-    #     condition: service_healthy
-    #   org-service:
-    #     condition: service_healthy
-    #   grafana:
-    #     condition: service_started
-    #   prometheus:
-    #     condition: service_started
-    #   docker-exporter:
-    #     condition: service_healthy
+      identity-service:
+        condition: service_healthy
+      chat-service:
+        condition: service_healthy
+      org-service:
+        condition: service_healthy
+      grafana:
+        condition: service_started
+      prometheus:
+        condition: service_started
+      docker-exporter:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
@@ -52,9 +48,8 @@ services:
     container_name: org-service
     environment:
       PORT: 8082
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/org_service_db
-      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+    env_file:
+      - ./.env
     networks:
       - private
     expose:
@@ -68,8 +63,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    env_file:
-      - ./.env
     restart: always
 
 
@@ -100,9 +93,8 @@ services:
   mongodb:
     image: mongo:7
     container_name: mongodb
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+    env_file:
+      - ./.env
     volumes:
       - mongo_data:/data/db
     expose:
@@ -161,20 +153,29 @@ services:
       retries: 5
       start_period: 5s
     restart: always
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.1.0
+    container_name: nginx-exporter
+    command:
+      - -nginx.scrape-uri=http://nginx:80/nginx_status
+    networks:
+      - private
+    depends_on:
+      - nginx
+    restart: always
   
 
   promtail:
     image: grafana/promtail:latest
     container_name: promtail
     volumes:
-      - /goinfre/${USER}/docker/containers:/goinfre/${USER}/docker/containers:ro
-      - /var/run/user/${UID}/docker.sock:/var/run/user/${UID}/docker.sock:ro
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - ./infra/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
     entrypoint: >
       /bin/sh -c "
-      apt-get update && apt-get install -y gettext-base &&
-      envsubst < /etc/promtail/config.yml > /tmp/config.yml &&
-      exec /usr/bin/promtail -config.file=/tmp/config.yml
+      exec /usr/bin/promtail -config.file=/etc/promtail/config.yml
       "
     expose:
       - "8093"

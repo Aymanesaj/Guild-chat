@@ -48,3 +48,6 @@ monitoring:
 microservices:
 	docker compose down -v --remove-orphans chat-service identity-service org-service 
 	docker compose up --build -d chat-service identity-service org-service 
+proxy:
+	docker compose down -v --remove-orphans nginx
+	docker compose up --build -d nginx 

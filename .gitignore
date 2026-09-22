@@ -9,21 +9,15 @@ tmp/*
 config/
 services/chat-service/target/
 
-
 notes/*
-
 
 CLAUDE.md
 
 # shared with the frontend dev — must be tracked despite the *.md rule above
+# shared documentation — must be tracked despite the *.md rule above
 !services/chat-service/API_CONTRACT.md
 !docs/frontend-backend-gaps.md
+!docs/*.md
 
 node_modules/
 frontend/app/dist/
-
-
-tasks.md
-
-# local dev DB seeding (not for the repo)
-scripts/seed-users.sh
