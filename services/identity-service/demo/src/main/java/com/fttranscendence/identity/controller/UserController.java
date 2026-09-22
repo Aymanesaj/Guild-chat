@@ -51,10 +51,19 @@ public class UserController {
 	}
 	
 	@Transactional(readOnly = true)
-	@GetMapping("/username/{username}")
-	public UserResponse getUserByUsername(@PathVariable String username){
+	@GetMapping("/username/get")
+	public UserResponse getUserByUsername(@RequestParam String username){
 		return userService.getUserByUsername(username);
 	}
+
+	@GetMapping("/username/available")
+    public Map<String, Object> usernameAvailable(@RequestParam String username) {
+        boolean available = userService.isUsernameAvailable(username);
+        return Map.of(
+            "available", available,
+            "message", available ? "Username is available" : "Username is taken"
+        );
+    }
 
 	@GetMapping("/avatars/{filename:.+}")
 	public ResponseEntity<Resource> avatar(@PathVariable String filename) {
