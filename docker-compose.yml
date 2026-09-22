@@ -21,8 +21,8 @@ services:
     depends_on:
       identity-service:
         condition: service_healthy
-      chat-service:
-        condition: service_healthy
+      # chat-service:
+      #   condition: service_healthy
       org-service:
         condition: service_healthy
       grafana:

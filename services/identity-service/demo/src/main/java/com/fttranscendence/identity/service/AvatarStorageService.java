@@ -73,7 +73,7 @@ public class AvatarStorageService {
 		try {
 			for (String ext : EXTENSIONS_BY_MEDIA_TYPE.values()) {
 				Path file = storageDir.resolve(userId + ext).normalize();
-				if (Files.exists(file, NOFOLLOW)){
+				if (Files.exists(file)) {
 					Files.delete(file);
 					return null;
 				}
