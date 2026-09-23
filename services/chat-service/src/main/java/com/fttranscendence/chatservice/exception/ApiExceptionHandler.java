@@ -8,10 +8,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.ErrorResponse;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * Every error leaves this service in the spec's envelope:
@@ -35,6 +40,22 @@ public class ApiExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
         return ResponseEntity.badRequest()
                 .body(body("INVALID_PARAMETER", "'" + e.getName() + "' has an invalid value"));
+    }
+
+    /** A body that is not JSON at all, e.g. {"content": — the client's mistake, not a 500. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleUnreadableBody(HttpMessageNotReadableException e) {
+        return ResponseEntity.badRequest().body(body("MALFORMED_JSON", "Request body is not valid JSON"));
+    }
+
+    /** Spring's own routing errors keep their status (405, 415, 404) instead of becoming a 500. */
+    @ExceptionHandler({
+            HttpRequestMethodNotSupportedException.class,
+            HttpMediaTypeNotSupportedException.class,
+            NoResourceFoundException.class })
+    public ResponseEntity<Map<String, Object>> handleRoutingError(Exception e) {
+        HttpStatus status = HttpStatus.valueOf(((ErrorResponse) e).getStatusCode().value());
+        return ResponseEntity.status(status).body(body(status.name(), status.getReasonPhrase()));
     }
 
     /** Anything unplanned: log the detail, tell the client nothing useful to an attacker. */
