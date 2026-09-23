@@ -52,9 +52,7 @@ public class SecurityConfig {
 					"/auth/refresh",
 					"/oauth/**",
 					"/avatars/**",
-					"/actuator/health",
-					"/actuator/health/**",
-					"/actuator/prometheus"
+					"/actuator/**"
 				).permitAll()
 				.anyRequest().authenticated()
 			)

@@ -1,9 +1,12 @@
 package com.fttranscendence.chatservice.service;
 
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 
 import org.bson.types.ObjectId;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 
@@ -15,7 +18,7 @@ import com.fttranscendence.chatservice.repository.MessageRepository;
 /**
  * The rules live here, not in the controller, because the WebSocket handler
  * must reach exactly the same logic without going through Spring MVC.
- */
+*/
 
 @Service
 public class MessageService {
@@ -26,11 +29,13 @@ public class MessageService {
     private final MessageRepository messageRepository;
     private final OrgClient orgClient;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
-    public MessageService(MessageRepository messageRepository, OrgClient orgClient, Clock clock) {
+    public MessageService(MessageRepository messageRepository, OrgClient orgClient, Clock clock , ApplicationEventPublisher events) {
         this.messageRepository = messageRepository;
         this.orgClient = orgClient;
         this.clock = clock;
+        this.events = events;
     }
 
 
@@ -48,8 +53,9 @@ public class MessageService {
         String reply = resolveReplyToId(roomId, replyToId);
 
         Message message =  Message.create( roomId , userId ,  reply , content ,DEFAULT_CONTENT_TYPE , clock.instant());
-
-        return messageRepository.save(message);
+        Message saved = messageRepository.save(message);
+        events.publishEvent(new MessageCreatedEvent(saved));
+        return saved ;
     }
 
     /**
@@ -115,4 +121,65 @@ public class MessageService {
         }
         return limit;
     }
+
+    /**
+     *
+     * One message by id. Deleted messages are returned too
+     * (DTO hides  their content). the same as history
+     */
+
+    public Message get(String userId,   String messageId) {
+        return loadVisible(userId,  messageId);
+    }
+
+    /**
+    /* Shared by GET, PATCH and DELETE on /messages/:id.
+    /*
+    /* A non-member gets the SAME 404 as an unknown id: a 403 would confirm
+    /* that the message exists in a room they cannot read. The room id is not
+    /* in the URL here, so unlike history there is nothing public to protect.
+    /*/
+
+    private Message loadVisible(String userId,  String messageId) {
+
+        if(!ObjectId.isValid(messageId)) {
+            throw ApiException.badRequest("INVALID_MESSAGE_ID", "'id' is not a valid message id");
+        }
+
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> ApiException.notFound("MESSAGE_NOT_FOUND", "Message does not exist"));
+
+        if(!orgClient.isMember(userId, message.getRoomId())) {
+            throw ApiException.notFound("MESSAGE_NOT_FOUND", "Message does not exist");
+        }
+
+        return message;
+    }
+
+    static final Duration EDIT_WINDOW = Duration.ofMinutes(15);
+    /**
+     * Edits a message: sender only, not deleted, and strictly within 15 minutes
+     * of sending. At exactly 15:00 the edit is refused (spec: now < created_at + 15 min).
+     */
+    public Message edit(String userId , String messageId, String content){
+        Message message = loadVisible(userId, messageId);
+
+        if(!message.getSenderId().equals(userId)){
+            throw ApiException.forbidden("NOT_SENDER", "Only the sender can edit this message");
+        }
+        if (message.isDeleted()) {
+            throw ApiException.forbidden("MESSAGE_DELETED", "Cannot edit a deleted message");
+        }
+        Instant now = clock.instant();
+        if (!now.isBefore(message.getCreatedAt().plus(EDIT_WINDOW))) {
+            throw ApiException.forbidden("EDIT_WINDOW_EXPIRED", "Edit window has expired");
+        }
+
+        message.applyEdit(content, now );
+        Message saved = messageRepository.save(message);
+        events.publishEvent(new MessageEditedEvent(saved));
+        return saved;
+
+    }
+
 }
