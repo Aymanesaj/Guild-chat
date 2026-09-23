@@ -12,6 +12,7 @@ import org.springframework.web.socket.WebSocketSession;
 import com.fttranscendence.chatservice.dto.MessageResponse;
 import com.fttranscendence.chatservice.model.Message;
 import com.fttranscendence.chatservice.service.MessageCreatedEvent;
+import com.fttranscendence.chatservice.service.MessageEditedEvent;
 /**
  * Pushes stored messages to every socket subscribed to their room.
  *
@@ -48,5 +49,12 @@ public class RoomBroadcaster {
         Set<WebSocketSession> sessions  = subscriptionRegistry.sessionsIn(roomId);
         sessions.forEach(session -> frameSender.send(session, event, data));
         log.debug("{} room={} recipients={}", event, roomId, sessions.size());
+    }
+
+
+    @EventListener
+    public void onEdited(MessageEditedEvent event) {
+        Message message = event.message();
+        broadcast(message.getRoomId(), WsEvents.MESSAGE_EDITED, MessageResponse.from(message));
     }
 }

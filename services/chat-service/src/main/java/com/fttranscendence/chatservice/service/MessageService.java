@@ -1,6 +1,8 @@
 package com.fttranscendence.chatservice.service;
 
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 
 import org.bson.types.ObjectId;
@@ -153,4 +155,31 @@ public class MessageService {
 
         return message;
     }
+
+    static final Duration EDIT_WINDOW = Duration.ofMinutes(15);
+    /**
+     * Edits a message: sender only, not deleted, and strictly within 15 minutes
+     * of sending. At exactly 15:00 the edit is refused (spec: now < created_at + 15 min).
+     */
+    public Message edit(String userId , String messageId, String content){
+        Message message = loadVisible(userId, messageId);
+
+        if(!message.getSenderId().equals(userId)){
+            throw ApiException.forbidden("NOT_SENDER", "Only the sender can edit this message");
+        }
+        if (message.isDeleted()) {
+            throw ApiException.forbidden("MESSAGE_DELETED", "Cannot edit a deleted message");
+        }
+        Instant now = clock.instant();
+        if (!now.isBefore(message.getCreatedAt().plus(EDIT_WINDOW))) {
+            throw ApiException.forbidden("EDIT_WINDOW_EXPIRED", "Edit window has expired");
+        }
+
+        message.applyEdit(content, now );
+        Message saved = messageRepository.save(message);
+        events.publishEvent(new MessageEditedEvent(saved));
+        return saved;
+
+    }
+
 }
