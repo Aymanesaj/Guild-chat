@@ -125,7 +125,10 @@ function MessageItem({ message }) {
           <time>{formatTimestamp(message.sent_at)}</time>
         </MessageMeta>
 
-        <MessageContent>{message.content}</MessageContent>
+        <MessageContent>
+          {message.deleted ? <em>Message deleted</em> : message.content}
+          {message.edited_at && !message.deleted && <small> (edited)</small>}
+        </MessageContent>
       </MessageBody>
     </MessageItemRoot>
   );

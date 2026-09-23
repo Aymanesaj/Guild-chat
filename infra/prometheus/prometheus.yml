@@ -42,3 +42,7 @@ scrape_configs:
     scrape_interval: 10s
     static_configs:
       - targets: ['org-service:8082']
+
+  - job_name: 'nginx-gateway'
+    static_configs:
+      - targets: ['nginx-exporter:9113']

@@ -194,11 +194,14 @@ export async function listDmConversations() {
     rooms.map(async (room) => {
       try {
         const [last] = await request(
-          `/api/rooms/${room.id}/messages${buildQuery({ page: 0, size: 1 })}`,
+          `/api/chat/rooms/${room.id}/messages${buildQuery({ limit: 1 })}`,
           {},
           "Failed to load messages",
         );
-        return { ...room, last_message: last ? { content: last.content, sent_at: last.sentAt } : null };
+        return {
+          ...room,
+          last_message: last ? { content: last.deleted ? "Message deleted" : last.content, sent_at: last.created_at } : null,
+        };
       } catch {
         return { ...room, last_message: null };
       }

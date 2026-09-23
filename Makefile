@@ -48,3 +48,15 @@ monitoring:
 microservices:
 	docker compose down -v --remove-orphans chat-service identity-service org-service 
 	docker compose up --build -d chat-service identity-service org-service 
+proxy:
+	docker compose down -v --remove-orphans nginx
+	docker compose up --build -d nginx 
+
+backup:
+	@./scripts/backup.sh
+
+restore:
+	@./scripts/restore.sh
+
+status:
+	@curl -k -s https://localhost:8443/api/v1/endpoints/statuses | jq '.[] | {name: .name, group: .group, status: (if .results[-1].success then "HEALTHY" else "UNHEALTHY" end), duration_ms: (.results[-1].duration / 1000000)}' 2>/dev/null || echo "Open https://localhost:8443/status/ in browser."

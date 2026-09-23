@@ -14,6 +14,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.config.Customizer;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -29,6 +31,20 @@ public class SecurityConfig {
 			.csrf(AbstractHttpConfigurer::disable)
 			.cors(Customizer.withDefaults())
 			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+			.exceptionHandling(exceptions -> exceptions
+				.authenticationEntryPoint((request, response, ex) -> {
+					response.setStatus(HttpStatus.UNAUTHORIZED.value()); // 401
+					response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+					response.getWriter().write("{\"error\":\"Unauthorized\"}");
+					response.getWriter().flush();
+				})
+				.accessDeniedHandler((request, response, ex) -> {
+					response.setStatus(HttpStatus.FORBIDDEN.value()); // keep 403
+					response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+					response.getWriter().write("{\"error\":\"Forbidden\"}");
+					response.getWriter().flush();
+				})
+			)
 			.authorizeHttpRequests(auth -> auth
 				.requestMatchers(
 					"/register",

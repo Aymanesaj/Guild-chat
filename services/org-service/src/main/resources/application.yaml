@@ -25,5 +25,5 @@ management:
       exposure:
         include: health,info,prometheus
   endpoint:
-    prometheus:
-      enabled: true
+    health:
+      show-details: always

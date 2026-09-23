@@ -6,15 +6,19 @@ import com.fttranscendence.identity.security.CurrentUser;
 import com.fttranscendence.identity.service.AvatarStorageService;
 import com.fttranscendence.identity.service.UserService;
 import jakarta.validation.Valid;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -45,10 +49,31 @@ public class UserController {
 		return userService.updateAvatar(CurrentUser.id(), avatarUrl);
 	}
 
+	@DeleteMapping("/me/avatar")
+	public UserResponse deleteAvatar() {
+		String avatarUrl = avatarStorageService.remove(CurrentUser.id());
+		return userService.updateAvatar(CurrentUser.id(), avatarUrl);
+	}
+
 	@GetMapping("/{id}")
 	public UserResponse getUser(@PathVariable UUID id) {
 		return userService.getUser(id);
 	}
+	
+	@Transactional(readOnly = true)
+	@GetMapping("/username/get")
+	public UserResponse getUserByUsername(@RequestParam String username){
+		return userService.getUserByUsername(username);
+	}
+
+	@GetMapping("/username/available")
+    public Map<String, Object> usernameAvailable(@RequestParam String username) {
+        boolean available = userService.isUsernameAvailable(username);
+        return Map.of(
+            "available", available,
+            "message", available ? "Username is available" : "Username is taken"
+        );
+    }
 
 	@GetMapping("/avatars/{filename:.+}")
 	public ResponseEntity<Resource> avatar(@PathVariable String filename) {

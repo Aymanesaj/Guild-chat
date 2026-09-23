@@ -37,6 +37,7 @@ Send `Authorization: Bearer <accessToken>`:
 - `DELETE /api/users/friends/{userId}` — removes an accepted friendship.
 - `GET /api/users/friends` — list of accepted friends.
 - `GET /api/users/friends/requests` — `{ "incoming": [...], "outgoing": [...] }`.
+- `GET /api/users/friends/username/get?username=<USERNAME>` — to get by the username.
 
 ### gRPC contract (internal, port 9090)
 
