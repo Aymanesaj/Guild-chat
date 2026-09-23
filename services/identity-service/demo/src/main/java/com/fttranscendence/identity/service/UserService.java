@@ -23,6 +23,18 @@ public class UserService {
 		return UserResponse.from(findUser(id));
 	}
 
+	@Transactional(readOnly = true)
+	public UserResponse getUserByUsername(String username) {
+		UserEntity user = userRepository.findByUsernameIgnoreCase(username)
+			.orElseThrow(() -> new ApiRequestException(HttpStatus.NOT_FOUND, "User not found"));
+		return UserResponse.from(user);
+	}
+
+	@Transactional(readOnly = true)
+	public boolean isUsernameAvailable(String username) {
+		return !userRepository.existsByUsernameIgnoreCase(username);
+	}
+
 	@Transactional
 	public UserResponse updateProfile(UUID id, UpdateProfileRequest request) {
 		UserEntity user = findUser(id);
