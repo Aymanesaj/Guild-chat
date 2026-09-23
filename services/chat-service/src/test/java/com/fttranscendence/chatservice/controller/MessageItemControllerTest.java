@@ -3,7 +3,11 @@ package com.fttranscendence.chatservice.controller;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -16,6 +20,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
@@ -137,6 +142,124 @@ class MessageItemControllerTest {
     void requiresTheAuthenticatedUserAttribute() throws Exception {
         mockMvc.perform(get("/messages/" + MESSAGE_ID))
                 .andExpect(status().is5xxServerError());
+
+        verifyNoInteractions(messageService);
+    }
+
+    // ---------------------------------------------------- PATCH /messages/:id
+
+    private static MockHttpServletRequestBuilder authenticatedPatch(String path, String json) {
+        return patch(path)
+                .requestAttr(AuthenticationFilter.USER_ID_ATTRIBUTE, USER)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json);
+    }
+
+    private Message edited(String content) {
+        Message message = message("original");
+        message.applyEdit(content, Instant.parse("2026-09-20T13:00:00Z"));
+        return message;
+    }
+
+    @Test
+    @DisplayName("PATCH returns 200 with the edited message and its edited_at")
+    void editReturnsEditedMessage() throws Exception {
+        when(messageService.edit(USER, MESSAGE_ID, "fixed")).thenReturn(edited("fixed"));
+
+        mockMvc.perform(authenticatedPatch("/messages/" + MESSAGE_ID, "{\"content\":\"fixed\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").value("fixed"))
+                .andExpect(jsonPath("$.edited_at").value("2026-09-20T13:00:00Z"))
+                .andExpect(jsonPath("$.created_at").value("2026-09-20T12:56:51.179Z"))
+                .andExpect(jsonPath("$.room_id").value(42));
+    }
+
+    @Test
+    @DisplayName("PATCH passes the path id, the authenticated user and the new content to the service")
+    void editPassesArgumentsThrough() throws Exception {
+        when(messageService.edit(USER, MESSAGE_ID, "fixed")).thenReturn(edited("fixed"));
+
+        mockMvc.perform(authenticatedPatch("/messages/" + MESSAGE_ID, "{\"content\":\"fixed\"}"))
+                .andExpect(status().isOk());
+
+        verify(messageService).edit(USER, MESSAGE_ID, "fixed");
+    }
+
+    @Test
+    @DisplayName("PATCH ignores sender_id / room_id in the body: only content can change")
+    void editIgnoresOtherBodyFields() throws Exception {
+        when(messageService.edit(USER, MESSAGE_ID, "fixed")).thenReturn(edited("fixed"));
+
+        mockMvc.perform(authenticatedPatch("/messages/" + MESSAGE_ID,
+                        "{\"content\":\"fixed\",\"sender_id\":\"someone-else\",\"room_id\":7}"))
+                .andExpect(status().isOk());
+
+        verify(messageService).edit(USER, MESSAGE_ID, "fixed");
+    }
+
+    @Test
+    @DisplayName("PATCH with blank content is a 400 VALIDATION_ERROR and never reaches the service")
+    void editBlankContentIsRejected() throws Exception {
+        mockMvc.perform(authenticatedPatch("/messages/" + MESSAGE_ID, "{\"content\":\"   \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.error.details.content").exists());
+
+        verifyNoInteractions(messageService);
+    }
+
+    @Test
+    @DisplayName("PATCH without content is a 400 VALIDATION_ERROR")
+    void editMissingContentIsRejected() throws Exception {
+        mockMvc.perform(authenticatedPatch("/messages/" + MESSAGE_ID, "{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+
+        verifyNoInteractions(messageService);
+    }
+
+    @Test
+    @DisplayName("PATCH content over 4000 characters is rejected; exactly 4000 is accepted")
+    void editContentLengthBoundary() throws Exception {
+        String atLimit = "x".repeat(4000);
+        when(messageService.edit(USER, MESSAGE_ID, atLimit)).thenReturn(edited(atLimit));
+
+        mockMvc.perform(authenticatedPatch("/messages/" + MESSAGE_ID, "{\"content\":\"" + atLimit + "x\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+        mockMvc.perform(authenticatedPatch("/messages/" + MESSAGE_ID, "{\"content\":\"" + atLimit + "\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("PATCH rejections keep the envelope: NOT_SENDER and EDIT_WINDOW_EXPIRED are 403")
+    void editRejectionsUseEnvelope() throws Exception {
+        when(messageService.edit(eq(USER), eq(MESSAGE_ID), any())).thenThrow(
+                ApiException.forbidden("EDIT_WINDOW_EXPIRED", "Edit window has expired"));
+
+        mockMvc.perform(authenticatedPatch("/messages/" + MESSAGE_ID, "{\"content\":\"late\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("EDIT_WINDOW_EXPIRED"));
+    }
+
+    @Test
+    @DisplayName("PATCH with malformed JSON is a 400, not a 500")
+    void editMalformedJsonIsBadRequest() throws Exception {
+        mockMvc.perform(authenticatedPatch("/messages/" + MESSAGE_ID, "{\"content\":"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").exists());
+
+        verifyNoInteractions(messageService);
+    }
+
+    @Test
+    @DisplayName("an unsupported method on /messages/:id is a 405, not a 500")
+    void unsupportedMethodIsMethodNotAllowed() throws Exception {
+        mockMvc.perform(put("/messages/" + MESSAGE_ID)
+                        .requestAttr(AuthenticationFilter.USER_ID_ATTRIBUTE, USER)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"x\"}"))
+                .andExpect(status().isMethodNotAllowed());
 
         verifyNoInteractions(messageService);
     }

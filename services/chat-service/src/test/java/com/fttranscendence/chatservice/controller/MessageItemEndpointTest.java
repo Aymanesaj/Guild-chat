@@ -121,4 +121,37 @@ class MessageItemEndpointTest extends MongoTestSupport {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
+
+    @Test
+    @DisplayName("an edit is stored: GET afterwards returns the new content and edited_at, same created_at")
+    void editIsPersisted() {
+        String created = post(ALICE, "before").getBody();
+        String id = idOf(created);
+        HttpHeaders headers = auth(ALICE);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        ResponseEntity<String> patched = rest.exchange("/messages/" + id, HttpMethod.PATCH,
+                new HttpEntity<>("{\"content\":\"after\"}", headers), String.class);
+        ResponseEntity<String> fetched = get(ALICE, id);
+
+        assertThat(patched.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(fetched.getBody()).as("GET reads back exactly what PATCH returned").isEqualTo(patched.getBody());
+        assertThat(fetched.getBody()).contains("\"content\":\"after\"").doesNotContain("\"edited_at\":null");
+        String createdAt = created.replaceAll(".*\"created_at\":\"([^\"]+)\".*", "$1");
+        assertThat(fetched.getBody()).contains("\"created_at\":\"" + createdAt + "\"");
+    }
+
+    @Test
+    @DisplayName("an outsider's PATCH is the same 404 as for an unknown id, and changes nothing")
+    void outsiderCannotEdit() {
+        String id = idOf(post(ALICE, "untouched").getBody());
+        HttpHeaders headers = auth(MALLORY);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        ResponseEntity<String> response = rest.exchange("/messages/" + id, HttpMethod.PATCH,
+                new HttpEntity<>("{\"content\":\"defaced\"}", headers), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(get(ALICE, id).getBody()).contains("\"content\":\"untouched\"");
+    }
 }

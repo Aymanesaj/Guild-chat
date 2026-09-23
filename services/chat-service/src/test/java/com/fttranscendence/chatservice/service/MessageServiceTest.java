@@ -460,4 +460,155 @@ class MessageServiceTest {
     private static ApiException catchApiException(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
         return (ApiException) org.assertj.core.api.Assertions.catchThrowableOfType(call, ApiException.class);
     }
+
+    // ---------------------------------------------------- PATCH /messages/:id
+
+    /** A message by USER in ROOM, sent at the given instant (NOW is the fixed clock). */
+    private Message sentAt(Instant createdAt) {
+        return Message.create(ROOM, USER, null, "original", "text", createdAt);
+    }
+
+    private void stored(Message message) {
+        when(messageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
+    }
+
+    @Test
+    @DisplayName("edit: the sender's edit replaces the content and stamps edited_at from the clock")
+    void editUpdatesContentAndEditedAt() {
+        Instant createdAt = NOW.minusSeconds(60);
+        stored(sentAt(createdAt));
+        isMember(true);
+        when(messageRepository.save(any(Message.class))).thenAnswer(i -> i.getArgument(0));
+
+        Message edited = messageService.edit(USER, MESSAGE_ID, "fixed typo");
+
+        assertThat(edited.getContent()).isEqualTo("fixed typo");
+        assertThat(edited.getEditedAt()).isEqualTo(NOW);
+        assertThat(edited.getCreatedAt()).as("an edit never moves the message in history").isEqualTo(createdAt);
+        assertThat(edited.getSenderId()).isEqualTo(USER);
+        assertThat(edited.getRoomId()).isEqualTo(ROOM);
+    }
+
+    @Test
+    @DisplayName("edit: publishes MessageEditedEvent carrying exactly the saved document")
+    void editPublishesEditedEvent() {
+        stored(sentAt(NOW.minusSeconds(60)));
+        isMember(true);
+        Message saved = sentAt(NOW.minusSeconds(60));
+        when(messageRepository.save(any(Message.class))).thenReturn(saved);
+
+        messageService.edit(USER, MESSAGE_ID, "fixed typo");
+
+        ArgumentCaptor<MessageEditedEvent> event = ArgumentCaptor.forClass(MessageEditedEvent.class);
+        verify(events).publishEvent(event.capture());
+        assertThat(event.getValue().message()).isSameAs(saved);
+    }
+
+    @Test
+    @DisplayName("edit: 1 ms before the 15-minute mark is still allowed (boundary)")
+    void editAllowedJustInsideWindow() {
+        stored(sentAt(NOW.minus(MessageService.EDIT_WINDOW).plusMillis(1)));
+        isMember(true);
+        when(messageRepository.save(any(Message.class))).thenAnswer(i -> i.getArgument(0));
+
+        assertThat(messageService.edit(USER, MESSAGE_ID, "just in time").getContent())
+                .isEqualTo("just in time");
+    }
+
+    @Test
+    @DisplayName("edit: at exactly 15:00 the edit is refused (spec: now < created_at + 15 min)")
+    void editRefusedAtWindowBoundary() {
+        stored(sentAt(NOW.minus(MessageService.EDIT_WINDOW)));
+        isMember(true);
+
+        assertThatThrownBy(() -> messageService.edit(USER, MESSAGE_ID, "too late"))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(e.getCode()).isEqualTo("EDIT_WINDOW_EXPIRED");
+                });
+
+        verify(messageRepository, never()).save(any());
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    @DisplayName("edit: long after the window is refused too")
+    void editRefusedLongAfterWindow() {
+        stored(sentAt(NOW.minusSeconds(24 * 3600)));
+        isMember(true);
+
+        assertThatThrownBy(() -> messageService.edit(USER, MESSAGE_ID, "way too late"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getCode()).isEqualTo("EDIT_WINDOW_EXPIRED"));
+    }
+
+    @Test
+    @DisplayName("edit: another member cannot edit someone else's message")
+    void editRefusedForNonSender() {
+        stored(Message.create(ROOM, "someone-else", null, "theirs", "text", NOW.minusSeconds(60)));
+        isMember(true);
+
+        assertThatThrownBy(() -> messageService.edit(USER, MESSAGE_ID, "hijacked"))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(e.getCode()).isEqualTo("NOT_SENDER");
+                });
+
+        verify(messageRepository, never()).save(any());
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    @DisplayName("edit: a deleted message cannot be edited back to life")
+    void editRefusedForDeletedMessage() {
+        Message deleted = sentAt(NOW.minusSeconds(60));
+        deleted.markDeleted(NOW.minusSeconds(30));
+        stored(deleted);
+        isMember(true);
+
+        assertThatThrownBy(() -> messageService.edit(USER, MESSAGE_ID, "resurrected"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getCode()).isEqualTo("MESSAGE_DELETED"));
+
+        verify(messageRepository, never()).save(any());
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    @DisplayName("edit: a sender who left the room gets 404, like any outsider")
+    void editRefusedForSenderNoLongerMember() {
+        stored(sentAt(NOW.minusSeconds(60)));
+        isMember(false);
+
+        assertThatThrownBy(() -> messageService.edit(USER, MESSAGE_ID, "after leaving"))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                    assertThat(e.getCode()).isEqualTo("MESSAGE_NOT_FOUND");
+                });
+
+        verify(messageRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("edit: a malformed id is a 400 and nothing is loaded or saved")
+    void editRejectsMalformedId() {
+        assertThatThrownBy(() -> messageService.edit(USER, "not-an-id", "x"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getCode()).isEqualTo("INVALID_MESSAGE_ID"));
+
+        verifyNoInteractions(messageRepository, orgClient, events);
+    }
+
+    @Test
+    @DisplayName("edit: a failed save publishes nothing")
+    void editFailedSavePublishesNothing() {
+        stored(sentAt(NOW.minusSeconds(60)));
+        isMember(true);
+        when(messageRepository.save(any(Message.class))).thenThrow(new IllegalStateException("mongo down"));
+
+        assertThatThrownBy(() -> messageService.edit(USER, MESSAGE_ID, "lost"))
+                .isInstanceOf(IllegalStateException.class);
+
+        verifyNoInteractions(events);
+    }
 }

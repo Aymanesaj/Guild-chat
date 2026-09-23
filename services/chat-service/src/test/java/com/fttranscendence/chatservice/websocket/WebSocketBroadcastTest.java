@@ -23,6 +23,7 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -244,5 +245,92 @@ class WebSocketBroadcastTest extends MongoTestSupport {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(nextFrame(alive).path("data").path("content").asText()).isEqualTo("still here");
+    }
+
+    // ------------------------------------------------------- message.edited
+
+    private ResponseEntity<String> patch(String userId, String messageId, String content) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(userId + ".token");
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        return rest.exchange("/messages/" + messageId, HttpMethod.PATCH,
+                new HttpEntity<>("{\"content\":\"" + content + "\"}", headers), String.class);
+    }
+
+    /** Posts as the given user and consumes the message.new frame from the given tab. */
+    private String postAndDrain(String userId, long roomId, String content, Tab listener) throws Exception {
+        ResponseEntity<String> created = post(userId, roomId, content);
+        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(nextFrame(listener).path("event").asText()).isEqualTo("message.new");
+        return objectMapper.readTree(created.getBody()).path("id").asText();
+    }
+
+    @Test
+    @DisplayName("a PATCH reaches subscribers as message.edited, identical to the REST body")
+    void editIsBroadcastToSubscribers() throws Exception {
+        Tab bob = connect(BOB);
+        subscribe(bob, ROOM);
+        awaitSubscribers(ROOM, 1);
+        String id = postAndDrain(ALICE, ROOM, "helo", bob);
+
+        ResponseEntity<String> response = patch(ALICE, id, "hello");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        JsonNode edited = objectMapper.readTree(response.getBody());
+
+        JsonNode frame = nextFrame(bob);
+        assertThat(frame.path("event").asText()).isEqualTo("message.edited");
+        JsonNode data = frame.path("data");
+        assertThat(data).as("same JSON as the PATCH response").isEqualTo(edited);
+        // the four fields the frontend reads (api/messages.js)
+        assertThat(data.path("id").asText()).isEqualTo(id);
+        assertThat(data.path("room_id").asLong()).isEqualTo(ROOM);
+        assertThat(data.path("content").asText()).isEqualTo("hello");
+        assertThat(data.path("edited_at").isTextual()).isTrue();
+    }
+
+    @Test
+    @DisplayName("an edit is not broadcast to another room")
+    void editDoesNotLeakToOtherRoom() throws Exception {
+        Tab alice = connect(ALICE);
+        Tab bob = connect(BOB);
+        subscribe(alice, ROOM);
+        subscribe(bob, OTHER_ROOM);
+        awaitSubscribers(ROOM, 1);
+        awaitSubscribers(OTHER_ROOM, 1);
+        String id = postAndDrain(ALICE, ROOM, "draft", alice);
+
+        patch(ALICE, id, "final");
+
+        assertThat(nextFrame(alice).path("event").asText()).isEqualTo("message.edited");
+        assertThat(receivesNothing(bob)).isTrue();
+    }
+
+    @Test
+    @DisplayName("a refused edit (not the sender) is a 403 and broadcasts nothing")
+    void refusedEditBroadcastsNothing() throws Exception {
+        Tab alice = connect(ALICE);
+        subscribe(alice, ROOM);
+        awaitSubscribers(ROOM, 1);
+        String id = postAndDrain(ALICE, ROOM, "mine", alice);
+
+        ResponseEntity<String> response = patch(BOB, id, "hijacked");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody()).contains("NOT_SENDER");
+        assertThat(receivesNothing(alice)).isTrue();
+    }
+
+    @Test
+    @DisplayName("an invalid edit body is a 400 and broadcasts nothing")
+    void invalidEditBroadcastsNothing() throws Exception {
+        Tab alice = connect(ALICE);
+        subscribe(alice, ROOM);
+        awaitSubscribers(ROOM, 1);
+        String id = postAndDrain(ALICE, ROOM, "mine", alice);
+
+        ResponseEntity<String> response = patch(ALICE, id, "  ");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(receivesNothing(alice)).isTrue();
     }
 }
