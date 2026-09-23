@@ -13,6 +13,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 
 import org.bson.types.ObjectId;
 import org.junit.jupiter.api.DisplayName;
@@ -362,5 +363,101 @@ class MessageServiceTest {
                         e -> assertThat(e.getCode())
                                 .as("a non-member must not learn anything about reply ids")
                                 .isEqualTo("NOT_A_MEMBER"));
+    }
+
+    // ------------------------------------------------------ GET /messages/:id
+
+    private static final String MESSAGE_ID = new ObjectId().toHexString();
+
+    @Test
+    @DisplayName("get: a member receives the message")
+    void getReturnsMessageToMember() {
+        Message stored = message("hello");
+        when(messageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(stored));
+        isMember(true);
+
+        assertThat(messageService.get(USER, MESSAGE_ID)).isSameAs(stored);
+    }
+
+    @Test
+    @DisplayName("get: a soft-deleted message is still returned (the DTO hides its content)")
+    void getReturnsDeletedMessage() {
+        Message deleted = message("gone");
+        deleted.markDeleted(NOW);
+        when(messageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(deleted));
+        isMember(true);
+
+        assertThat(messageService.get(USER, MESSAGE_ID).isDeleted()).isTrue();
+    }
+
+    @Test
+    @DisplayName("get: a malformed id is a 400 and touches neither Mongo nor org")
+    void getRejectsMalformedId() {
+        assertThatThrownBy(() -> messageService.get(USER, "not-an-object-id"))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(e.getCode()).isEqualTo("INVALID_MESSAGE_ID");
+                });
+
+        verifyNoInteractions(messageRepository, orgClient);
+    }
+
+    @Test
+    @DisplayName("get: an unknown id is a 404 and org is never asked")
+    void getUnknownIdIsNotFound() {
+        when(messageRepository.findById(MESSAGE_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> messageService.get(USER, MESSAGE_ID))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                    assertThat(e.getCode()).isEqualTo("MESSAGE_NOT_FOUND");
+                });
+
+        verifyNoInteractions(orgClient);
+    }
+
+    @Test
+    @DisplayName("get: membership is checked against the room stored on the message")
+    void getChecksMembershipOfTheMessagesRoom() {
+        Message elsewhere = Message.create(OTHER_ROOM, "someone-else", null, "hi", "text", NOW);
+        when(messageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(elsewhere));
+        when(orgClient.isMember(USER, OTHER_ROOM)).thenReturn(true);
+
+        assertThat(messageService.get(USER, MESSAGE_ID)).isSameAs(elsewhere);
+        verify(orgClient).isMember(USER, OTHER_ROOM);
+    }
+
+    @Test
+    @DisplayName("get: a non-member gets exactly the same 404 as an unknown id")
+    void getNonMemberLooksLikeUnknownId() {
+        String unknownId = new ObjectId().toHexString();
+        when(messageRepository.findById(unknownId)).thenReturn(Optional.empty());
+        when(messageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message("secret")));
+        isMember(false);
+
+        ApiException unknown = catchApiException(() -> messageService.get(USER, unknownId));
+        ApiException hidden = catchApiException(() -> messageService.get(USER, MESSAGE_ID));
+
+        assertThat(hidden.getStatus()).isEqualTo(HttpStatus.NOT_FOUND).isEqualTo(unknown.getStatus());
+        assertThat(hidden.getCode()).isEqualTo(unknown.getCode());
+        assertThat(hidden.getMessage())
+                .as("the message text must not reveal that the message exists")
+                .isEqualTo(unknown.getMessage());
+    }
+
+    @Test
+    @DisplayName("get: org-service down surfaces as 503, never as a 404 or a leak")
+    void getPropagatesOrgOutage() {
+        when(messageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message("hello")));
+        when(orgClient.isMember(USER, ROOM)).thenThrow(new ApiException(
+                HttpStatus.SERVICE_UNAVAILABLE, "ORG_UNAVAILABLE", "org-service is unavailable"));
+
+        assertThatThrownBy(() -> messageService.get(USER, MESSAGE_ID))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getCode()).isEqualTo("ORG_UNAVAILABLE"));
+    }
+
+    private static ApiException catchApiException(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
+        return (ApiException) org.assertj.core.api.Assertions.catchThrowableOfType(call, ApiException.class);
     }
 }

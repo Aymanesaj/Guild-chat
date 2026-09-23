@@ -119,4 +119,38 @@ public class MessageService {
         }
         return limit;
     }
+
+    /**
+     *
+     * One message by id. Deleted messages are returned too
+     * (DTO hides  their content). the same as history
+     */
+
+    public Message get(String userId,   String messageId) {
+        return loadVisible(userId,  messageId);
+    }
+
+    /**
+    /* Shared by GET, PATCH and DELETE on /messages/:id.
+    /*
+    /* A non-member gets the SAME 404 as an unknown id: a 403 would confirm
+    /* that the message exists in a room they cannot read. The room id is not
+    /* in the URL here, so unlike history there is nothing public to protect.
+    /*/
+
+    private Message loadVisible(String userId,  String messageId) {
+
+        if(!ObjectId.isValid(messageId)) {
+            throw ApiException.badRequest("INVALID_MESSAGE_ID", "'id' is not a valid message id");
+        }
+
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> ApiException.notFound("MESSAGE_NOT_FOUND", "Message does not exist"));
+
+        if(!orgClient.isMember(userId, message.getRoomId())) {
+            throw ApiException.notFound("MESSAGE_NOT_FOUND", "Message does not exist");
+        }
+
+        return message;
+    }
 }
