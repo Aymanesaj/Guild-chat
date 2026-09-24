@@ -1,4 +1,3 @@
-import { requireEndpoint } from "./features";
 import { ApiError, authedFetch, jsonBody, request } from "./http";
 import { normalizeUser } from "./users";
 
@@ -48,8 +47,7 @@ export async function uploadAvatar(file) {
   ).then(normalizeUser);
 }
 
-/** identity `DELETE /me/avatar` — not implemented yet (see features.js). */
+/** identity `DELETE /me/avatar` -> the updated user. */
 export async function deleteAvatar() {
-  requireEndpoint("avatarDelete");
-  return request(`${API_BASE}/me/avatar`, { method: "DELETE" }, "Failed to remove avatar");
+  return request(`${API_BASE}/me/avatar`, { method: "DELETE" }, "Failed to remove avatar").then(normalizeUser);
 }
