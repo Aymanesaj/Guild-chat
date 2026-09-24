@@ -1,3 +1,8 @@
+security:
+  basic:
+    username: ${STATUS_PAGE_USER}
+    password-bcrypt-base64: ${STATUS_PAGE_PASSWORD_BCRYPT_BASE64}
+
 storage:
   type: memory
 

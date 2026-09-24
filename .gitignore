@@ -13,6 +13,7 @@ services/chat-service/target/
 notes/*
 
 CLAUDE.md
+!GEMINI.md
 
 # shared with the frontend dev — must be tracked despite the *.md rule above
 # shared documentation — must be tracked despite the *.md rule above
