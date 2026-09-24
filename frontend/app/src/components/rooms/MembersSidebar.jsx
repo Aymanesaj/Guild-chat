@@ -5,6 +5,7 @@ import { TbArrowLeft, TbUserPlus, TbUsersGroup } from "react-icons/tb";
 import MemberList from "./MemberList";
 import { addMember, getRoomMembers, removeMember } from "../../api/rooms";
 import { getFriendsList } from "../../api/friends";
+import { usePresence } from "../../hooks/usePresence";
 import { useProfileOverlay } from "../layout/ProfileOverlayContext";
 import {
   Avatar,
@@ -82,6 +83,8 @@ function MembersSidebar({ roomId }) {
   const [kickError, setKickError] = useState(null);
   const [pendingKick, setPendingKick] = useState(null);
   const [kicking, setKicking] = useState(false);
+
+  const presence = usePresence(members.map((member) => member.id));
 
   const [friendsLoading, setFriendsLoading] = useState("idle");
   const [friends, setFriends] = useState([]);
@@ -214,7 +217,10 @@ function MembersSidebar({ roomId }) {
             )}
             {loading === "success" && (
               <MemberList
-                members={members}
+                members={members.map((member) => ({
+                  ...member,
+                  status: presence.get(member.id) ?? member.status,
+                }))}
                 currentUserId={currentUser?.id}
                 currentUserRole={currentUserRole}
                 onKick={setPendingKick}

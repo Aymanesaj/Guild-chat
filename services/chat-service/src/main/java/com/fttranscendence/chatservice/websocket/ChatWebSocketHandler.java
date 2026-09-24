@@ -45,12 +45,15 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     private final SubscriptionRegistry subscriptionRegistry;
     private final OrgClient orgClient;
+    private final PresenceRegistry presenceRegistry;
 
-    public ChatWebSocketHandler(FrameSender frameSender,  ObjectMapper objectMapper , SubscriptionRegistry subscriptionRegistry, OrgClient orgClient) {
+    public ChatWebSocketHandler(FrameSender frameSender,  ObjectMapper objectMapper , SubscriptionRegistry subscriptionRegistry, OrgClient orgClient,
+            PresenceRegistry presenceRegistry) {
         this.frameSender = frameSender;
         this.objectMapper = objectMapper;
         this.subscriptionRegistry = subscriptionRegistry;
         this.orgClient = orgClient;
+        this.presenceRegistry = presenceRegistry;
     }
 
     @Override
@@ -65,6 +68,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         sessions.add(guarded);
         log.debug("WebSocket opened: user={} sessions={}" , userId, sessions.size());
         session.getAttributes().put(GUARDED_SESSION_ATTRIBUTE, guarded);
+        presenceRegistry.connected(userId, session.getId());
     }
 
     @Override
@@ -112,6 +116,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         if (userId == null) {
             return;
         }
+        presenceRegistry.disconnected(userId, session.getId());
 
         sessionsByUser.computeIfPresent(userId, (id, sessions) -> {
             sessions.removeIf(existing -> sameConnection(existing, session));

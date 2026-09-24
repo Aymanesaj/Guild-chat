@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import styled from "styled-components";
 import Sidebar from "./Sidebar";
 import MainPanel from "./MainPanel";
@@ -6,6 +6,7 @@ import ProfileOverlay from "./ProfileOverlay";
 import { ProfileOverlayProvider, useProfileOverlay } from "./ProfileOverlayContext";
 import { RoomNavigationProvider } from "./RoomNavigationContext";
 import ProfilePreviewPopover from "../profile/ProfilePreviewPopover";
+import { connectChat } from "../../api/messages";
 
 const AppShellRoot = styled.div`
   display: flex;
@@ -78,6 +79,12 @@ function AppShellContent({ onLogout }) {
 }
 
 function AppShell({ user, onLogout }) {
+  // Only mounted while logged in: the chat socket stays open for the whole
+  // session, which is what makes the user "online". Logout closes it.
+  useEffect(() => {
+    connectChat();
+  }, []);
+
   return (
     <ProfileOverlayProvider user={user}>
       <AppShellContent onLogout={onLogout} />
