@@ -1,6 +1,7 @@
 import styled from "styled-components";
 import { TbHash, TbMessageCircle, TbUsers } from "react-icons/tb";
 import { Button } from "../ui";
+import { NavToggleButton } from "../layout/NavDrawerContext";
 
 const PanelHeader = styled.header`
   display: flex;
@@ -29,28 +30,40 @@ const HeaderTitle = styled.div`
   }
 `;
 
+/* The header now also carries a hamburger on phones; at 360px the label is
+   what has to give. */
+const MembersButton = styled(Button)`
+  @media (max-width: 700px) {
+    span {
+      display: none;
+    }
+  }
+`;
+
 function RoomHeader({ roomName, isDm, onToggleMembers }) {
   const TitleIcon = isDm ? TbMessageCircle : TbHash;
 
   return (
     <PanelHeader>
       <HeaderTitle>
+        <NavToggleButton />
         <TitleIcon size={20} />
         <h2>{roomName}</h2>
       </HeaderTitle>
 
       {/* A DM has exactly two members and no roster to manage. */}
       {!isDm && (
-        <Button
+        <MembersButton
           type="button"
           $variant="ghost"
           $size="sm"
           onClick={onToggleMembers}
           title="Toggle members"
+          aria-label="Toggle members"
         >
           <TbUsers size={18} />
-          Members
-        </Button>
+          <span>Members</span>
+        </MembersButton>
       )}
     </PanelHeader>
   );

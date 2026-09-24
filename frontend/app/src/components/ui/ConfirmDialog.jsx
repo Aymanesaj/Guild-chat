@@ -5,7 +5,7 @@ import { fadeIn, riseIn } from "./Card";
 const Backdrop = styled.div`
   position: ${({ $position = "fixed" }) => $position};
   inset: 0;
-  z-index: 50;
+  z-index: var(--z-dialog);
   display: grid;
   place-items: center;
   padding: var(--space-4);

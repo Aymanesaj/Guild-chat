@@ -3,6 +3,7 @@ import styled from "styled-components";
 import { TbCheck, TbSend, TbUserCheck, TbUserPlus, TbX } from "react-icons/tb";
 
 import { useAvatarUrl } from "../../hooks/useAvatarUrl";
+import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { useRoomNavigation } from "../layout/RoomNavigationContext";
 import { getUserById } from "../../api/profile";
 import {
@@ -86,14 +87,9 @@ export default function ProfilePreviewPopover({ target, onClose }) {
     };
   }, [target.id]);
 
-  useEffect(() => {
-    function handleKeyDown(e) {
-      if (e.key === "Escape") onClose();
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  // Mounted last when it sits over a drawer, so it takes the Escape first and
+  // the drawer underneath stays open.
+  useEscapeKey(onClose);
 
   const handleAddFriend = async () => {
     setRunningAction(true);
@@ -312,7 +308,7 @@ export default function ProfilePreviewPopover({ target, onClose }) {
 const Backdrop = styled.div`
   position: fixed;
   inset: 0;
-  z-index: 9998;
+  z-index: var(--z-popover);
 `;
 
 const Card = styled.div`
@@ -325,7 +321,7 @@ const Card = styled.div`
   color: var(--text-secondary);
   box-shadow: var(--shadow-lg);
   animation: ${riseIn} var(--dur) var(--ease);
-  z-index: 9999;
+  z-index: var(--z-overlay);
 `;
 
 const Banner = styled.div`

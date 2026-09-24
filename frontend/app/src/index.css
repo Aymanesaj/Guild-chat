@@ -64,6 +64,13 @@
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --dur-fast: 120ms;
   --dur: 200ms;
+
+  /* Stacking order, lowest layer first. */
+  --z-dialog: 50;
+  --z-drawer-backdrop: 60;
+  --z-drawer: 61;
+  --z-popover: 9998;
+  --z-overlay: 9999;
 }
 
 html,
