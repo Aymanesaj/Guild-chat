@@ -50,6 +50,25 @@ public class RoomService {
         this.directMessageCreationService = directMessageCreationService;
     }
 
+    public List<RoomResponse> getDirectMessageRoomsByUserId(UUID userId) {
+        List<RoomMember> roomMembers = roomMemberRepository.findByUserId(userId);
+        return roomMembers.stream()
+                .filter(roomMember -> roomMember.getRoom().getType() == RoomType.DM)
+                .map(roomMember -> {
+                    Room room = roomMember.getRoom();
+                    UUID otherUserId = room.getDmUser1().equals(userId) ? room.getDmUser2() : room.getDmUser1();
+                    return new RoomResponse(
+                            room.getId(),
+                            room.getName(),
+                            room.getCreatedAt(),
+                            room.getType(),
+                            room.getUpdatedAt(),
+                            otherUserId
+                    );
+                })
+                .toList();
+    }
+
     private boolean isOwner(Long roomId, UUID userId) {
         return memberRoleRepository.existsByRoomMemberRoomIdAndRoomMemberUserIdAndRoleName(
                 roomId,
@@ -331,10 +350,11 @@ public class RoomService {
     public List<RoomResponse> getRoomsByUserId(UUID userId) {
         List<RoomMember> roomMembers = roomMemberRepository.findByUserId(userId);
         return roomMembers.stream()
+                .filter(roomMember -> roomMember.getRoom().getType() != RoomType.DM) // Exclude DM rooms
                 .map(roomMember -> new RoomResponse(roomMember.getRoom().getId(), 
                             roomMember.getRoom().getName(), roomMember.getRoom().getCreatedAt(),
                             roomMember.getRoom().getType(), roomMember.getRoom().getUpdatedAt(),
-                            roomMember.getRoom().getType() == RoomType.DM ? roomMember.getRoom().getDmUser1().equals(userId) ? roomMember.getRoom().getDmUser2() : roomMember.getRoom().getDmUser1() : null))
+                            null))
                 .toList();
     }
 
