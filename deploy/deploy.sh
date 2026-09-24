@@ -25,11 +25,6 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-# 3. Pull latest changes from git
-echo "📥 Fetching latest changes from Git..."
-git fetch origin main
-git reset --hard origin/main
-
 # 4. Export DOCKER_SOCK for docker-compose compatibility
 CURRENT_UID=$(id -u)
 if [ -S "/var/run/user/${CURRENT_UID}/docker.sock" ]; then
