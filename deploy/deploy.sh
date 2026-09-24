@@ -19,6 +19,9 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
+# Sanitize .env if any variable was defined with double equals (e.g., KEY==VAL)
+sed -i -E 's/^([A-Za-z0-9_]+)=[[:space:]]*=/\1=/' .env
+
 # Ensure required environment variables exist in .env (safely append defaults if missing)
 ensure_env() {
     local key="$1"
@@ -77,19 +80,54 @@ if ! docker compose exec -T postgres psql -U "$PG_USER" -d postgres -tc "SELECT 
     docker compose exec -T postgres psql -U "$PG_USER" -d postgres -c "CREATE DATABASE org_service_db;" || true
 fi
 
-# Ensure Mongo root user exists
-M_USER=$(grep -E '^MONGO_INITDB_ROOT_USERNAME=' .env | cut -d'=' -f2- | tr -d '\r"' || echo "rooted")
-M_PASS=$(grep -E '^MONGO_INITDB_ROOT_PASSWORD=' .env | cut -d'=' -f2- | tr -d '\r"' || echo "rooted123")
-M_USER=${M_USER:-rooted}
-M_PASS=${M_PASS:-rooted123}
-
-docker compose exec -T mongodb mongosh admin --eval "
-try {
-    db.createUser({ user: '${M_USER}', pwd: '${M_PASS}', roles: [{ role: 'root', db: 'admin' }] });
-} catch (e) {
-    // Ignore if already exists
+# Ensure Mongo users exist and have credentials matching .env
+sanitize_val() {
+    echo "$1" | sed -E 's/^[=[:space:]]+//' | tr -d '\r"'
 }
+
+M_ROOT_USER=$(sanitize_val "$(grep -E '^MONGO_INITDB_ROOT_USERNAME=' .env | cut -d'=' -f2- || echo 'rooted')")
+M_ROOT_PASS=$(sanitize_val "$(grep -E '^MONGO_INITDB_ROOT_PASSWORD=' .env | cut -d'=' -f2- || echo 'rooted123')")
+C_MONGO_USER=$(sanitize_val "$(grep -E '^CHAT_MONGO_USER=' .env | cut -d'=' -f2- || echo 'rooted')")
+C_MONGO_PASS=$(sanitize_val "$(grep -E '^CHAT_MONGO_PASSWORD=' .env | cut -d'=' -f2- || echo 'rooted123')")
+
+M_ROOT_USER=${M_ROOT_USER:-rooted}
+M_ROOT_PASS=${M_ROOT_PASS:-rooted123}
+C_MONGO_USER=${C_MONGO_USER:-$M_ROOT_USER}
+C_MONGO_PASS=${C_MONGO_PASS:-$M_ROOT_PASS}
+
+echo "🍃 Provisioning MongoDB users (${M_ROOT_USER}, ${C_MONGO_USER})..."
+
+# Try unauthenticated first (works when DB is fresh via localhost exception)
+docker compose exec -T mongodb mongosh admin --eval "
+function upsert(u, p) {
+    if (!u || !p) return;
+    try {
+        db.createUser({ user: u, pwd: p, roles: [{ role: 'root', db: 'admin' }] });
+    } catch(e) {
+        try { db.updateUser(u, { pwd: p }); } catch(err) {}
+    }
+}
+upsert('${M_ROOT_USER}', '${M_ROOT_PASS}');
+upsert('${C_MONGO_USER}', '${C_MONGO_PASS}');
 " > /dev/null 2>&1 || true
+
+# Try with available authentication credentials
+for AUTH_TRY in "${M_ROOT_USER}:${M_ROOT_PASS}" "${C_MONGO_USER}:${C_MONGO_PASS}" "rooted:rooted123"; do
+    A_USER="${AUTH_TRY%%:*}"
+    A_PASS="${AUTH_TRY#*:}"
+    docker compose exec -T mongodb mongosh -u "$A_USER" -p "$A_PASS" --authenticationDatabase admin admin --eval "
+    function upsert(u, p) {
+        if (!u || !p) return;
+        try {
+            db.createUser({ user: u, pwd: p, roles: [{ role: 'root', db: 'admin' }] });
+        } catch(e) {
+            try { db.updateUser(u, { pwd: p }); } catch(err) {}
+        }
+    }
+    upsert('${M_ROOT_USER}', '${M_ROOT_PASS}');
+    upsert('${C_MONGO_USER}', '${C_MONGO_PASS}');
+    " > /dev/null 2>&1 || true
+done
 
 # 5. Build and launch all services
 echo "🔨 Building and launching containers..."
