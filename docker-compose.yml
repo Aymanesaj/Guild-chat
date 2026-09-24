@@ -13,6 +13,7 @@ services:
       - PARANOIA=1
       - BLOCKING_PARANOIA=1
       - MODSEC_RULE_ENGINE=on
+      - ALLOWED_METHODS=GET HEAD POST OPTIONS PUT PATCH DELETE
     ports:
       - 8000:80
       - 8443:443
@@ -166,7 +167,7 @@ services:
     depends_on:
       - nginx
     restart: always
-  
+
 
   promtail:
     image: grafana/promtail:latest
@@ -215,7 +216,7 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--web.external-url=http://localhost/prometheus/'
       - '--web.route-prefix=/'
-    volumes: 
+    volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./infra/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
       - prometheus_data:/prometheus
@@ -236,7 +237,7 @@ services:
     networks:
       - private
     restart: always
-    
+
 
 # -----------------------------------------------------------
 # -------------------- Data visualization -------------------

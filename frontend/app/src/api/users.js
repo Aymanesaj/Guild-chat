@@ -1,4 +1,3 @@
-import { requireEndpoint } from "./features";
 import { buildQuery, LOGOUT_EVENT, request } from "./http";
 
 const API_BASE = "/api/users";
@@ -61,22 +60,20 @@ export function clearUserCache() {
 
 window.addEventListener(LOGOUT_EVENT, clearUserCache);
 
-/** identity `GET /by-username` — not implemented yet (see features.js). */
+/** identity `GET /username/get?username=` — 404 "User not found" when nobody has it. */
 export async function getUserByUsername(username) {
-  requireEndpoint("usernameLookup");
   return request(
-    `${API_BASE}/by-username${buildQuery({ username })}`,
+    `${API_BASE}/username/get${buildQuery({ username })}`,
     {},
     "User not found",
   ).then(normalizeUser);
 }
 
-/** identity `GET /check-username` — not implemented yet (see features.js). */
+/** identity `GET /username/available?username=`. */
 export async function checkUsernameAvailability(username, { signal } = {}) {
-  requireEndpoint("usernameCheck");
-  // -> { available: boolean }
+  // -> { available: boolean, message: string }
   return request(
-    `${API_BASE}/check-username${buildQuery({ username })}`,
+    `${API_BASE}/username/available${buildQuery({ username })}`,
     { signal },
     "Failed to check username",
   );

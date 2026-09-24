@@ -656,6 +656,8 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       await sendFriendRequest(match.id);
 
       setFriendUsername("");
+      // Show the new pending request (the tab change reloads the list).
+      setManagementTab("sent");
     } catch (error) {
       console.error("Failed to add friend:", error);
 
