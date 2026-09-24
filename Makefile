@@ -9,10 +9,10 @@ DOCKER_SOCK := $(shell if [ -S /var/run/user/$$(id -u)/docker.sock ]; then \
 all: up
 
 up: run
-	DOCKER_SOCK=$(DOCKER_SOCK) docker compose up -d
+	DOCKER_SOCK=$(DOCKER_SOCK) docker compose --progress plain up -d
 
 build: run
-	DOCKER_SOCK=$(DOCKER_SOCK) docker compose up --build -d
+	DOCKER_SOCK=$(DOCKER_SOCK) docker compose --progress plain up --build -d
 
 down:
 	docker compose down
@@ -43,14 +43,14 @@ run:
 
 monitoring:
 	docker compose down -v --remove-orphans grafana prometheus docker-exporter alertmanager loki promtail
-	docker compose up --build -d grafana prometheus docker-exporter alertmanager loki promtail
+	docker compose --progress plain up --build -d grafana prometheus docker-exporter alertmanager loki promtail
 
 microservices:
 	docker compose down -v --remove-orphans chat-service identity-service org-service 
-	docker compose up --build -d chat-service identity-service org-service 
+	docker compose --progress plain up --build -d chat-service identity-service org-service 
 proxy:
 	docker compose down -v --remove-orphans nginx
-	docker compose up --build -d nginx 
+	docker compose --progress plain up --build -d nginx 
 
 backup:
 	@./scripts/backup.sh
