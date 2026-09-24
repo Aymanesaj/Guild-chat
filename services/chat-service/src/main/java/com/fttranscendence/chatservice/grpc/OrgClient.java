@@ -68,42 +68,32 @@ import jakarta.annotation.PreDestroy;
 
   * The proto carries ids as strings, so the Long room id is converted here.
     */
-    public boolean isMember(String userId, Long roomId) {
-    try {
-    CheckMembershipResponse response = stub
-    .withDeadlineAfter(
-    deadlineMs,
-    TimeUnit.MILLISECONDS)
-    .checkMembership(
-    CheckMembershipRequest.newBuilder()
-    .setUserId(userId)
-    .setRoomId(String.valueOf(roomId))
-    .build());
-
-     return response.getIsMember();
-
-    } catch (StatusRuntimeException e) {
-    Status.Code code = e.getStatus().getCode();
-
-     // org-service returns NOT_FOUND / INVALID_ARGUMENT for
-     // unknown/invalid rooms: not a membership, but not an outage.
-     if (code == Status.Code.NOT_FOUND
-             || code == Status.Code.INVALID_ARGUMENT) {
-         return false;
-     }
-
-     log.warn(
-             "org-service CheckMembership failed: {}",
-             code ,e );
-
-     throw new ApiException(
-             HttpStatus.SERVICE_UNAVAILABLE,
-             "ORG_UNAVAILABLE",
-             "org-service is unavailable");
-
+    public Membership membership(String userId , Long roomId) {
+        try {
+            CheckMembershipResponse response = stub
+            .withDeadlineAfter(deadlineMs ,TimeUnit.MILLISECONDS)
+            .checkMembership(CheckMembershipRequest.newBuilder()
+            .setUserId(userId)
+            .setRoomId(String.valueOf(roomId))
+            .build());
+            // role is "" from an org-service that does not send it yet
+            return new Membership(response.getIsMember(), response.getRole());
+        } catch( StatusRuntimeException e)
+    {
+            Status.Code code = e.getStatus().getCode();
+            
+            // org-service returns NOT_FOUND / INVALID_ARGUMENT for
+            // unknown/invalid rooms: not a membership, but not an outage.
+            if (code == Status.Code.NOT_FOUND || code == Status.Code.INVALID_ARGUMENT) {
+                return Membership.NONE;
+            }
+            log.warn("org-service CheckMembership failed: {}", code, e);
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "ORG_UNAVAILABLE", "org-service is unavailable");
+        }
     }
+    public boolean isMember(String userId , Long roomId){
+        return membership(userId ,roomId).member();
     }
-
   @PreDestroy
   void shutdown() {
   if (ownedChannel != null) {

@@ -29,7 +29,7 @@ services:
       org-service:
         condition: service_healthy
       grafana:
-        condition: service_started
+        condition: service_healthy
       prometheus:
         condition: service_started
       docker-exporter:
@@ -164,8 +164,7 @@ services:
 
   docker-exporter:
     container_name: docker-exporter
-    # build: ./infra/exporter/
-    image: seraph919/docker-exporter:v2.4
+    build: ./infra/docker-exporter/
     expose:
     - "8090"
     volumes:
@@ -193,43 +192,6 @@ services:
       - nginx
     restart: always
 
-
-  promtail:
-    image: grafana/promtail:latest
-    container_name: promtail
-    volumes:
-      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - ./infra/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
-    entrypoint: >
-      /bin/sh -c "
-      exec /usr/bin/promtail -config.file=/etc/promtail/config.yml
-      "
-    expose:
-      - "8093"
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c 'printf \"GET / HTTP/1.1\n\n\" > /dev/tcp/127.0.0.1/8093; exit $?;'"]
-      interval: 20s
-      retries: 50
-      timeout: 10s
-      start_period: 10s
-    env_file:
-      - ./.env
-    networks:
-    - private
-    depends_on:
-      - loki
-    restart: always
-
-  loki:
-    image: grafana/loki:latest
-    container_name: loki
-    command: -config.file=/etc/loki/local-config.yaml
-    expose:
-      - "3100"
-    networks:
-      - private
-    restart: always
 
   prometheus:
     container_name: prometheus
@@ -267,19 +229,21 @@ services:
 # -----------------------------------------------------------
 # -------------------- Data visualization -------------------
 # -----------------------------------------------------------
-  # add healthcheck later
   grafana:
     build: ./infra/grafana/
     container_name: grafana
     expose:
-    - "3000"
+      - "3000"
     networks:
-    - private
-    user : "root"
+      - private
     volumes:
-    - grafana_data:/var/lib/grafana
-    - ./infra/grafana/:/etc/grafana/provisioning:ro
-    - database:/var/lib/postgresql/data
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/:/etc/grafana/provisioning:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
     env_file:
       - ./.env
     restart: always
@@ -315,6 +279,8 @@ services:
   status-page:
     image: twinproduction/gatus:latest
     container_name: status-page
+    env_file:
+      - ./.env
     volumes:
       - ./infra/status/config.yaml:/config/config.yaml:ro
     expose:

@@ -20,6 +20,7 @@ import org.springframework.web.socket.WebSocketSession;
 import com.fttranscendence.chatservice.dto.MessageResponse;
 import com.fttranscendence.chatservice.model.Message;
 import com.fttranscendence.chatservice.service.MessageCreatedEvent;
+import com.fttranscendence.chatservice.service.MessageDeletedEvent;
 
 /**
  * Who receives a message.new, with a real registry and a mocked FrameSender:
@@ -99,6 +100,23 @@ class RoomBroadcasterTest {
             assertThat(dto.roomId()).isEqualTo(ROOM);
             assertThat(dto.senderId()).isEqualTo(ALICE);
             assertThat(dto.content()).isEqualTo("hello");
+        });
+    }
+
+    @Test
+    @DisplayName("a delete is broadcast as message.deleted, with the content hidden")
+    void deleteIsBroadcastWithoutContent() {
+        registry.subscribe(ROOM, session("s1"));
+        Message message = Message.create(ROOM, ALICE, null, "secret", "text", Instant.parse("2026-09-22T10:00:00Z"));
+        message.markDeleted(Instant.parse("2026-09-22T10:01:00Z"));
+
+        broadcaster.onDelete(new MessageDeletedEvent(message));
+
+        ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
+        verify(frameSender).send(any(), eq(WsEvents.MESSAGE_DELETED), payload.capture());
+        assertThat(payload.getValue()).isInstanceOfSatisfying(MessageResponse.class, dto -> {
+            assertThat(dto.deleted()).isTrue();
+            assertThat(dto.content()).as("deleted content never leaves the server").isNull();
         });
     }
 }

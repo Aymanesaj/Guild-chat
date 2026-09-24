@@ -140,4 +140,49 @@ class MessageRepositoryTest extends MongoTestSupport {
         assertThat(reloaded.getEditedAt()).isEqualTo(Instant.parse("2026-09-20T10:05:00Z"));
         assertThat(reloaded.getCreatedAt()).isEqualTo(createdAt);
     }
+
+    // ------------------------------------------ conditional (atomic) writes
+
+    @Test
+    @DisplayName("markDeletedIfLive: the first call deletes (1), a second one finds nothing (0)")
+    void markDeletedIfLiveOnlyOnce() {
+        Message message = send(ROOM, "hello");
+        Instant first = Instant.parse("2026-09-24T10:00:00Z");
+
+        assertThat(repository.markDeletedIfLive(message.getId(), first)).isEqualTo(1);
+        assertThat(repository.markDeletedIfLive(message.getId(), first.plusSeconds(5))).isEqualTo(0);
+
+        Message stored = repository.findById(message.getId()).orElseThrow();
+        assertThat(stored.getDeletedAt()).as("the second call did not move deleted_at").isEqualTo(first);
+        assertThat(stored.getContent()).as("soft delete keeps the document").isEqualTo("hello");
+    }
+
+    @Test
+    @DisplayName("applyEditIfLive: edits a live message, refuses (0) once it is deleted")
+    void applyEditIfLiveSkipsDeleted() {
+        Message message = send(ROOM, "hello");
+        Instant at = Instant.parse("2026-09-24T10:00:00Z");
+
+        assertThat(repository.applyEditIfLive(message.getId(), "edited", at)).isEqualTo(1);
+        Message edited = repository.findById(message.getId()).orElseThrow();
+        assertThat(edited.getContent()).isEqualTo("edited");
+        assertThat(edited.getEditedAt()).isEqualTo(at);
+
+        repository.markDeletedIfLive(message.getId(), at.plusSeconds(1));
+        assertThat(repository.applyEditIfLive(message.getId(), "resurrected", at.plusSeconds(2))).isEqualTo(0);
+        Message after = repository.findById(message.getId()).orElseThrow();
+        assertThat(after.getContent()).isEqualTo("edited");
+        assertThat(after.isDeleted()).as("an edit can no longer undo a delete").isTrue();
+    }
+
+    @Test
+    @DisplayName("the conditional writes match on _id as an ObjectId, and touch no other message")
+    void conditionalWritesTouchOnlyTheTarget() {
+        Message target = send(ROOM, "target");
+        Message other = send(ROOM, "other");
+
+        repository.markDeletedIfLive(target.getId(), Instant.now());
+
+        assertThat(repository.findById(other.getId()).orElseThrow().isDeleted()).isFalse();
+    }
 }

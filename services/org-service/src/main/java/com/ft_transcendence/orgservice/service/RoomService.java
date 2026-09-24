@@ -362,6 +362,17 @@ public class RoomService {
         return roomMemberRepository.existsByRoomIdAndUserId(roomId, userId);
     }
 
+    /**
+     * The user's role in the room, empty if they are not a member.
+     * chat-service uses it to let OWNER/ADMIN delete other members' messages.
+     */
+    @Transactional(readOnly = true)
+    public Optional<RoleName> findRoleInRoom(Long roomId, UUID userId) {
+        return roomMemberRepository.findByRoomIdAndUserId(roomId, userId)
+                .flatMap(memberRoleRepository::findByRoomMember)
+                .map(memberRole -> memberRole.getRole().getName());
+    }
+
     public RoomResponse getRoomById(Long roomId, UUID userId) {
         Room room = roomRepository.findById(roomId).orElseThrow(()
         -> new NotFoundException("Room not found with id: " + roomId));
