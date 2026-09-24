@@ -84,10 +84,10 @@ services:
       - "8082"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8082/healthz"]
-      interval: 15s
-      timeout: 5s
+      interval: 20s
+      timeout: 3s
       retries: 5
-      start_period: 30s
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,11 +102,11 @@ services:
     environment:
       PORT: 8081
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health/readiness"]
-      interval: 15s
-      timeout: 5s
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/actuator/health || exit 1"]
+      interval: 20s
+      timeout: 3s
       retries: 5
-      start_period: 30s
+      start_period: 10s
     networks:
       - private
     env_file:
@@ -144,10 +144,10 @@ services:
       - private
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health/readiness"]
-      interval: 15s
-      timeout: 5s
+      interval: 20s
+      timeout: 3s
       retries: 5
-      start_period: 30s
+      start_period: 15s
     env_file:
       - ./.env
     volumes:
@@ -229,21 +229,9 @@ services:
 # -----------------------------------------------------------
 # -------------------- Data visualization -------------------
 # -----------------------------------------------------------
-  grafana-init:
-    image: alpine:3.20
-    container_name: grafana-init
-    user: "0"
-    command: ["chown", "-R", "472:0", "/var/lib/grafana"]
-    volumes:
-      - grafana_data:/var/lib/grafana
-    restart: "no"
-
   grafana:
     build: ./infra/grafana/
     container_name: grafana
-    depends_on:
-      grafana-init:
-        condition: service_completed_successfully
     expose:
       - "3000"
     networks:

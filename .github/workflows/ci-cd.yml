@@ -100,13 +100,10 @@ jobs:
           key: ${{ secrets.OCI_SSH_KEY }}
           port: ${{ secrets.OCI_SSH_PORT || 22 }}
           script: |
-            if [ -d ~/ft_transcendence ]; then
-              cd ~/ft_transcendence
-              git fetch origin main
-              git reset --hard origin/main
-              bash deploy/deploy.sh
+            if [ -f ~/ft_transcendence/deploy/deploy.sh ]; then
+              bash ~/ft_transcendence/deploy/deploy.sh
             else
-              echo "❌ ERROR: ~/ft_transcendence directory not found on VM!"
+              echo "❌ ERROR: ~/ft_transcendence/deploy/deploy.sh not found on VM!"
               exit 1
             fi
 
