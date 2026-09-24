@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  deleteMessage,
   editMessage,
   listMessages,
   onConnectionStatus,
@@ -37,6 +38,13 @@ export function useRoomMessages(roomId) {
     );
   }, []);
 
+  /** Same idea for deletes: our own DELETE and the message.deleted frame both land here. */
+  const applyDelete = useCallback((id) => {
+    setMessages((previous) =>
+      previous.map((item) => (item.id === id ? { ...item, content: null, deleted: true } : item)),
+    );
+  }, []);
+
   const applyUpdate = useCallback(
     (update) => {
       switch (update.type) {
@@ -47,15 +55,13 @@ export function useRoomMessages(roomId) {
           applyEdit(update.id, update.content, update.edited_at);
           break;
         case "deleted":
-          setMessages((previous) =>
-            previous.map((item) => (item.id === update.id ? { ...item, content: null, deleted: true } : item)),
-          );
+          applyDelete(update.id);
           break;
         default:
           break;
       }
     },
-    [appendMessage, applyEdit],
+    [appendMessage, applyEdit, applyDelete],
   );
 
   useEffect(() => onConnectionStatus(setConnection), []);
@@ -120,11 +126,23 @@ export function useRoomMessages(roomId) {
     [applyEdit],
   );
 
+  /**
+   * Sender, or a room owner/admin. Throws on refusal (NOT_ALLOWED) so the
+   * confirm dialog can show why. Deleting twice is a 204 both times.
+   */
+  const remove = useCallback(
+    async (messageId) => {
+      await deleteMessage(messageId);
+      applyDelete(messageId);
+    },
+    [applyDelete],
+  );
+
   /** Reply targets are looked up in the loaded page; nothing is refetched. */
   const messagesById = useMemo(
     () => new Map(messages.map((message) => [message.id, message])),
     [messages],
   );
 
-  return { messages, messagesById, state, connection, sending, send, edit };
+  return { messages, messagesById, state, connection, sending, send, edit, remove };
 }

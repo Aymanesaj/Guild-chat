@@ -6,11 +6,12 @@ import {
   TbCornerDownRight,
   TbMessage2,
   TbPencil,
+  TbTrash,
 } from "react-icons/tb";
 import { ProfileName } from "../layout/Sidebar";
 import { formatTimestamp } from "../../api/rooms";
 import { useOpenUserPreview } from "../../hooks/useOpenUserPreview";
-import { Button, EmptyState, IconButton, InlineError, Input, Spinner } from "../ui";
+import { Button, ConfirmDialog, EmptyState, IconButton, InlineError, Input, Spinner } from "../ui";
 import UserAvatar from "../profile/UserAvatar";
 
 const PanelCenter = styled.div`
@@ -158,8 +159,32 @@ function RoomContent({
   currentUserId,
   onReply,
   onEdit,
+  canModerate,
+  onDelete,
 }) {
   const [editingId, setEditingId] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
+
+  const closeDelete = () => {
+    setPendingDelete(null);
+    setDeleteError(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await onDelete?.(pendingDelete.id);
+      setPendingDelete(null);
+    } catch (failure) {
+      setDeleteError(failure?.message || "Couldn't delete this message.");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <>
@@ -179,19 +204,24 @@ function RoomContent({
             />
           ) : (
             <MessageList>
-              {roomChat.map((message) => (
-                <MessageItem
-                  key={message.id}
-                  message={message}
-                  repliedTo={message.reply_to_id ? messagesById?.get(message.reply_to_id) : null}
-                  isOwn={Boolean(currentUserId) && message.sender_id === currentUserId}
-                  isEditing={editingId === message.id}
-                  onStartEdit={() => setEditingId(message.id)}
-                  onStopEdit={() => setEditingId(null)}
-                  onReply={onReply}
-                  onEdit={onEdit}
-                />
-              ))}
+              {roomChat.map((message) => {
+                const isOwn = Boolean(currentUserId) && message.sender_id === currentUserId;
+                return (
+                  <MessageItem
+                    key={message.id}
+                    message={message}
+                    repliedTo={message.reply_to_id ? messagesById?.get(message.reply_to_id) : null}
+                    isOwn={isOwn}
+                    canDelete={isOwn || Boolean(canModerate)}
+                    isEditing={editingId === message.id}
+                    onStartEdit={() => setEditingId(message.id)}
+                    onStopEdit={() => setEditingId(null)}
+                    onReply={onReply}
+                    onEdit={onEdit}
+                    onStartDelete={() => setPendingDelete(message)}
+                  />
+                );
+              })}
             </MessageList>
           )}
         </RoomContentScroll>
@@ -206,6 +236,22 @@ function RoomContent({
           />
         </PanelCenter>
       )}
+
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Delete message?"
+        text={
+          pendingDelete && pendingDelete.sender_id !== currentUserId
+            ? `Delete this message from ${pendingDelete.sender_username ?? "this user"}? Everyone in the room will see it as deleted.`
+            : "Everyone in the room will see it as deleted."
+        }
+        error={deleteError}
+        confirmLabel="Delete"
+        busyLabel="Deleting..."
+        busy={deleting}
+        onConfirm={confirmDelete}
+        onCancel={closeDelete}
+      />
     </>
   );
 }
@@ -214,11 +260,13 @@ function MessageItem({
   message,
   repliedTo,
   isOwn,
+  canDelete,
   isEditing,
   onStartEdit,
   onStopEdit,
   onReply,
   onEdit,
+  onStartDelete,
 }) {
   const openPreview = useOpenUserPreview();
   const sender = { id: message.sender_id, username: message.sender_username };
@@ -284,6 +332,18 @@ function MessageItem({
               title="Edit"
             >
               <TbPencil size={16} />
+            </IconButton>
+          )}
+
+          {canDelete && (
+            <IconButton
+              type="button"
+              $size={28}
+              onClick={onStartDelete}
+              aria-label="Delete this message"
+              title="Delete"
+            >
+              <TbTrash size={16} />
             </IconButton>
           )}
         </MessageActions>
