@@ -28,6 +28,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.http.HttpStatus;
 
 import com.fttranscendence.chatservice.exception.ApiException;
+import com.fttranscendence.chatservice.grpc.Membership;
 import com.fttranscendence.chatservice.grpc.OrgClient;
 import com.fttranscendence.chatservice.model.Message;
 import com.fttranscendence.chatservice.repository.MessageRepository;
@@ -478,7 +479,7 @@ class MessageServiceTest {
         Instant createdAt = NOW.minusSeconds(60);
         stored(sentAt(createdAt));
         isMember(true);
-        when(messageRepository.save(any(Message.class))).thenAnswer(i -> i.getArgument(0));
+        when(messageRepository.applyEditIfLive(MESSAGE_ID, "fixed typo", NOW)).thenReturn(1L);
 
         Message edited = messageService.edit(USER, MESSAGE_ID, "fixed typo");
 
@@ -490,18 +491,18 @@ class MessageServiceTest {
     }
 
     @Test
-    @DisplayName("edit: publishes MessageEditedEvent carrying exactly the saved document")
+    @DisplayName("edit: publishes MessageEditedEvent carrying the edited message")
     void editPublishesEditedEvent() {
         stored(sentAt(NOW.minusSeconds(60)));
         isMember(true);
-        Message saved = sentAt(NOW.minusSeconds(60));
-        when(messageRepository.save(any(Message.class))).thenReturn(saved);
+        when(messageRepository.applyEditIfLive(MESSAGE_ID, "fixed typo", NOW)).thenReturn(1L);
 
-        messageService.edit(USER, MESSAGE_ID, "fixed typo");
+        Message edited = messageService.edit(USER, MESSAGE_ID, "fixed typo");
 
         ArgumentCaptor<MessageEditedEvent> event = ArgumentCaptor.forClass(MessageEditedEvent.class);
         verify(events).publishEvent(event.capture());
-        assertThat(event.getValue().message()).isSameAs(saved);
+        assertThat(event.getValue().message()).isSameAs(edited);
+        assertThat(event.getValue().message().getContent()).isEqualTo("fixed typo");
     }
 
     @Test
@@ -509,7 +510,7 @@ class MessageServiceTest {
     void editAllowedJustInsideWindow() {
         stored(sentAt(NOW.minus(MessageService.EDIT_WINDOW).plusMillis(1)));
         isMember(true);
-        when(messageRepository.save(any(Message.class))).thenAnswer(i -> i.getArgument(0));
+        when(messageRepository.applyEditIfLive(MESSAGE_ID, "just in time", NOW)).thenReturn(1L);
 
         assertThat(messageService.edit(USER, MESSAGE_ID, "just in time").getContent())
                 .isEqualTo("just in time");
@@ -527,7 +528,7 @@ class MessageServiceTest {
                     assertThat(e.getCode()).isEqualTo("EDIT_WINDOW_EXPIRED");
                 });
 
-        verify(messageRepository, never()).save(any());
+        verify(messageRepository, never()).applyEditIfLive(any(), any(), any());
         verifyNoInteractions(events);
     }
 
@@ -554,7 +555,7 @@ class MessageServiceTest {
                     assertThat(e.getCode()).isEqualTo("NOT_SENDER");
                 });
 
-        verify(messageRepository, never()).save(any());
+        verify(messageRepository, never()).applyEditIfLive(any(), any(), any());
         verifyNoInteractions(events);
     }
 
@@ -570,7 +571,7 @@ class MessageServiceTest {
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getCode()).isEqualTo("MESSAGE_DELETED"));
 
-        verify(messageRepository, never()).save(any());
+        verify(messageRepository, never()).applyEditIfLive(any(), any(), any());
         verifyNoInteractions(events);
     }
 
@@ -586,7 +587,7 @@ class MessageServiceTest {
                     assertThat(e.getCode()).isEqualTo("MESSAGE_NOT_FOUND");
                 });
 
-        verify(messageRepository, never()).save(any());
+        verify(messageRepository, never()).applyEditIfLive(any(), any(), any());
     }
 
     @Test
@@ -604,11 +605,136 @@ class MessageServiceTest {
     void editFailedSavePublishesNothing() {
         stored(sentAt(NOW.minusSeconds(60)));
         isMember(true);
-        when(messageRepository.save(any(Message.class))).thenThrow(new IllegalStateException("mongo down"));
+        when(messageRepository.applyEditIfLive(MESSAGE_ID, "lost", NOW)).thenThrow(new IllegalStateException("mongo down"));
 
         assertThatThrownBy(() -> messageService.edit(USER, MESSAGE_ID, "lost"))
                 .isInstanceOf(IllegalStateException.class);
 
         verifyNoInteractions(events);
+    }
+
+    @Test
+    @DisplayName("edit: a delete that lands between load and write wins; nothing is announced")
+    void editLosesRaceAgainstDelete() {
+        stored(sentAt(NOW.minusSeconds(60)));
+        isMember(true);
+        when(messageRepository.applyEditIfLive(MESSAGE_ID, "too slow", NOW)).thenReturn(0L);
+
+        assertThatThrownBy(() -> messageService.edit(USER, MESSAGE_ID, "too slow"))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(e.getCode()).isEqualTo("MESSAGE_DELETED");
+                });
+
+        verifyNoInteractions(events);
+    }
+
+    // --------------------------------------------------- DELETE /messages/:id
+
+    private void role(String role) {
+        when(orgClient.membership(USER, ROOM)).thenReturn(new Membership(true, role));
+    }
+
+    @Test
+    @DisplayName("delete: the sender soft-deletes their own message and it is announced once")
+    void deleteOwnMessage() {
+        stored(sentAt(NOW.minusSeconds(60)));
+        role("MEMBER");
+        when(messageRepository.markDeletedIfLive(MESSAGE_ID, NOW)).thenReturn(1L);
+
+        messageService.delete(USER, MESSAGE_ID);
+
+        ArgumentCaptor<MessageDeletedEvent> event = ArgumentCaptor.forClass(MessageDeletedEvent.class);
+        verify(events).publishEvent(event.capture());
+        assertThat(event.getValue().message().isDeleted()).isTrue();
+        assertThat(event.getValue().message().getDeletedAt()).isEqualTo(NOW);
+        verify(messageRepository, never()).save(any());
+        verify(messageRepository, never()).deleteById(any());
+    }
+
+    @Test
+    @DisplayName("delete: an ADMIN or OWNER may delete someone else's message")
+    void moderatorDeletesOthersMessage() {
+        for (String moderator : List.of("ADMIN", "OWNER")) {
+            org.mockito.Mockito.reset(messageRepository, orgClient, events);
+            stored(Message.create(ROOM, "someone-else", null, "spam", "text", NOW.minusSeconds(60)));
+            role(moderator);
+            when(messageRepository.markDeletedIfLive(MESSAGE_ID, NOW)).thenReturn(1L);
+
+            messageService.delete(USER, MESSAGE_ID);
+
+            verify(events).publishEvent(any(MessageDeletedEvent.class));
+        }
+    }
+
+    @Test
+    @DisplayName("delete: a plain member cannot delete someone else's message (403)")
+    void memberCannotDeleteOthersMessage() {
+        stored(Message.create(ROOM, "someone-else", null, "theirs", "text", NOW.minusSeconds(60)));
+        role("MEMBER");
+
+        assertThatThrownBy(() -> messageService.delete(USER, MESSAGE_ID))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(e.getCode()).isEqualTo("NOT_ALLOWED");
+                });
+
+        verify(messageRepository, never()).markDeletedIfLive(any(), any());
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    @DisplayName("delete: an org-service that sends no role means no moderation rights")
+    void missingRoleCannotModerate() {
+        stored(Message.create(ROOM, "someone-else", null, "theirs", "text", NOW.minusSeconds(60)));
+        role("");
+
+        assertThatThrownBy(() -> messageService.delete(USER, MESSAGE_ID))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getCode()).isEqualTo("NOT_ALLOWED"));
+    }
+
+    @Test
+    @DisplayName("delete: a non-member gets the same 404 as an unknown id")
+    void nonMemberGets404() {
+        stored(sentAt(NOW.minusSeconds(60)));
+        when(orgClient.membership(USER, ROOM)).thenReturn(Membership.NONE);
+
+        assertThatThrownBy(() -> messageService.delete(USER, MESSAGE_ID))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                    assertThat(e.getCode()).isEqualTo("MESSAGE_NOT_FOUND");
+                });
+
+        verify(messageRepository, never()).markDeletedIfLive(any(), any());
+    }
+
+    @Test
+    @DisplayName("delete: deleting an already-deleted message is not an error, and is not announced again")
+    void deleteTwiceIsSilent() {
+        Message deleted = sentAt(NOW.minusSeconds(60));
+        deleted.markDeleted(NOW.minusSeconds(30));
+        stored(deleted);
+        role("MEMBER");
+        when(messageRepository.markDeletedIfLive(MESSAGE_ID, NOW)).thenReturn(0L);
+
+        messageService.delete(USER, MESSAGE_ID);
+
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    @DisplayName("delete: an unknown id is 404, a malformed one is 400 and touches nothing")
+    void deleteUnknownAndMalformedIds() {
+        when(messageRepository.findById(MESSAGE_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> messageService.delete(USER, MESSAGE_ID))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getCode()).isEqualTo("MESSAGE_NOT_FOUND"));
+        assertThatThrownBy(() -> messageService.delete(USER, "not-an-id"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getCode()).isEqualTo("INVALID_MESSAGE_ID"));
+
+        verifyNoInteractions(orgClient, events);
     }
 }

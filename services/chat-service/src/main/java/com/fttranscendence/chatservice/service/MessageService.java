@@ -10,6 +10,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 
+import com.fttranscendence.chatservice.grpc.Membership;
 import com.fttranscendence.chatservice.exception.ApiException;
 import com.fttranscendence.chatservice.grpc.OrgClient;
 import com.fttranscendence.chatservice.model.Message;
@@ -140,15 +141,21 @@ public class MessageService {
     /* in the URL here, so unlike history there is nothing public to protect.
     /*/
 
-    private Message loadVisible(String userId,  String messageId) {
-
-        if(!ObjectId.isValid(messageId)) {
+    /** 400 for a malformed id, 404 for an unknown one. No membership check. */
+    private Message findMessage(String messageId){
+        if (!ObjectId.isValid(messageId)){
             throw ApiException.badRequest("INVALID_MESSAGE_ID", "'id' is not a valid message id");
         }
+        return messageRepository.findById(messageId)
+        .orElseThrow(() -> ApiException.notFound("MESSAGE_NOT_FOUND" , "Message does not exist"));
+    }
 
-        Message message = messageRepository.findById(messageId)
-                .orElseThrow(() -> ApiException.notFound("MESSAGE_NOT_FOUND", "Message does not exist"));
-
+    /**
+     * A non-member gets the SAME 404 as an unknown id: a 403 would confirm
+     * that the message exists in a room they cannot read.
+     */
+    private Message loadVisible(String userId,  String messageId) {
+        Message message = findMessage(messageId); 
         if(!orgClient.isMember(userId, message.getRoomId())) {
             throw ApiException.notFound("MESSAGE_NOT_FOUND", "Message does not exist");
         }
@@ -175,11 +182,41 @@ public class MessageService {
             throw ApiException.forbidden("EDIT_WINDOW_EXPIRED", "Edit window has expired");
         }
 
-        message.applyEdit(content, now );
-        Message saved = messageRepository.save(message);
-        events.publishEvent(new MessageEditedEvent(saved));
-        return saved;
+        // Atomic: if a delete landed after we loaded the message, nothing is
+        // written. A whole-document save() here would put deleted_at back to null.
+        if (messageRepository.applyEditIfLive(messageId, content, now) == 0) {
+            throw ApiException.forbidden("MESSAGE_DELETED", "Cannot edit a deleted message");
+        }
+
+        message.applyEdit(content , now );
+        events.publishEvent(new MessageEditedEvent(message));
+        return message;
 
     }
 
+    /**
+     * Soft delete: the sender, or a room OWNER/ADMIN. Deleting twice is not an
+     * error (204 both times), but only the first delete is broadcast.
+     * Permission is checked BEFORE "already deleted", so a plain member gets
+     * 403 on someone else's message whether or not it is deleted.
+     */
+    public  void delete(String userId , String messageId){
+        Message message = findMessage(messageId);
+        Membership membership = orgClient.membership(userId, message.getRoomId());
+
+        if(!membership.member()) {
+            throw ApiException.notFound("MESSAGE_NOT_FOUND" ,"message does not exist");
+        }
+
+        boolean own = message.getSenderId().equals(userId);
+        if (!own &&  !membership.canModerate()){
+            throw ApiException.forbidden("NOT_ALLOWED", "Only the sender or a room admin can delete this message");
+        }
+        Instant now = clock.instant();
+              if (messageRepository.markDeletedIfLive(messageId, now) == 0) {
+            return; // already deleted (maybe a moment ago by someone else): nothing new to announce
+        }
+        message.markDeleted(now);
+        events.publishEvent(new MessageDeletedEvent(message));
+    }
 }

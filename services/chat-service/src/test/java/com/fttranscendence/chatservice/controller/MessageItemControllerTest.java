@@ -1,13 +1,16 @@
 package com.fttranscendence.chatservice.controller;
 
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -262,5 +265,37 @@ class MessageItemControllerTest {
                 .andExpect(status().isMethodNotAllowed());
 
         verifyNoInteractions(messageService);
+    }
+
+    // --------------------------------------------------------------- DELETE
+
+    private static MockHttpServletRequestBuilder authenticatedDelete(String path) {
+        return delete(path).requestAttr(AuthenticationFilter.USER_ID_ATTRIBUTE, USER);
+    }
+
+    @Test
+    @DisplayName("DELETE is a 204 with no body, and the caller comes from the request attribute")
+    void deleteReturnsNoContent() throws Exception {
+        mockMvc.perform(authenticatedDelete("/messages/" + MESSAGE_ID))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+
+        verify(messageService).delete(USER, MESSAGE_ID);
+    }
+
+    @Test
+    @DisplayName("DELETE rejections keep the envelope: 403 NOT_ALLOWED, 404 MESSAGE_NOT_FOUND")
+    void deleteRejectionsUseEnvelope() throws Exception {
+        doThrow(ApiException.forbidden("NOT_ALLOWED", "no"))
+                .when(messageService).delete(USER, MESSAGE_ID);
+        mockMvc.perform(authenticatedDelete("/messages/" + MESSAGE_ID))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("NOT_ALLOWED"));
+
+        doThrow(ApiException.notFound("MESSAGE_NOT_FOUND", "no"))
+                .when(messageService).delete(USER, MESSAGE_ID);
+        mockMvc.perform(authenticatedDelete("/messages/" + MESSAGE_ID))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("MESSAGE_NOT_FOUND"));
     }
 }
