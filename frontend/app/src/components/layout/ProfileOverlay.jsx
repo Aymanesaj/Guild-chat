@@ -12,9 +12,11 @@ import {
 
 import { useProfileOverlay } from "./ProfileOverlayContext";
 import { useAvatarUrl } from "../../hooks/useAvatarUrl";
+import UserAvatar from "../profile/UserAvatar";
 
 import {
   checkUsernameAvailability,
+  forgetAvatar,
   getUserByUsername,
   updateProfile,
   uploadAvatar,
@@ -36,7 +38,6 @@ import { getRooms, leaveRoom } from "../../api/rooms";
 import { isAvailable } from "../../api/features";
 
 import {
-  AvatarRoot,
   Button as KitButton,
   ConfirmDialog,
   IconButton as KitIconButton,
@@ -168,6 +169,9 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
     setAvatarError("");
 
     try {
+      // Drop the cached object URL first: identity can hand back the same
+      // path with new bytes, and the cache would otherwise serve the old one.
+      forgetAvatar(user.avatar_file);
       await uploadAvatar(file);
       await refreshProfile();
     } catch (error) {
@@ -680,11 +684,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
         {items.length > 0 ? (
           items.map((friend) => (
             <ListRow key={friend.id}>
-              <RowAvatar>
-                {friend.username
-                  ?.charAt(0)
-                  ?.toUpperCase() || "?"}
-              </RowAvatar>
+              <RowAvatar avatar={friend.avatar} name={friend.username} />
 
               <RowName>
                 {friend.username}
@@ -732,11 +732,11 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
         {items.length > 0 ? (
           items.map((room) => (
             <ListRow key={room.id}>
-              <RowAvatar>
-                {(room.name || room.peer?.username || "DM")
-                  .charAt(0)
-                  .toUpperCase()}
-              </RowAvatar>
+              {/* A DM shows the peer; a group room has no image, so the initial stands. */}
+              <RowAvatar
+                avatar={room.peer?.avatar}
+                name={room.name || room.peer?.username || "DM"}
+              />
 
               <RowName>
                 {room.name || room.peer?.username || "Direct message"}
@@ -811,11 +811,10 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
           {friendRequests.length > 0 ? (
             friendRequests.map((request) => (
               <RequestRow key={request.friendship_id}>
-                <RowAvatar>
-                  {request.sender?.username
-                    ?.charAt(0)
-                    ?.toUpperCase() || "?"}
-                </RowAvatar>
+                <RowAvatar
+                  avatar={request.sender?.avatar}
+                  name={request.sender?.username}
+                />
 
                 <RowName>
                   {request.sender?.username}
@@ -891,11 +890,10 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
           {sentRequests.length > 0 ? (
             sentRequests.map((request) => (
               <RequestRow key={request.friendship_id}>
-                <RowAvatar>
-                  {request.receiver?.username
-                    ?.charAt(0)
-                    ?.toUpperCase() || "?"}
-                </RowAvatar>
+                <RowAvatar
+                  avatar={request.receiver?.avatar}
+                  name={request.receiver?.username}
+                />
 
                 <RowName>
                   {request.receiver?.username}
@@ -1734,7 +1732,8 @@ const ListRow = styled.div`
   }
 `;
 
-const RowAvatar = styled(AvatarRoot)`
+/* Resolves its own image; falls back to the initial when there is no avatar. */
+const RowAvatar = styled(UserAvatar)`
   background: var(--accent-600);
 `;
 

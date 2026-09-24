@@ -21,6 +21,7 @@ Browser ──► nginx :8000
 - [x] Rooms (org-service): create, list, leave, view members with roles
 - [x] Room members: owners and admins add friends directly (no invites) and kick members
 - [x] DMs (org-service): open or create one, list them with the other person's name
+- [x] Messages: reply to one (banner in the composer, quoted line on the reply, click to jump to the original) and edit your own inline, within chat-service's 15-minute window
 - [x] Shared UI layer: design tokens in [`src/index.css`](../frontend/app/src/index.css) and reusable components in [`src/components/ui/`](../frontend/app/src/components/ui/) (Button, IconButton, Avatar, StatusDot, Card, Input, Tabs, Feedback, ConfirmDialog, Skeleton). New UI should compose these rather than redefine buttons/avatars per file. `ConfirmDialog` also replaced the last `window.confirm`/`window.alert` calls.
 
 ---
@@ -61,6 +62,22 @@ Spring's default entry point returns 403. The frontend works around it, but 401 
 
 ---
 
+## chat-service TODO
+
+**Delete a message.** This is the one message-level feature the frontend cannot ship: there is no endpoint.
+
+```
+DELETE /messages/{id}   →  200 MessageResponse (deleted: true)
+```
+
+`MessageItemController` maps only `@GetMapping` and `@PatchMapping`. `Message.markDeleted()` exists but nothing calls it, and `WsEvents.MESSAGE_DELETED` is declared but never published, so no `message.deleted` frame is ever broadcast.
+
+Everything on the frontend is already in place and waiting: `deleteMessage()` in [`src/api/messages.js`](../frontend/app/src/api/messages.js), the `message.deleted` branch of `handleFrame`, the `{ type: "deleted" }` case in `useRoomMessages`, and the *Message deleted* render in `RoomContent`. When the endpoint lands, the UI work is one `TbTrash` button in the existing `MessageActions` bar plus a `ConfirmDialog`.
+
+Note that `services/chat-service/API_CONTRACT.md` still lists DELETE as planned and claims there are no public endpoints yet — it is stale for GET/POST/PATCH too.
+
+---
+
 ## My TODOs (frontend)
 
 Nothing here is blocked — the backend is ready for all of it.
@@ -79,7 +96,7 @@ Put the action on the member row in [`src/components/rooms/MemberItem.jsx`](../f
 
 **3. Surface the socket connection status.**
 
-`useRoomMessages` tracks `connection` and returns it, but [`RoomView.jsx`](../frontend/app/src/components/rooms/RoomView.jsx) destructures only `{ messages, state, sending, send }`, so a dropped socket is invisible. Show a reconnecting banner in the room header.
+`useRoomMessages` tracks `connection` and returns it, but [`RoomView.jsx`](../frontend/app/src/components/rooms/RoomView.jsx) still doesn't destructure it, so a dropped socket is invisible. Show a reconnecting banner in the room header.
 
 **4. Room settings: rename and delete.**
 

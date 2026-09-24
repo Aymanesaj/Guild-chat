@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
-import { listMessages, onConnectionStatus, sendMessage, subscribeToRoom } from "../api/messages";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  editMessage,
+  listMessages,
+  onConnectionStatus,
+  sendMessage,
+  subscribeToRoom,
+} from "../api/messages";
 
 /**
  * One room's messages: REST history on mount, the shared chat socket for
@@ -21,6 +27,16 @@ export function useRoomMessages(roomId) {
     );
   }, []);
 
+  /**
+   * Shared by the socket's message.edited frame and by our own PATCH response:
+   * whichever lands first wins, and the other is a no-op (same id, same text).
+   */
+  const applyEdit = useCallback((id, content, editedAt) => {
+    setMessages((previous) =>
+      previous.map((item) => (item.id === id ? { ...item, content, edited_at: editedAt } : item)),
+    );
+  }, []);
+
   const applyUpdate = useCallback(
     (update) => {
       switch (update.type) {
@@ -28,11 +44,7 @@ export function useRoomMessages(roomId) {
           appendMessage(update.message);
           break;
         case "edited":
-          setMessages((previous) =>
-            previous.map((item) =>
-              item.id === update.id ? { ...item, content: update.content, edited_at: update.edited_at } : item,
-            ),
-          );
+          applyEdit(update.id, update.content, update.edited_at);
           break;
         case "deleted":
           setMessages((previous) =>
@@ -43,7 +55,7 @@ export function useRoomMessages(roomId) {
           break;
       }
     },
-    [appendMessage],
+    [appendMessage, applyEdit],
   );
 
   useEffect(() => onConnectionStatus(setConnection), []);
@@ -79,13 +91,13 @@ export function useRoomMessages(roomId) {
   }, [roomId, applyUpdate]);
 
   const send = useCallback(
-    async (content) => {
+    async (content, replyToId) => {
       const text = (content || "").trim();
       if (!text) return;
 
       setSending(true);
       try {
-        appendMessage(await sendMessage(roomId, text));
+        appendMessage(await sendMessage(roomId, text, replyToId));
       } finally {
         setSending(false);
       }
@@ -93,5 +105,26 @@ export function useRoomMessages(roomId) {
     [roomId, appendMessage],
   );
 
-  return { messages, state, connection, sending, send };
+  /**
+   * Throws on refusal (EDIT_WINDOW_EXPIRED, NOT_SENDER) so the row can show
+   * why: swallowing it here would leave the old text on screen with no reason.
+   */
+  const edit = useCallback(
+    async (messageId, content) => {
+      const text = (content || "").trim();
+      if (!text) return;
+
+      const saved = await editMessage(messageId, text);
+      applyEdit(saved.id, saved.content, saved.edited_at);
+    },
+    [applyEdit],
+  );
+
+  /** Reply targets are looked up in the loaded page; nothing is refetched. */
+  const messagesById = useMemo(
+    () => new Map(messages.map((message) => [message.id, message])),
+    [messages],
+  );
+
+  return { messages, messagesById, state, connection, sending, send, edit };
 }
