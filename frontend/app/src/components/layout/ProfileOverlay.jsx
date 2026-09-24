@@ -252,7 +252,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [sectionError, setSectionError] = useState("");
 
-  // Add friend
+  // Add friend — the search box sits at the right of the friends tabs row.
   const [friendUsername, setFriendUsername] = useState("");
   const [addingFriend, setAddingFriend] = useState(false);
 
@@ -268,6 +268,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
   const openManagement = (section = "friends") => {
     setSectionError("");
+    setFriendUsername("");
     setManagementSection(section);
     setManagementTab(section);
     setView("management");
@@ -275,6 +276,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
   const goBackToProfile = () => {
     setSectionError("");
+    setFriendUsername("");
     setView("profile");
   };
 
@@ -884,81 +886,53 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       );
     }
 
-    if (managementTab === "sent") {
-      return (
-        <ExpandedListPanel>
-          {sentRequests.length > 0 ? (
-            sentRequests.map((request) => (
-              <RequestRow key={request.friendship_id}>
-                <RowAvatar
-                  avatar={request.receiver?.avatar}
-                  name={request.receiver?.username}
-                />
-
-                <RowName>
-                  {request.receiver?.username}
-                </RowName>
-
-                <RequestActions>
-                  <ActionButton
-                    type="button"
-                    onClick={() =>
-                      requestCancelSentRequest(request)
-                    }
-                    aria-label={`Cancel request to ${
-                      request.receiver?.username
-                    }`}
-                  >
-                    <TbX size={16} />
-                  </ActionButton>
-                </RequestActions>
-              </RequestRow>
-            ))
-          ) : (
-            <EmptyState>
-              No sent requests
-            </EmptyState>
-          )}
-
-          {sentHasMore && (
-            <CenteredButtonWrap>
-              <PillButton
-                type="button"
-                onClick={() => loadSentPage(false)}
-                disabled={loadingMore}
-              >
-                {loadingMore ? "Loading..." : "Load more"}
-              </PillButton>
-            </CenteredButtonWrap>
-          )}
-        </ExpandedListPanel>
-      );
-    }
-
     return (
-      <AddPanel onSubmit={handleFriendSearchAdd}>
-        <AddRow>
-          <AddInput
-            value={friendUsername}
-            onChange={(e) =>
-              setFriendUsername(e.target.value)
-            }
-            placeholder="Exact username"
-          />
+      <ExpandedListPanel>
+        {sentRequests.length > 0 ? (
+          sentRequests.map((request) => (
+            <RequestRow key={request.friendship_id}>
+              <RowAvatar
+                avatar={request.receiver?.avatar}
+                name={request.receiver?.username}
+              />
 
-          <AddButton
-            type="submit"
-            disabled={addingFriend}
-          >
-            {addingFriend ? "Adding..." : "Add"}
-          </AddButton>
-        </AddRow>
+              <RowName>
+                {request.receiver?.username}
+              </RowName>
 
-        <HelperRow>
-          <TbSearch size={14} />
-          Exact match only.
-        </HelperRow>
-      </AddPanel>
+              <RequestActions>
+                <ActionButton
+                  type="button"
+                  onClick={() =>
+                    requestCancelSentRequest(request)
+                  }
+                  aria-label={`Cancel request to ${
+                    request.receiver?.username
+                  }`}
+                >
+                  <TbX size={16} />
+                </ActionButton>
+              </RequestActions>
+            </RequestRow>
+          ))
+        ) : (
+          <EmptyState>
+            No sent requests
+          </EmptyState>
+        )}
+
+        {sentHasMore && (
+          <CenteredButtonWrap>
+            <PillButton
+              type="button"
+              onClick={() => loadSentPage(false)}
+              disabled={loadingMore}
+            >
+              {loadingMore ? "Loading..." : "Load more"}
+            </PillButton>
+          </CenteredButtonWrap>
+        )}
+      </ExpandedListPanel>
     );
   };
 
@@ -1300,19 +1274,28 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                       Sent
                     </ManagementTab>
 
-                    <ManagementTab
-                      type="button"
-                      $active={
-                        managementTab === "add"
-                      }
-                      onClick={() =>
-                        setManagementTab(
-                          "add"
-                        )
-                      }
+                    <FriendSearch
+                      onSubmit={handleFriendSearchAdd}
                     >
-                      Add
-                    </ManagementTab>
+                      <FriendSearchInput
+                        value={friendUsername}
+                        onChange={(e) =>
+                          setFriendUsername(
+                            e.target.value
+                          )
+                        }
+                        placeholder="Exact username"
+                        aria-label="Add a friend by username"
+                      />
+
+                      <FriendSearchButton
+                        type="submit"
+                        disabled={addingFriend}
+                        aria-label="Add a friend"
+                      >
+                        <TbSearch size={16} />
+                      </FriendSearchButton>
+                    </FriendSearch>
                   </>
                 ) : (
                   <>
@@ -1773,34 +1756,23 @@ const EmptyState = styled.div`
 // Add friend
 // =============================================================================
 
-const AddPanel = styled.form`
+/* Add-a-friend box, at the far right of the friends tabs row. */
+const FriendSearch = styled.form`
   display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding-top: var(--space-1);
-`;
-
-const AddRow = styled.div`
-  display: flex;
-  gap: 10px;
-  align-items: center;
-`;
-
-const AddInput = styled(KitInput)`
-  flex: 1;
-  min-width: 0;
-`;
-
-const AddButton = styled(KitButton).attrs({ $pill: true, $size: "sm" })`
-  flex-shrink: 0;
-`;
-
-const HelperRow = styled.div`
-  display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--text-tertiary);
+  margin-left: auto;
+  padding-bottom: var(--space-2);
+`;
+
+const FriendSearchInput = styled(KitInput)`
+  width: 170px;
+  padding: 6px 10px;
   font-size: var(--text-sm);
+`;
+
+const FriendSearchButton = styled(KitIconButton).attrs({ $size: 28 })`
+  border-color: var(--border-strong);
 `;
 
 // =============================================================================
