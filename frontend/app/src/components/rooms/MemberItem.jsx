@@ -1,7 +1,8 @@
 import styled from "styled-components";
 import { TbUserX } from "react-icons/tb";
 import { useOpenUserPreview } from "../../hooks/useOpenUserPreview";
-import { Avatar, IconButton, StatusDot } from "../ui";
+import { IconButton, StatusDot } from "../ui";
+import UserAvatar from "../profile/UserAvatar";
 
 const MemberItemRoot = styled.li`
   display: flex;
@@ -60,7 +61,7 @@ function MemberItem({ member, canKick, onKick }) {
       <StatusDot $online={member.status === "online"} aria-label={member.status} />
 
       <MemberIdentity type="button" onClick={openPreview(member)}>
-        <Avatar name={member.username} $size={22} />
+        <UserAvatar avatar={member.avatar} name={member.username} $size={22} />
         <MemberName>{member.username}</MemberName>
       </MemberIdentity>
 

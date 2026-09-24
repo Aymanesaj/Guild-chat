@@ -6,9 +6,8 @@ import { ApiError } from "./http";
  * set its entry to null. See docs/frontend-backend-gaps.md.
  */
 export const missingEndpoints = {
-  usernameLookup: "identity-service: GET /by-username?username=",
-  usernameCheck: "identity-service: GET /check-username?username=",
-  avatarDelete: "identity-service: DELETE /me/avatar",
+  // All three shipped in identity: GET /username/get, GET /username/available,
+  // DELETE /me/avatar. Add an entry here when the UI needs an endpoint that doesn't exist yet.
 };
 
 export function isAvailable(feature) {

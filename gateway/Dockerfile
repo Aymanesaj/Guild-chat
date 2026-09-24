@@ -1,10 +1,3 @@
-FROM node:24-alpine AS frontend-builder
-WORKDIR /app
-COPY frontend/app/package*.json ./
-RUN npm ci
-COPY frontend/app/ ./
-RUN npm run build
-
 FROM owasp/modsecurity-crs:nginx
 
 USER root
@@ -23,11 +16,16 @@ RUN rm -rf /etc/nginx/templates/nginx.conf.template \
              /docker-entrypoint.d/96-update-http3-config.sh
 
 COPY ./gateway/modsec/modsecurity-override.conf /etc/nginx/templates/modsecurity.d/modsecurity-override.conf.template
+
 COPY ./gateway/nginx.conf /etc/nginx/nginx.conf
-COPY --from=frontend-builder /app/dist /usr/share/nginx/html
 COPY ./gateway/script.sh .
 
-RUN chmod +x ./script.sh
+RUN chmod +x ./script.sh \
+    && mkdir -p /etc/nginx/conf /var/cache/nginx /var/log/nginx /var/run /tmp \
+    && chown -R nginx:nginx /etc/nginx /etc/modsecurity.d /opt/owasp-crs /var/cache/nginx /var/log/nginx /var/run /tmp ./script.sh
+
+USER nginx
+
 ENTRYPOINT [ "./script.sh" ]
 
 CMD [ "nginx", "-g", "daemon off;" ]

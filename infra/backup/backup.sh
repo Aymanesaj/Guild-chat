@@ -47,7 +47,14 @@ perform_backup() {
     MONGO_FILE="${BACKUP_DIR}/mongo_${TIMESTAMP}.archive.gz"
     MONGO_LATEST="${BACKUP_DIR}/mongo_latest.archive.gz"
     echo "Dumping MongoDB from ${MONGO_HOST}:${MONGO_PORT}..."
-    mongodump --host="${MONGO_HOST}:${MONGO_PORT}" --archive="$MONGO_FILE" --gzip
+    MONGO_AUTH=""
+    MONGO_AUTH_USER="${CHAT_MONGO_USER:-${MONGO_INITDB_ROOT_USERNAME}}"
+    MONGO_AUTH_PASS="${CHAT_MONGO_PASSWORD:-${MONGO_INITDB_ROOT_PASSWORD}}"
+    MONGO_AUTH_DB="${CHAT_MONGO_AUTH_DB:-admin}"
+    if [ -n "$MONGO_AUTH_USER" ] && [ -n "$MONGO_AUTH_PASS" ]; then
+        MONGO_AUTH="--username=${MONGO_AUTH_USER} --password=${MONGO_AUTH_PASS} --authenticationDatabase=${MONGO_AUTH_DB}"
+    fi
+    mongodump --host="${MONGO_HOST}:${MONGO_PORT}" $MONGO_AUTH --archive="$MONGO_FILE" --gzip
     cp -f "$MONGO_FILE" "$MONGO_LATEST"
     chmod 666 "$PG_FILE" "$PG_LATEST" "$MONGO_FILE" "$MONGO_LATEST" 2>/dev/null || true
     echo "MongoDB backup completed: ${MONGO_FILE} ($(du -h "$MONGO_FILE" | cut -f1))"

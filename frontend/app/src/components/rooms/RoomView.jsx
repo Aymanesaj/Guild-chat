@@ -1,10 +1,15 @@
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import styled from "styled-components";
 import RoomHeader from "./RoomHeader";
 import RoomContent from "./RoomContent";
 import MessageComposer from "./MessageComposer";
 import MembersSidebar from "./MembersSidebar";
+import { useNavDrawer } from "../layout/NavDrawerContext";
+import { useProfileOverlay } from "../layout/ProfileOverlayContext";
 import { useRoomMessages } from "../../hooks/useRoomMessages";
+import { useEscapeKey } from "../../hooks/useEscapeKey";
+import { getCurrentUserId } from "../../api/tokens";
+import { SlidePanel } from "../ui";
 
 const RoomViewShell = styled.section`
   display: flex;
@@ -21,8 +26,45 @@ const RoomMain = styled.div`
 `;
 
 function RoomView({ roomId, roomName, isDm }) {
-  const [isMembersOpen, setIsMembersOpen] = useState(false);
-  const { messages, state, sending, send } = useRoomMessages(roomId);
+  const { isPhone, closeNav } = useNavDrawer();
+  const { profile, previewUser } = useProfileOverlay();
+
+  // Tagged with its room for the same reason as the reply draft below: this
+  // component is reused across room switches, so an untagged flag would leave
+  // the panel open over the room you just opened — and keep MembersSidebar
+  // mounted with a pending kick belonging to the room you just left.
+  const [membersPanel, setMembersPanel] = useState({ roomId, open: false });
+  const isMembersOpen = membersPanel.roomId === roomId && membersPanel.open;
+
+  const closeMembers = useCallback(
+    () => setMembersPanel({ roomId, open: false }),
+    [roomId],
+  );
+
+  // Yields Escape to anything stacked above the drawer — see AppShell.
+  useEscapeKey(
+    closeMembers,
+    isPhone && isMembersOpen && !profile && !previewUser,
+  );
+
+  function toggleMembers() {
+    const open = !isMembersOpen;
+    setMembersPanel({ roomId, open });
+    // Only one drawer at a time on a phone.
+    if (open) closeNav();
+  }
+
+  // Tagged with the room it belongs to and read back through that tag, so a
+  // half-written reply cannot follow the user into another room. Derived
+  // rather than reset in an effect, which would render the stale one once.
+  const [reply, setReply] = useState({ roomId, message: null });
+  const replyingTo = reply.roomId === roomId ? reply.message : null;
+  const setReplyingTo = (message) => setReply({ roomId, message });
+
+  const { messages, messagesById, state, sending, send, edit } = useRoomMessages(roomId);
+
+  // Read once per view, not once per message row.
+  const currentUserId = useMemo(() => getCurrentUserId(), []);
 
   return (
     <RoomViewShell>
@@ -30,14 +72,41 @@ function RoomView({ roomId, roomName, isDm }) {
         <RoomHeader
           roomName={roomName}
           isDm={isDm}
-          onToggleMembers={() => setIsMembersOpen((open) => !open)}
+          onToggleMembers={toggleMembers}
         />
 
-        <RoomContent roomChat={messages} state={state} roomName={roomName} isDm={isDm} />
-        <MessageComposer roomName={roomName} isDm={isDm} onSend={send} disabled={sending} />
+        <RoomContent
+          roomChat={messages}
+          state={state}
+          roomName={roomName}
+          isDm={isDm}
+          messagesById={messagesById}
+          currentUserId={currentUserId}
+          onReply={setReplyingTo}
+          onEdit={edit}
+        />
+        <MessageComposer
+          roomName={roomName}
+          isDm={isDm}
+          onSend={send}
+          disabled={sending}
+          replyingTo={replyingTo}
+          onCancelReply={() => setReplyingTo(null)}
+        />
       </RoomMain>
 
-      {isMembersOpen && <MembersSidebar roomId={roomId} />}
+      {/* Still mounted only while open, so members are fetched lazily and a
+          stale roster never outlives the room it came from. */}
+      {!isDm && isMembersOpen && (
+        <SlidePanel
+          $asOverlay={isPhone}
+          $open={isMembersOpen}
+          $side="right"
+          onClose={closeMembers}
+        >
+          <MembersSidebar roomId={roomId} onClose={closeMembers} />
+        </SlidePanel>
+      )}
     </RoomViewShell>
   );
 }

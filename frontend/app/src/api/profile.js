@@ -1,5 +1,4 @@
-import { requireEndpoint } from "./features";
-import { ApiError, authedFetch, jsonBody, request } from "./http";
+import { ApiError, authedFetch, jsonBody, LOGOUT_EVENT, request } from "./http";
 import { normalizeUser } from "./users";
 
 export { checkUsernameAvailability, getUserById, getUserByUsername } from "./users";
@@ -36,6 +35,67 @@ export async function getAvatarBlob(avatar) {
   return response.blob();
 }
 
+/**
+ * Avatar images need an Authorization header, so they can't go straight into
+ * an <img src>: each one is fetched as a blob and wrapped in an object URL.
+ *
+ * That makes them expensive enough to share. A message list can show the same
+ * sender fifty times, so the object URL is cached by path and every view gets
+ * the same one — one fetch per distinct avatar per session, like `userCache`.
+ * Nothing revokes on unmount: the cache owns the URL until logout.
+ */
+const settledAvatars = new Map(); // avatar path -> object URL, or null when it failed
+const pendingAvatars = new Map(); // avatar path -> in-flight promise
+
+/** The object URL if it's already resolved, `null` if it failed, `undefined` if unknown. */
+export function peekAvatarObjectUrl(avatar) {
+  if (!avatar) return null;
+  return settledAvatars.has(avatar) ? settledAvatars.get(avatar) : undefined;
+}
+
+/** Fetches once per path; concurrent callers share the same request. */
+export function getAvatarObjectUrl(avatar) {
+  if (!avatar) return Promise.resolve(null);
+  if (settledAvatars.has(avatar)) return Promise.resolve(settledAvatars.get(avatar));
+  if (pendingAvatars.has(avatar)) return pendingAvatars.get(avatar);
+
+  const pending = getAvatarBlob(avatar)
+    .then((blob) => {
+      const objectUrl = URL.createObjectURL(blob);
+      settledAvatars.set(avatar, objectUrl);
+      return objectUrl;
+    })
+    // A missing or forbidden avatar is cached as a miss so the initial is
+    // rendered instead of the same request firing again on every re-render.
+    .catch(() => {
+      settledAvatars.set(avatar, null);
+      return null;
+    })
+    .finally(() => pendingAvatars.delete(avatar));
+
+  pendingAvatars.set(avatar, pending);
+  return pending;
+}
+
+/** After an upload or removal: identity may hand back the same path with new bytes. */
+export function forgetAvatar(avatar) {
+  if (!avatar) return;
+
+  const objectUrl = settledAvatars.get(avatar);
+  if (objectUrl) URL.revokeObjectURL(objectUrl);
+
+  settledAvatars.delete(avatar);
+  pendingAvatars.delete(avatar);
+}
+
+export function clearAvatarCache() {
+  settledAvatars.forEach((objectUrl) => objectUrl && URL.revokeObjectURL(objectUrl));
+  settledAvatars.clear();
+  pendingAvatars.clear();
+}
+
+window.addEventListener(LOGOUT_EVENT, clearAvatarCache);
+
 export async function uploadAvatar(file) {
   const formData = new FormData();
   formData.append("file", file);
@@ -48,8 +108,7 @@ export async function uploadAvatar(file) {
   ).then(normalizeUser);
 }
 
-/** identity `DELETE /me/avatar` — not implemented yet (see features.js). */
+/** identity `DELETE /me/avatar` -> the updated user. */
 export async function deleteAvatar() {
-  requireEndpoint("avatarDelete");
-  return request(`${API_BASE}/me/avatar`, { method: "DELETE" }, "Failed to remove avatar");
+  return request(`${API_BASE}/me/avatar`, { method: "DELETE" }, "Failed to remove avatar").then(normalizeUser);
 }

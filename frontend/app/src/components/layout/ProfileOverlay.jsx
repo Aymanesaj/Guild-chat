@@ -12,9 +12,11 @@ import {
 
 import { useProfileOverlay } from "./ProfileOverlayContext";
 import { useAvatarUrl } from "../../hooks/useAvatarUrl";
+import UserAvatar from "../profile/UserAvatar";
 
 import {
   checkUsernameAvailability,
+  forgetAvatar,
   getUserByUsername,
   updateProfile,
   uploadAvatar,
@@ -36,7 +38,6 @@ import { getRooms, leaveRoom } from "../../api/rooms";
 import { isAvailable } from "../../api/features";
 
 import {
-  AvatarRoot,
   Button as KitButton,
   ConfirmDialog,
   IconButton as KitIconButton,
@@ -168,6 +169,9 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
     setAvatarError("");
 
     try {
+      // Drop the cached object URL first: identity can hand back the same
+      // path with new bytes, and the cache would otherwise serve the old one.
+      forgetAvatar(user.avatar_file);
       await uploadAvatar(file);
       await refreshProfile();
     } catch (error) {
@@ -248,7 +252,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [sectionError, setSectionError] = useState("");
 
-  // Add friend
+  // Add friend — the search box sits at the right of the friends tabs row.
   const [friendUsername, setFriendUsername] = useState("");
   const [addingFriend, setAddingFriend] = useState(false);
 
@@ -264,6 +268,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
   const openManagement = (section = "friends") => {
     setSectionError("");
+    setFriendUsername("");
     setManagementSection(section);
     setManagementTab(section);
     setView("management");
@@ -271,6 +276,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
   const goBackToProfile = () => {
     setSectionError("");
+    setFriendUsername("");
     setView("profile");
   };
 
@@ -656,6 +662,8 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       await sendFriendRequest(match.id);
 
       setFriendUsername("");
+      // Show the new pending request (the tab change reloads the list).
+      setManagementTab("sent");
     } catch (error) {
       console.error("Failed to add friend:", error);
 
@@ -678,11 +686,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
         {items.length > 0 ? (
           items.map((friend) => (
             <ListRow key={friend.id}>
-              <RowAvatar>
-                {friend.username
-                  ?.charAt(0)
-                  ?.toUpperCase() || "?"}
-              </RowAvatar>
+              <RowAvatar avatar={friend.avatar} name={friend.username} />
 
               <RowName>
                 {friend.username}
@@ -730,11 +734,11 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
         {items.length > 0 ? (
           items.map((room) => (
             <ListRow key={room.id}>
-              <RowAvatar>
-                {(room.name || room.peer?.username || "DM")
-                  .charAt(0)
-                  .toUpperCase()}
-              </RowAvatar>
+              {/* A DM shows the peer; a group room has no image, so the initial stands. */}
+              <RowAvatar
+                avatar={room.peer?.avatar}
+                name={room.name || room.peer?.username || "DM"}
+              />
 
               <RowName>
                 {room.name || room.peer?.username || "Direct message"}
@@ -809,11 +813,10 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
           {friendRequests.length > 0 ? (
             friendRequests.map((request) => (
               <RequestRow key={request.friendship_id}>
-                <RowAvatar>
-                  {request.sender?.username
-                    ?.charAt(0)
-                    ?.toUpperCase() || "?"}
-                </RowAvatar>
+                <RowAvatar
+                  avatar={request.sender?.avatar}
+                  name={request.sender?.username}
+                />
 
                 <RowName>
                   {request.sender?.username}
@@ -883,82 +886,53 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       );
     }
 
-    if (managementTab === "sent") {
-      return (
-        <ExpandedListPanel>
-          {sentRequests.length > 0 ? (
-            sentRequests.map((request) => (
-              <RequestRow key={request.friendship_id}>
-                <RowAvatar>
-                  {request.receiver?.username
-                    ?.charAt(0)
-                    ?.toUpperCase() || "?"}
-                </RowAvatar>
-
-                <RowName>
-                  {request.receiver?.username}
-                </RowName>
-
-                <RequestActions>
-                  <ActionButton
-                    type="button"
-                    onClick={() =>
-                      requestCancelSentRequest(request)
-                    }
-                    aria-label={`Cancel request to ${
-                      request.receiver?.username
-                    }`}
-                  >
-                    <TbX size={16} />
-                  </ActionButton>
-                </RequestActions>
-              </RequestRow>
-            ))
-          ) : (
-            <EmptyState>
-              No sent requests
-            </EmptyState>
-          )}
-
-          {sentHasMore && (
-            <CenteredButtonWrap>
-              <PillButton
-                type="button"
-                onClick={() => loadSentPage(false)}
-                disabled={loadingMore}
-              >
-                {loadingMore ? "Loading..." : "Load more"}
-              </PillButton>
-            </CenteredButtonWrap>
-          )}
-        </ExpandedListPanel>
-      );
-    }
-
     return (
-      <AddPanel onSubmit={handleFriendSearchAdd}>
-        <AddRow>
-          <AddInput
-            value={friendUsername}
-            onChange={(e) =>
-              setFriendUsername(e.target.value)
-            }
-            placeholder="Exact username"
-          />
+      <ExpandedListPanel>
+        {sentRequests.length > 0 ? (
+          sentRequests.map((request) => (
+            <RequestRow key={request.friendship_id}>
+              <RowAvatar
+                avatar={request.receiver?.avatar}
+                name={request.receiver?.username}
+              />
 
-          <AddButton
-            type="submit"
-            disabled={addingFriend}
-          >
-            {addingFriend ? "Adding..." : "Add"}
-          </AddButton>
-        </AddRow>
+              <RowName>
+                {request.receiver?.username}
+              </RowName>
 
-        <HelperRow>
-          <TbSearch size={14} />
-          Exact match only.
-        </HelperRow>
-      </AddPanel>
+              <RequestActions>
+                <ActionButton
+                  type="button"
+                  onClick={() =>
+                    requestCancelSentRequest(request)
+                  }
+                  aria-label={`Cancel request to ${
+                    request.receiver?.username
+                  }`}
+                >
+                  <TbX size={16} />
+                </ActionButton>
+              </RequestActions>
+            </RequestRow>
+          ))
+        ) : (
+          <EmptyState>
+            No sent requests
+          </EmptyState>
+        )}
+
+        {sentHasMore && (
+          <CenteredButtonWrap>
+            <PillButton
+              type="button"
+              onClick={() => loadSentPage(false)}
+              disabled={loadingMore}
+            >
+              {loadingMore ? "Loading..." : "Load more"}
+            </PillButton>
+          </CenteredButtonWrap>
+        )}
+      </ExpandedListPanel>
     );
   };
 
@@ -1300,19 +1274,28 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                       Sent
                     </ManagementTab>
 
-                    <ManagementTab
-                      type="button"
-                      $active={
-                        managementTab === "add"
-                      }
-                      onClick={() =>
-                        setManagementTab(
-                          "add"
-                        )
-                      }
+                    <FriendSearch
+                      onSubmit={handleFriendSearchAdd}
                     >
-                      Add
-                    </ManagementTab>
+                      <FriendSearchInput
+                        value={friendUsername}
+                        onChange={(e) =>
+                          setFriendUsername(
+                            e.target.value
+                          )
+                        }
+                        placeholder="Exact username"
+                        aria-label="Add a friend by username"
+                      />
+
+                      <FriendSearchButton
+                        type="submit"
+                        disabled={addingFriend}
+                        aria-label="Add a friend"
+                      >
+                        <TbSearch size={16} />
+                      </FriendSearchButton>
+                    </FriendSearch>
                   </>
                 ) : (
                   <>
@@ -1395,7 +1378,7 @@ const Overlay = styled.div`
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(8px);
   animation: ${fadeIn} var(--dur) var(--ease);
-  z-index: 9999;
+  z-index: var(--z-overlay);
 `;
 
 const Card = styled.div`
@@ -1688,6 +1671,13 @@ const ManagementTabs = styled(TabList)`
   justify-content: flex-start;
   gap: var(--space-5);
   padding-top: var(--space-4);
+  /* The tabs and the search box together are wider than the card gets on a
+     phone, so let the search drop to a line of its own. */
+  flex-wrap: wrap;
+
+  @media (max-width: 700px) {
+    gap: var(--space-3);
+  }
 `;
 
 const ManagementTab = Tab;
@@ -1732,7 +1722,8 @@ const ListRow = styled.div`
   }
 `;
 
-const RowAvatar = styled(AvatarRoot)`
+/* Resolves its own image; falls back to the initial when there is no avatar. */
+const RowAvatar = styled(UserAvatar)`
   background: var(--accent-600);
 `;
 
@@ -1772,34 +1763,40 @@ const EmptyState = styled.div`
 // Add friend
 // =============================================================================
 
-const AddPanel = styled.form`
+/* Add-a-friend box, at the far right of the friends tabs row. */
+const FriendSearch = styled.form`
   display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding-top: var(--space-1);
-`;
-
-const AddRow = styled.div`
-  display: flex;
-  gap: 10px;
-  align-items: center;
-`;
-
-const AddInput = styled(KitInput)`
-  flex: 1;
-  min-width: 0;
-`;
-
-const AddButton = styled(KitButton).attrs({ $pill: true, $size: "sm" })`
-  flex-shrink: 0;
-`;
-
-const HelperRow = styled.div`
-  display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--text-tertiary);
+  margin-left: auto;
+  padding-bottom: var(--space-2);
+  /* Never force the row wider than the card; shrink before overflowing. */
+  min-width: 0;
+
+  /* Once wrapped, it owns the line — so it spans it instead of sitting in the
+     middle where "margin-left: auto" would leave it. */
+  @media (max-width: 700px) {
+    width: 100%;
+    margin-left: 0;
+  }
+`;
+
+const FriendSearchInput = styled(KitInput)`
+  width: 170px;
+  padding: 6px 10px;
   font-size: var(--text-sm);
+
+  @media (max-width: 700px) {
+    width: auto;
+    flex: 1;
+    /* Text inputs default to min-width:auto, which is what pushes them past
+       the edge of a flex container. */
+    min-width: 0;
+  }
+`;
+
+const FriendSearchButton = styled(KitIconButton).attrs({ $size: 28 })`
+  border-color: var(--border-strong);
 `;
 
 // =============================================================================

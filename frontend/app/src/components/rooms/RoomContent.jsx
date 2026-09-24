@@ -1,9 +1,17 @@
+import { useEffect, useRef, useState } from "react";
 import styled from "styled-components";
-import { TbAlertTriangle, TbMessage2 } from "react-icons/tb";
+import {
+  TbAlertTriangle,
+  TbArrowBackUp,
+  TbCornerDownRight,
+  TbMessage2,
+  TbPencil,
+} from "react-icons/tb";
 import { ProfileName } from "../layout/Sidebar";
 import { formatTimestamp } from "../../api/rooms";
 import { useOpenUserPreview } from "../../hooks/useOpenUserPreview";
-import { Avatar, EmptyState, Spinner } from "../ui";
+import { Button, EmptyState, IconButton, InlineError, Input, Spinner } from "../ui";
+import UserAvatar from "../profile/UserAvatar";
 
 const PanelCenter = styled.div`
   display: grid;
@@ -26,6 +34,7 @@ const MessageList = styled.div`
 `;
 
 const MessageItemRoot = styled.article`
+  position: relative;
   display: flex;
   gap: 10px;
   padding: var(--space-2);
@@ -37,6 +46,29 @@ const MessageItemRoot = styled.article`
   }
 `;
 
+/**
+ * Hidden with opacity, not display: none — the buttons stay in the tab order,
+ * and :focus-within reveals them for anyone navigating by keyboard.
+ */
+const MessageActions = styled.div`
+  position: absolute;
+  top: calc(var(--space-1) * -1);
+  right: var(--space-2);
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease);
+
+  ${MessageItemRoot}:hover &,
+  ${MessageItemRoot}:focus-within & {
+    opacity: 1;
+  }
+`;
+
 const MessageAvatarWrap = styled.div`
   flex: 0 0 36px;
   cursor: pointer;
@@ -44,6 +76,7 @@ const MessageAvatarWrap = styled.div`
 
 const MessageBody = styled.div`
   min-width: 0;
+  flex: 1;
 `;
 
 const MessageMeta = styled.div`
@@ -61,9 +94,73 @@ const MessageContent = styled.p`
   margin: var(--space-1) 0 0;
   color: var(--text-primary);
   overflow-wrap: anywhere;
+
+  /* The "(edited)" marker is metadata, so it matches the timestamp. */
+  small {
+    color: var(--text-tertiary);
+  }
 `;
 
-function RoomContent({ roomChat, state, roomName, isDm }) {
+const ReplyQuote = styled.button`
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  max-width: 100%;
+  margin-bottom: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  text-align: left;
+  cursor: pointer;
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  &:hover span {
+    color: var(--text-secondary);
+  }
+`;
+
+const EditForm = styled.form`
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin-top: var(--space-1);
+`;
+
+const EditHint = styled.small`
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+`;
+
+/** Scrolls the quoted message into view; it may have scrolled out, or never loaded. */
+function scrollToMessage(messageId) {
+  document.getElementById(`message-${messageId}`)?.scrollIntoView({
+    behavior: "smooth",
+    block: "center",
+  });
+}
+
+function RoomContent({
+  roomChat,
+  state,
+  roomName,
+  isDm,
+  messagesById,
+  currentUserId,
+  onReply,
+  onEdit,
+}) {
+  const [editingId, setEditingId] = useState(null);
+
   return (
     <>
       {state === "loading" && (
@@ -83,7 +180,17 @@ function RoomContent({ roomChat, state, roomName, isDm }) {
           ) : (
             <MessageList>
               {roomChat.map((message) => (
-                <MessageItem key={message.id} message={message} />
+                <MessageItem
+                  key={message.id}
+                  message={message}
+                  repliedTo={message.reply_to_id ? messagesById?.get(message.reply_to_id) : null}
+                  isOwn={Boolean(currentUserId) && message.sender_id === currentUserId}
+                  isEditing={editingId === message.id}
+                  onStartEdit={() => setEditingId(message.id)}
+                  onStopEdit={() => setEditingId(null)}
+                  onReply={onReply}
+                  onEdit={onEdit}
+                />
               ))}
             </MessageList>
           )}
@@ -103,18 +210,39 @@ function RoomContent({ roomChat, state, roomName, isDm }) {
   );
 }
 
-function MessageItem({ message }) {
+function MessageItem({
+  message,
+  repliedTo,
+  isOwn,
+  isEditing,
+  onStartEdit,
+  onStopEdit,
+  onReply,
+  onEdit,
+}) {
   const openPreview = useOpenUserPreview();
   const sender = { id: message.sender_id, username: message.sender_username };
   const canPreview = Boolean(sender.id);
+  const canAct = !message.deleted;
 
   return (
-    <MessageItemRoot>
+    <MessageItemRoot id={`message-${message.id}`}>
       <MessageAvatarWrap onClick={canPreview ? openPreview(sender) : undefined}>
-        <Avatar name={message.sender_username} $size={36} />
+        <UserAvatar avatar={message.sender_avatar} name={message.sender_username} $size={36} />
       </MessageAvatarWrap>
 
       <MessageBody>
+        {message.reply_to_id && (
+          <ReplyQuote
+            type="button"
+            onClick={() => scrollToMessage(message.reply_to_id)}
+            title="Jump to the replied-to message"
+          >
+            <TbCornerDownRight size={12} />
+            <span>{replyPreview(repliedTo)}</span>
+          </ReplyQuote>
+        )}
+
         <MessageMeta>
           <ProfileName
             onClick={canPreview ? openPreview(sender) : undefined}
@@ -125,12 +253,116 @@ function MessageItem({ message }) {
           <time>{formatTimestamp(message.sent_at)}</time>
         </MessageMeta>
 
-        <MessageContent>
-          {message.deleted ? <em>Message deleted</em> : message.content}
-          {message.edited_at && !message.deleted && <small> (edited)</small>}
-        </MessageContent>
+        {isEditing ? (
+          <MessageEditor message={message} onSave={onEdit} onClose={onStopEdit} />
+        ) : (
+          <MessageContent>
+            {message.deleted ? <em>Message deleted</em> : message.content}
+            {message.edited_at && !message.deleted && <small> (edited)</small>}
+          </MessageContent>
+        )}
       </MessageBody>
+
+      {canAct && !isEditing && (
+        <MessageActions>
+          <IconButton
+            type="button"
+            $size={28}
+            onClick={() => onReply?.(message)}
+            aria-label="Reply to this message"
+            title="Reply"
+          >
+            <TbArrowBackUp size={16} />
+          </IconButton>
+
+          {isOwn && (
+            <IconButton
+              type="button"
+              $size={28}
+              onClick={onStartEdit}
+              aria-label="Edit this message"
+              title="Edit"
+            >
+              <TbPencil size={16} />
+            </IconButton>
+          )}
+        </MessageActions>
+      )}
     </MessageItemRoot>
+  );
+}
+
+/** The quoted line. The target may be deleted, or older than the loaded page. */
+function replyPreview(repliedTo) {
+  if (!repliedTo) return "Original message";
+  if (repliedTo.deleted) return "Replying to a deleted message";
+
+  const author = repliedTo.sender_username ?? "Unknown user";
+  return `${author}: ${repliedTo.content ?? ""}`;
+}
+
+/**
+ * Inline edit. chat-service refuses edits past 15 minutes (EDIT_WINDOW_EXPIRED)
+ * and from anyone but the sender, so the failure is shown on the row rather
+ * than dropped — the old text is still on screen and needs an explanation.
+ */
+function MessageEditor({ message, onSave, onClose }) {
+  const [text, setText] = useState(message.content ?? "");
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+
+    const trimmed = text.trim();
+    if (!trimmed || saving) return;
+    if (trimmed === message.content) {
+      onClose();
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave?.(message.id, trimmed);
+      onClose();
+    } catch (failure) {
+      setError(failure?.message || "Couldn't edit this message.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <EditForm onSubmit={handleSubmit}>
+        <Input
+          ref={inputRef}
+          type="text"
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") onClose();
+          }}
+          aria-label="Edit message"
+          disabled={saving}
+        />
+        <Button type="submit" $pill $size="sm" disabled={saving || !text.trim()}>
+          Save
+        </Button>
+        <Button type="button" $pill $size="sm" $variant="ghost" onClick={onClose} disabled={saving}>
+          Cancel
+        </Button>
+      </EditForm>
+
+      {error ? <InlineError role="alert">{error}</InlineError> : <EditHint>Escape to cancel</EditHint>}
+    </>
   );
 }
 

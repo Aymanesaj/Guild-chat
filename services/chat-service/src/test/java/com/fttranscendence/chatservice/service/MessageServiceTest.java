@@ -13,6 +13,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 
 import org.bson.types.ObjectId;
 import org.junit.jupiter.api.DisplayName;
@@ -22,6 +23,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
 import org.springframework.http.HttpStatus;
 
@@ -48,6 +50,9 @@ class MessageServiceTest {
 
     @Mock
     private OrgClient orgClient;
+
+    @Mock
+    private ApplicationEventPublisher events;
 
     /** Fixed so created_at can be asserted exactly, with no sleeping. */
     private static final Instant NOW = Instant.parse("2026-09-21T10:00:00Z");
@@ -219,6 +224,42 @@ class MessageServiceTest {
     }
 
     @Test
+    @DisplayName("a stored message is announced with exactly the saved document")
+    void sendPublishesCreatedEvent() {
+        isMember(true);
+        when(messageRepository.save(any(Message.class))).thenAnswer(i -> i.getArgument(0));
+
+        Message saved = messageService.send(USER, ROOM, "hello", null);
+
+        ArgumentCaptor<MessageCreatedEvent> event = ArgumentCaptor.forClass(MessageCreatedEvent.class);
+        verify(events).publishEvent(event.capture());
+        assertThat(event.getValue().message()).isSameAs(saved);
+    }
+
+    @Test
+    @DisplayName("a rejected send announces nothing: no socket may see a message that was never stored")
+    void rejectedSendPublishesNothing() {
+        isMember(false);
+
+        assertThatThrownBy(() -> messageService.send(USER, ROOM, "hello", null))
+                .isInstanceOf(ApiException.class);
+
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    @DisplayName("a failed save announces nothing")
+    void failedSavePublishesNothing() {
+        isMember(true);
+        when(messageRepository.save(any(Message.class))).thenThrow(new RuntimeException("mongo down"));
+
+        assertThatThrownBy(() -> messageService.send(USER, ROOM, "hello", null))
+                .isInstanceOf(RuntimeException.class);
+
+        verifyNoInteractions(events);
+    }
+
+    @Test
     @DisplayName("a non-member cannot send, and nothing is written")
     void sendRejectsNonMember() {
         isMember(false);
@@ -322,5 +363,252 @@ class MessageServiceTest {
                         e -> assertThat(e.getCode())
                                 .as("a non-member must not learn anything about reply ids")
                                 .isEqualTo("NOT_A_MEMBER"));
+    }
+
+    // ------------------------------------------------------ GET /messages/:id
+
+    private static final String MESSAGE_ID = new ObjectId().toHexString();
+
+    @Test
+    @DisplayName("get: a member receives the message")
+    void getReturnsMessageToMember() {
+        Message stored = message("hello");
+        when(messageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(stored));
+        isMember(true);
+
+        assertThat(messageService.get(USER, MESSAGE_ID)).isSameAs(stored);
+    }
+
+    @Test
+    @DisplayName("get: a soft-deleted message is still returned (the DTO hides its content)")
+    void getReturnsDeletedMessage() {
+        Message deleted = message("gone");
+        deleted.markDeleted(NOW);
+        when(messageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(deleted));
+        isMember(true);
+
+        assertThat(messageService.get(USER, MESSAGE_ID).isDeleted()).isTrue();
+    }
+
+    @Test
+    @DisplayName("get: a malformed id is a 400 and touches neither Mongo nor org")
+    void getRejectsMalformedId() {
+        assertThatThrownBy(() -> messageService.get(USER, "not-an-object-id"))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(e.getCode()).isEqualTo("INVALID_MESSAGE_ID");
+                });
+
+        verifyNoInteractions(messageRepository, orgClient);
+    }
+
+    @Test
+    @DisplayName("get: an unknown id is a 404 and org is never asked")
+    void getUnknownIdIsNotFound() {
+        when(messageRepository.findById(MESSAGE_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> messageService.get(USER, MESSAGE_ID))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                    assertThat(e.getCode()).isEqualTo("MESSAGE_NOT_FOUND");
+                });
+
+        verifyNoInteractions(orgClient);
+    }
+
+    @Test
+    @DisplayName("get: membership is checked against the room stored on the message")
+    void getChecksMembershipOfTheMessagesRoom() {
+        Message elsewhere = Message.create(OTHER_ROOM, "someone-else", null, "hi", "text", NOW);
+        when(messageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(elsewhere));
+        when(orgClient.isMember(USER, OTHER_ROOM)).thenReturn(true);
+
+        assertThat(messageService.get(USER, MESSAGE_ID)).isSameAs(elsewhere);
+        verify(orgClient).isMember(USER, OTHER_ROOM);
+    }
+
+    @Test
+    @DisplayName("get: a non-member gets exactly the same 404 as an unknown id")
+    void getNonMemberLooksLikeUnknownId() {
+        String unknownId = new ObjectId().toHexString();
+        when(messageRepository.findById(unknownId)).thenReturn(Optional.empty());
+        when(messageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message("secret")));
+        isMember(false);
+
+        ApiException unknown = catchApiException(() -> messageService.get(USER, unknownId));
+        ApiException hidden = catchApiException(() -> messageService.get(USER, MESSAGE_ID));
+
+        assertThat(hidden.getStatus()).isEqualTo(HttpStatus.NOT_FOUND).isEqualTo(unknown.getStatus());
+        assertThat(hidden.getCode()).isEqualTo(unknown.getCode());
+        assertThat(hidden.getMessage())
+                .as("the message text must not reveal that the message exists")
+                .isEqualTo(unknown.getMessage());
+    }
+
+    @Test
+    @DisplayName("get: org-service down surfaces as 503, never as a 404 or a leak")
+    void getPropagatesOrgOutage() {
+        when(messageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message("hello")));
+        when(orgClient.isMember(USER, ROOM)).thenThrow(new ApiException(
+                HttpStatus.SERVICE_UNAVAILABLE, "ORG_UNAVAILABLE", "org-service is unavailable"));
+
+        assertThatThrownBy(() -> messageService.get(USER, MESSAGE_ID))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getCode()).isEqualTo("ORG_UNAVAILABLE"));
+    }
+
+    private static ApiException catchApiException(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
+        return (ApiException) org.assertj.core.api.Assertions.catchThrowableOfType(call, ApiException.class);
+    }
+
+    // ---------------------------------------------------- PATCH /messages/:id
+
+    /** A message by USER in ROOM, sent at the given instant (NOW is the fixed clock). */
+    private Message sentAt(Instant createdAt) {
+        return Message.create(ROOM, USER, null, "original", "text", createdAt);
+    }
+
+    private void stored(Message message) {
+        when(messageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
+    }
+
+    @Test
+    @DisplayName("edit: the sender's edit replaces the content and stamps edited_at from the clock")
+    void editUpdatesContentAndEditedAt() {
+        Instant createdAt = NOW.minusSeconds(60);
+        stored(sentAt(createdAt));
+        isMember(true);
+        when(messageRepository.save(any(Message.class))).thenAnswer(i -> i.getArgument(0));
+
+        Message edited = messageService.edit(USER, MESSAGE_ID, "fixed typo");
+
+        assertThat(edited.getContent()).isEqualTo("fixed typo");
+        assertThat(edited.getEditedAt()).isEqualTo(NOW);
+        assertThat(edited.getCreatedAt()).as("an edit never moves the message in history").isEqualTo(createdAt);
+        assertThat(edited.getSenderId()).isEqualTo(USER);
+        assertThat(edited.getRoomId()).isEqualTo(ROOM);
+    }
+
+    @Test
+    @DisplayName("edit: publishes MessageEditedEvent carrying exactly the saved document")
+    void editPublishesEditedEvent() {
+        stored(sentAt(NOW.minusSeconds(60)));
+        isMember(true);
+        Message saved = sentAt(NOW.minusSeconds(60));
+        when(messageRepository.save(any(Message.class))).thenReturn(saved);
+
+        messageService.edit(USER, MESSAGE_ID, "fixed typo");
+
+        ArgumentCaptor<MessageEditedEvent> event = ArgumentCaptor.forClass(MessageEditedEvent.class);
+        verify(events).publishEvent(event.capture());
+        assertThat(event.getValue().message()).isSameAs(saved);
+    }
+
+    @Test
+    @DisplayName("edit: 1 ms before the 15-minute mark is still allowed (boundary)")
+    void editAllowedJustInsideWindow() {
+        stored(sentAt(NOW.minus(MessageService.EDIT_WINDOW).plusMillis(1)));
+        isMember(true);
+        when(messageRepository.save(any(Message.class))).thenAnswer(i -> i.getArgument(0));
+
+        assertThat(messageService.edit(USER, MESSAGE_ID, "just in time").getContent())
+                .isEqualTo("just in time");
+    }
+
+    @Test
+    @DisplayName("edit: at exactly 15:00 the edit is refused (spec: now < created_at + 15 min)")
+    void editRefusedAtWindowBoundary() {
+        stored(sentAt(NOW.minus(MessageService.EDIT_WINDOW)));
+        isMember(true);
+
+        assertThatThrownBy(() -> messageService.edit(USER, MESSAGE_ID, "too late"))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(e.getCode()).isEqualTo("EDIT_WINDOW_EXPIRED");
+                });
+
+        verify(messageRepository, never()).save(any());
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    @DisplayName("edit: long after the window is refused too")
+    void editRefusedLongAfterWindow() {
+        stored(sentAt(NOW.minusSeconds(24 * 3600)));
+        isMember(true);
+
+        assertThatThrownBy(() -> messageService.edit(USER, MESSAGE_ID, "way too late"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getCode()).isEqualTo("EDIT_WINDOW_EXPIRED"));
+    }
+
+    @Test
+    @DisplayName("edit: another member cannot edit someone else's message")
+    void editRefusedForNonSender() {
+        stored(Message.create(ROOM, "someone-else", null, "theirs", "text", NOW.minusSeconds(60)));
+        isMember(true);
+
+        assertThatThrownBy(() -> messageService.edit(USER, MESSAGE_ID, "hijacked"))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(e.getCode()).isEqualTo("NOT_SENDER");
+                });
+
+        verify(messageRepository, never()).save(any());
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    @DisplayName("edit: a deleted message cannot be edited back to life")
+    void editRefusedForDeletedMessage() {
+        Message deleted = sentAt(NOW.minusSeconds(60));
+        deleted.markDeleted(NOW.minusSeconds(30));
+        stored(deleted);
+        isMember(true);
+
+        assertThatThrownBy(() -> messageService.edit(USER, MESSAGE_ID, "resurrected"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getCode()).isEqualTo("MESSAGE_DELETED"));
+
+        verify(messageRepository, never()).save(any());
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    @DisplayName("edit: a sender who left the room gets 404, like any outsider")
+    void editRefusedForSenderNoLongerMember() {
+        stored(sentAt(NOW.minusSeconds(60)));
+        isMember(false);
+
+        assertThatThrownBy(() -> messageService.edit(USER, MESSAGE_ID, "after leaving"))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                    assertThat(e.getCode()).isEqualTo("MESSAGE_NOT_FOUND");
+                });
+
+        verify(messageRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("edit: a malformed id is a 400 and nothing is loaded or saved")
+    void editRejectsMalformedId() {
+        assertThatThrownBy(() -> messageService.edit(USER, "not-an-id", "x"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getCode()).isEqualTo("INVALID_MESSAGE_ID"));
+
+        verifyNoInteractions(messageRepository, orgClient, events);
+    }
+
+    @Test
+    @DisplayName("edit: a failed save publishes nothing")
+    void editFailedSavePublishesNothing() {
+        stored(sentAt(NOW.minusSeconds(60)));
+        isMember(true);
+        when(messageRepository.save(any(Message.class))).thenThrow(new IllegalStateException("mongo down"));
+
+        assertThatThrownBy(() -> messageService.edit(USER, MESSAGE_ID, "lost"))
+                .isInstanceOf(IllegalStateException.class);
+
+        verifyNoInteractions(events);
     }
 }

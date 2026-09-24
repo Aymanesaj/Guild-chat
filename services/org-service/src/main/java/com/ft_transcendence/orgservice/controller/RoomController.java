@@ -33,6 +33,12 @@ public class RoomController {
         this.roomService = roomService;        
     }
 
+    @GetMapping("/dm")
+    public List<RoomResponse> getDirectMessageRooms(Principal principal) {
+        UUID userId = UUID.fromString(principal.getName());
+        return roomService.getDirectMessageRoomsByUserId(userId);
+    }
+
     @PatchMapping("/{roomId}/members/{userId}/roles")
     public ResponseEntity<Void> updateMemberRole(
             @PathVariable Long roomId,

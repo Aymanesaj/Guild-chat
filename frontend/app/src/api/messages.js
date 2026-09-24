@@ -9,6 +9,10 @@ import { resolveUsers } from "./users";
  * REST goes through the gateway's `/api/chat/` prefix, which is stripped
  * before chat-service sees the path. JSON is snake_case.
  *
+ * The socket opens at login (`connectChat`, called by AppShell) and stays open
+ * until logout, even with no room open: chat-service counts an open socket as
+ * "online" (GET /presence).
+ *
  * The socket carries `{ event, data }` frames. The client subscribes per room;
  * the server forgets subscriptions when a socket closes, so every (re)connect
  * subscribes again. A POST's own message also arrives as `message.new`, and
@@ -17,12 +21,13 @@ import { resolveUsers } from "./users";
 
 const CHAT = "/api/chat";
 
-function normalizeMessage(message, username) {
+function normalizeMessage(message, sender) {
   return {
     id: message.id,
     room_id: message.room_id,
     sender_id: message.sender_id,
-    sender_username: username ?? null,
+    sender_username: sender?.username ?? null,
+    sender_avatar: sender?.avatar ?? null,
     reply_to_id: message.reply_to_id ?? null,
     content: message.content,
     sent_at: message.created_at,
@@ -31,10 +36,10 @@ function normalizeMessage(message, username) {
   };
 }
 
-/** Attaches sender usernames: chat stores ids only, names come from identity. */
+/** Attaches senders: chat stores ids only, names and avatars come from identity. */
 async function withUsernames(messages) {
   const senders = await resolveUsers(messages.map((message) => message.sender_id));
-  return messages.map((message) => normalizeMessage(message, senders.get(message.sender_id)?.username));
+  return messages.map((message) => normalizeMessage(message, senders.get(message.sender_id)));
 }
 
 /**
@@ -95,6 +100,8 @@ let timer = null;
 let attempt = 0;
 /** Pending close after the last room left; a room switch cancels it. */
 let idleTimer = null;
+/** True from connectChat() until logout: the socket is the user's presence, so rooms don't decide. */
+let keepOpen = false;
 const IDLE_CLOSE_MS = 2000;
 
 const roomKey = (roomId) => String(roomId);
@@ -112,6 +119,10 @@ function socketUrl() {
 
 function hasSubscribers() {
   return subscribers.size > 0;
+}
+
+function wantsSocket() {
+  return keepOpen || hasSubscribers();
 }
 
 /** Writes a frame if the socket is open. Closed? onopen will resubscribe. */
@@ -163,7 +174,7 @@ async function handleFrame(frame) {
 function connect() {
   clearTimeout(timer);
   timer = null;
-  if (socket || !hasSubscribers() || !getAccessToken()) return;
+  if (socket || !wantsSocket() || !getAccessToken()) return;
 
   setStatus("connecting");
 
@@ -202,7 +213,7 @@ function connect() {
     if (socket !== current) return;
     socket = null;
     setStatus("closed");
-    if (!hasSubscribers()) return;
+    if (!wantsSocket()) return;
 
     // A rejected handshake (expired token) surfaces as an abnormal 1006 close
     // with no detail, so refresh on any unexpected close before retrying.
@@ -234,9 +245,18 @@ function disconnect() {
 }
 
 window.addEventListener(LOGOUT_EVENT, () => {
+  keepOpen = false;
   subscribers.clear();
   disconnect();
 });
+
+/** Opens the shared socket for the whole session (online presence). Safe to call twice. */
+export function connectChat() {
+  keepOpen = true;
+  clearTimeout(idleTimer);
+  idleTimer = null;
+  connect();
+}
 
 /** Live updates for one room. Returns an unsubscribe function. */
 export function subscribeToRoom(roomId, handler) {
@@ -259,7 +279,7 @@ export function subscribeToRoom(roomId, handler) {
     }
     // Not at once: on a room switch React unsubscribes the old room before
     // subscribing the new one, and closing here would open a new socket per room.
-    if (!hasSubscribers()) {
+    if (!wantsSocket()) {
       clearTimeout(idleTimer);
       idleTimer = setTimeout(disconnect, IDLE_CLOSE_MS);
     }
