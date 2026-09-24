@@ -113,6 +113,16 @@ export async function deleteRoom(roomId) {
   return request(`${ROOMS}/${roomId}`, { method: "DELETE" }, "Failed to delete room");
 }
 
+/**
+ * The current user's role in a room: "owner" | "admin" | "member", or null.
+ * Only the raw member list: no identity lookups, unlike getRoomMembers.
+ */
+export async function getMyRoomRole(roomId) {
+  const me = getCurrentUserId();
+  const members = await listMembers(roomId);
+  return members.find((member) => member.userId === me)?.role || null;
+}
+
 /** -> [{ id, username, display_name, avatar, status, role: "owner" | "admin" | "member" }] */
 export async function getRoomMembers(roomId) {
   const members = await listMembers(roomId);

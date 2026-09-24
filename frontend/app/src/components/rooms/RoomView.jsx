@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 import RoomHeader from "./RoomHeader";
 import RoomContent from "./RoomContent";
@@ -9,6 +9,7 @@ import { useProfileOverlay } from "../layout/ProfileOverlayContext";
 import { useRoomMessages } from "../../hooks/useRoomMessages";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { getCurrentUserId } from "../../api/tokens";
+import { getMyRoomRole } from "../../api/rooms";
 import { SlidePanel } from "../ui";
 
 const RoomViewShell = styled.section`
@@ -61,10 +62,27 @@ function RoomView({ roomId, roomName, isDm }) {
   const replyingTo = reply.roomId === roomId ? reply.message : null;
   const setReplyingTo = (message) => setReply({ roomId, message });
 
-  const { messages, messagesById, state, sending, send, edit } = useRoomMessages(roomId);
+  const { messages, messagesById, state, sending, send, edit, remove } = useRoomMessages(roomId);
 
   // Read once per view, not once per message row.
   const currentUserId = useMemo(() => getCurrentUserId(), []);
+
+  // Owners and admins may delete anyone's message. Tagged with its room like
+  // the reply draft, so the previous room's role never applies here. DMs have
+  // no moderators. If the lookup fails, only the user's own messages can be deleted.
+  const [myRole, setMyRole] = useState({ roomId, role: null });
+  useEffect(() => {
+    if (isDm) return undefined;
+    let cancelled = false;
+    getMyRoomRole(roomId)
+      .then((role) => !cancelled && setMyRole({ roomId, role }))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId, isDm]);
+  const roleHere = !isDm && myRole.roomId === roomId ? myRole.role : null;
+  const canModerate = roleHere === "owner" || roleHere === "admin";
 
   return (
     <RoomViewShell>
@@ -84,6 +102,8 @@ function RoomView({ roomId, roomName, isDm }) {
           currentUserId={currentUserId}
           onReply={setReplyingTo}
           onEdit={edit}
+          canModerate={canModerate}
+          onDelete={remove}
         />
         <MessageComposer
           roomName={roomName}
