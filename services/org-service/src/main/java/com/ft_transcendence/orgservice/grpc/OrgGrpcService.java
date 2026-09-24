@@ -36,12 +36,17 @@ public class OrgGrpcService extends OrgServiceGrpc.OrgServiceImplBase {
 
         boolean isMember = roomService.isUserInRoom(roomId, userId);
 
-        CheckMembershipResponse response =
+        CheckMembershipResponse.Builder response =
                 CheckMembershipResponse.newBuilder()
-                        .setIsMember(isMember)
-                        .build();
+                        .setIsMember(isMember);
 
-        responseObserver.onNext(response);
+        // role stays "" (the proto default) for a non-member
+        if (isMember) {
+            roomService.findRoleInRoom(roomId, userId)
+                    .ifPresent(role -> response.setRole(role.name()));
+        }
+
+        responseObserver.onNext(response.build());
         responseObserver.onCompleted();
     }
 
