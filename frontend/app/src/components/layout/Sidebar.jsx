@@ -298,7 +298,7 @@ function RoomsSection({
       )}
 
       <RoomListNav aria-label="Rooms">
-        {rooms.filter((room) => room.type !== "dm").map((room) => (
+        {rooms.map((room) => (
           <RoomButton
             key={room.id}
             room={room}

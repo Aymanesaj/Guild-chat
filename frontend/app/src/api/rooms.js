@@ -7,6 +7,7 @@ import { resolveUsers } from "./users";
  * /api/orgs). There are no invites: an owner/admin adds a member directly.
  */
 const ROOMS = "/api/orgs/rooms";
+const DM_ROOMS = `${ROOMS}/dm`;
 
 function page(items, { limit, offset = 0 } = {}) {
   return limit ? items.slice(offset, offset + limit) : items.slice(offset);
@@ -20,6 +21,8 @@ function normalizeRoom(room) {
     type: String(room.type || "").toLowerCase(), // "dm" | "group"
     created_at: room.createdAt ?? null,
     updated_at: room.updatedAt ?? null,
+    // org-service fills userIdIfDm with the other member on every DM response.
+    peer_id: room.userIdIfDm ?? null,
     peer: null,
   };
 }
@@ -34,8 +37,8 @@ async function listMembers(roomId) {
 }
 
 /**
- * DMs have no name, and RoomResponse carries no members — fetch them to find
- * the other person.
+ * DMs have no name, so the other member is what the UI shows. RoomResponse
+ * names them in userIdIfDm; only fall back to /members if it's missing.
  */
 async function withPeers(rooms) {
   const me = getCurrentUserId();
@@ -43,6 +46,7 @@ async function withPeers(rooms) {
   const peerIds = await Promise.all(
     rooms.map(async (room) => {
       if (room.type !== "dm") return null;
+      if (room.peer_id) return room.peer_id;
       try {
         const members = await listMembers(room.id);
         return members.find((member) => member.userId !== me)?.userId ?? null;
@@ -58,8 +62,15 @@ async function withPeers(rooms) {
   );
 }
 
+/** GET /rooms — group rooms only; org-service serves DMs from /rooms/dm. */
 export async function getRooms(options) {
   const rooms = await request(ROOMS, {}, "Failed to fetch rooms");
+  return page(await withPeers((rooms || []).map(normalizeRoom)), options);
+}
+
+/** GET /rooms/dm — the caller's DM rooms, each with its peer resolved. */
+export async function getDmRooms(options) {
+  const rooms = await request(DM_ROOMS, {}, "Failed to fetch conversations");
   return page(await withPeers((rooms || []).map(normalizeRoom)), options);
 }
 
@@ -81,7 +92,7 @@ export async function createRoom(name) {
 /** Opens (or reuses) the DM room with another user. */
 export async function getOrCreateDm(userId) {
   const room = await request(
-    `${ROOMS}/dm`,
+    DM_ROOMS,
     { method: "POST", ...jsonBody({ userId }) },
     "Failed to open conversation",
   );
@@ -190,7 +201,7 @@ export function toConversation(room) {
 
 /** DM rooms with their newest message attached, newest conversation first. */
 export async function listDmConversations() {
-  const rooms = (await getRooms()).filter((room) => room.type === "dm");
+  const rooms = await getDmRooms();
 
   const withLast = await Promise.all(
     rooms.map(async (room) => {
