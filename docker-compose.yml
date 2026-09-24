@@ -15,11 +15,13 @@ services:
       - MODSEC_RULE_ENGINE=on
       - ALLOWED_METHODS=GET HEAD POST OPTIONS PUT PATCH DELETE
     ports:
-      - 8000:80
-      - 8443:443
+      - 8000:8080
+      - 8443:8443
     networks:
       - private
     depends_on:
+      frontend:
+        condition: service_healthy
       identity-service:
         condition: service_healthy
       chat-service:
@@ -35,10 +37,30 @@ services:
       status-page:
         condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
       interval: 30s
       timeout: 5s
       retries: 5
+    restart: always
+
+# -----------------------------------------------------------
+# ------------------------ Frontend -------------------------
+# -----------------------------------------------------------
+
+  frontend:
+    build:
+      context: ./frontend/app
+      dockerfile: Dockerfile
+    container_name: frontend
+    networks:
+      - private
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost/ || exit 1"]
+      interval: 20s
+      timeout: 3s
+      retries: 3
     restart: always
 
 # -----------------------------------------------------------
@@ -164,7 +186,7 @@ services:
     image: nginx/nginx-prometheus-exporter:1.1.0
     container_name: nginx-exporter
     command:
-      - -nginx.scrape-uri=http://nginx:80/nginx_status
+      - -nginx.scrape-uri=http://nginx:8080/nginx_status
     networks:
       - private
     depends_on:
