@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import styled from "styled-components";
 import { TbMessageCircle } from "react-icons/tb";
 import { listDmConversations } from "../../api/rooms";
+import { usePresence } from "../../hooks/usePresence";
 
 const DmViewShell = styled.section`
   display: flex;
@@ -46,6 +47,12 @@ function DmView() {
     loadMessages();
   }, []);
 
+  const presence = usePresence(conversations.map((conversation) => conversation.userId));
+  const withPresence = conversations.map((conversation) => ({
+    ...conversation,
+    status: presence.get(conversation.userId) ?? conversation.status,
+  }));
+
   return (
     <DmViewShell>
       <PanelHeader>
@@ -54,7 +61,7 @@ function DmView() {
       </PanelHeader>
 
       <DmList
-        conversations={conversations}
+        conversations={withPresence}
         state={ loading }
       />
     </DmViewShell>
