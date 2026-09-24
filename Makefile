@@ -18,9 +18,10 @@ down:
 	docker compose down
 
 clean:
-	docker compose down -v --remove-orphans
+	docker compose down --remove-orphans
 
 fclean:
+	docker compose down -v --remove-orphans
 	docker system prune -a
 
 ps:
