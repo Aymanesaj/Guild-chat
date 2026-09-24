@@ -1378,7 +1378,7 @@ const Overlay = styled.div`
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(8px);
   animation: ${fadeIn} var(--dur) var(--ease);
-  z-index: 9999;
+  z-index: var(--z-overlay);
 `;
 
 const Card = styled.div`
@@ -1671,6 +1671,13 @@ const ManagementTabs = styled(TabList)`
   justify-content: flex-start;
   gap: var(--space-5);
   padding-top: var(--space-4);
+  /* The tabs and the search box together are wider than the card gets on a
+     phone, so let the search drop to a line of its own. */
+  flex-wrap: wrap;
+
+  @media (max-width: 700px) {
+    gap: var(--space-3);
+  }
 `;
 
 const ManagementTab = Tab;
@@ -1763,12 +1770,29 @@ const FriendSearch = styled.form`
   gap: 6px;
   margin-left: auto;
   padding-bottom: var(--space-2);
+  /* Never force the row wider than the card; shrink before overflowing. */
+  min-width: 0;
+
+  /* Once wrapped, it owns the line — so it spans it instead of sitting in the
+     middle where "margin-left: auto" would leave it. */
+  @media (max-width: 700px) {
+    width: 100%;
+    margin-left: 0;
+  }
 `;
 
 const FriendSearchInput = styled(KitInput)`
   width: 170px;
   padding: 6px 10px;
   font-size: var(--text-sm);
+
+  @media (max-width: 700px) {
+    width: auto;
+    flex: 1;
+    /* Text inputs default to min-width:auto, which is what pushes them past
+       the edge of a flex container. */
+    min-width: 0;
+  }
 `;
 
 const FriendSearchButton = styled(KitIconButton).attrs({ $size: 28 })`

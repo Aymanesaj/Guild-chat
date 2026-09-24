@@ -15,11 +15,6 @@ const SidebarRoot = styled.aside`
   padding: var(--space-4);
   border-right: 1px solid var(--border-subtle);
   background: var(--bg-surface);
-
-  @media (max-width: 700px) {
-    width: 76px;
-    padding: 10px;
-  }
 `;
 
 const SidebarHeaderBox = styled.div`
@@ -33,10 +28,6 @@ const SidebarTitle = styled.h1`
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--accent-500);
-
-  @media (max-width: 700px) {
-    display: none;
-  }
 `;
 
 const SidebarSection = styled.section`
@@ -55,12 +46,6 @@ const SectionTitleRow = styled.div`
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-
-  @media (max-width: 700px) {
-    span {
-      display: none;
-    }
-  }
 `;
 
 const RoomListNav = styled.nav`
@@ -125,15 +110,6 @@ const NavItemButton = styled.button`
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-
-  @media (max-width: 700px) {
-    justify-content: center;
-    padding: 10px 0;
-
-    span {
-      display: none;
-    }
-  }
 `;
 
 const DirectMessagesSection = styled.section`
@@ -156,14 +132,6 @@ const ProfilePreviewBox = styled.div`
   span {
     color: var(--text-tertiary);
     font-size: var(--text-xs);
-  }
-
-  @media (max-width: 700px) {
-    justify-content: center;
-
-    > div:last-of-type {
-      display: none;
-    }
   }
 `;
 

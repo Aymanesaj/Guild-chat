@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
-import { TbArrowLeft, TbUserPlus, TbUsersGroup } from "react-icons/tb";
+import { TbArrowLeft, TbUserPlus, TbUsersGroup, TbX } from "react-icons/tb";
 
 import MemberList from "./MemberList";
 import { addMember, getRoomMembers, removeMember } from "../../api/rooms";
 import { getFriendsList } from "../../api/friends";
 import { usePresence } from "../../hooks/usePresence";
 import { useProfileOverlay } from "../layout/ProfileOverlayContext";
+import { useNavDrawer } from "../layout/NavDrawerContext";
 import {
   ConfirmDialog,
   EmptyState,
@@ -17,15 +18,20 @@ import {
 import UserAvatar from "../profile/UserAvatar";
 
 const MembersSidebarRoot = styled.aside`
+  display: flex;
   width: 260px;
+  flex-direction: column;
   flex-shrink: 0;
-  overflow-y: auto;
+  min-height: 0;
   padding: var(--space-4);
   border-left: 1px solid var(--border-subtle);
   background: var(--bg-surface);
 
+  /* Inside the phone drawer the panel fills it, and the roster — not the
+     panel — is what scrolls, so the confirm dialog stays put over it. */
   @media (max-width: 700px) {
-    display: none;
+    width: 100%;
+    border-left: 0;
   }
 `;
 
@@ -36,6 +42,12 @@ const SidebarHeader = styled.div`
   gap: var(--space-2);
   padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--border-subtle);
+`;
+
+const HeaderActions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
 `;
 
 const MembersTitle = styled.h3`
@@ -71,11 +83,15 @@ const FriendName = styled.span`
 `;
 
 const ListArea = styled.div`
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   padding-top: var(--space-3);
 `;
 
-function MembersSidebar({ roomId }) {
+function MembersSidebar({ roomId, onClose }) {
   const { currentUser } = useProfileOverlay();
+  const { isPhone } = useNavDrawer();
   const [view, setView] = useState("members");
 
   const [loading, setLoading] = useState("loading");
@@ -184,27 +200,43 @@ function MembersSidebar({ roomId }) {
             : `Friends — ${invitableFriends.length}`}
         </MembersTitle>
 
-        {(view !== "members" || canAddMembers) && (
-          <IconButton
-            type="button"
-            $size={26}
-            onClick={() =>
-              setView(view === "members" ? "friends" : "members")
-            }
-            aria-label={
-              view === "members"
-                ? "Add friends"
-                : "Back to members"
-            }
-            title={view === "members" ? "Add friends" : "Back to members"}
-          >
-            {view === "members" ? (
-              <TbUserPlus size={18} />
-            ) : (
-              <TbArrowLeft size={18} />
-            )}
-          </IconButton>
-        )}
+        <HeaderActions>
+          {(view !== "members" || canAddMembers) && (
+            <IconButton
+              type="button"
+              $size={26}
+              onClick={() =>
+                setView(view === "members" ? "friends" : "members")
+              }
+              aria-label={
+                view === "members"
+                  ? "Add friends"
+                  : "Back to members"
+              }
+              title={view === "members" ? "Add friends" : "Back to members"}
+            >
+              {view === "members" ? (
+                <TbUserPlus size={18} />
+              ) : (
+                <TbArrowLeft size={18} />
+              )}
+            </IconButton>
+          )}
+
+          {/* Desktop closes this from the header toggle, which the drawer
+              covers on a phone. */}
+          {isPhone && (
+            <IconButton
+              type="button"
+              $size={26}
+              onClick={onClose}
+              aria-label="Close members"
+              title="Close members"
+            >
+              <TbX size={18} />
+            </IconButton>
+          )}
+        </HeaderActions>
       </SidebarHeader>
 
       <ListArea>
@@ -275,6 +307,9 @@ function MembersSidebar({ roomId }) {
         )}
       </ListArea>
 
+      {/* Stays position:fixed. The drawer that wraps this panel is careful to
+          rest at `transform: none` precisely so it never becomes the
+          containing block for this backdrop. */}
       <ConfirmDialog
         open={Boolean(pendingKick)}
         title="Remove member?"
