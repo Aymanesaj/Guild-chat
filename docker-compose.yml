@@ -229,9 +229,21 @@ services:
 # -----------------------------------------------------------
 # -------------------- Data visualization -------------------
 # -----------------------------------------------------------
+  grafana-init:
+    image: alpine:3.20
+    container_name: grafana-init
+    user: "0"
+    command: ["chown", "-R", "472:0", "/var/lib/grafana"]
+    volumes:
+      - grafana_data:/var/lib/grafana
+    restart: "no"
+
   grafana:
     build: ./infra/grafana/
     container_name: grafana
+    depends_on:
+      grafana-init:
+        condition: service_completed_successfully
     expose:
       - "3000"
     networks:
