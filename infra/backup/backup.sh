@@ -51,13 +51,19 @@ perform_backup() {
     MONGO_AUTH_USER="${CHAT_MONGO_USER:-${MONGO_INITDB_ROOT_USERNAME}}"
     MONGO_AUTH_PASS="${CHAT_MONGO_PASSWORD:-${MONGO_INITDB_ROOT_PASSWORD}}"
     MONGO_AUTH_DB="${CHAT_MONGO_AUTH_DB:-admin}"
+    # Strip any accidental leading '=' or whitespace
+    MONGO_AUTH_USER=$(echo "$MONGO_AUTH_USER" | sed -E 's/^[=[:space:]]+//')
+    MONGO_AUTH_PASS=$(echo "$MONGO_AUTH_PASS" | sed -E 's/^[=[:space:]]+//')
     if [ -n "$MONGO_AUTH_USER" ] && [ -n "$MONGO_AUTH_PASS" ]; then
         MONGO_AUTH="--username=${MONGO_AUTH_USER} --password=${MONGO_AUTH_PASS} --authenticationDatabase=${MONGO_AUTH_DB}"
     fi
-    mongodump --host="${MONGO_HOST}:${MONGO_PORT}" $MONGO_AUTH --archive="$MONGO_FILE" --gzip
-    cp -f "$MONGO_FILE" "$MONGO_LATEST"
-    chmod 666 "$PG_FILE" "$PG_LATEST" "$MONGO_FILE" "$MONGO_LATEST" 2>/dev/null || true
-    echo "MongoDB backup completed: ${MONGO_FILE} ($(du -h "$MONGO_FILE" | cut -f1))"
+    if mongodump --host="${MONGO_HOST}:${MONGO_PORT}" $MONGO_AUTH --archive="$MONGO_FILE" --gzip; then
+        cp -f "$MONGO_FILE" "$MONGO_LATEST"
+        chmod 666 "$PG_FILE" "$PG_LATEST" "$MONGO_FILE" "$MONGO_LATEST" 2>/dev/null || true
+        echo "MongoDB backup completed: ${MONGO_FILE} ($(du -h "$MONGO_FILE" | cut -f1))"
+    else
+        echo "⚠️ WARNING: MongoDB backup failed! Check credentials for user '${MONGO_AUTH_USER}' in .env"
+    fi
 
     # 4. Retention: Delete backups older than RETENTION_DAYS
     echo "Rotating backups older than ${RETENTION_DAYS} days..."
