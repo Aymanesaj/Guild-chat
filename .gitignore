@@ -9,16 +9,16 @@ tmp/*
 *.md
 config/
 services/chat-service/target/
-
+.idea/
 notes/*
 
 CLAUDE.md
+!GEMINI.md
 
 # shared with the frontend dev — must be tracked despite the *.md rule above
 # shared documentation — must be tracked despite the *.md rule above
 !services/chat-service/API_CONTRACT.md
 !docs/frontend-backend-gaps.md
-!docs/*.md
 
 node_modules/
 frontend/app/dist/
@@ -30,3 +30,4 @@ backups/
 !gateway/script.sh
 !scripts/*.sh
 !infra/backup/*.sh
+!deploy/deploy.sh

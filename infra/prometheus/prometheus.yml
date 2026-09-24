@@ -21,10 +21,6 @@ scrape_configs:
     static_configs:
       - targets: ['docker-exporter:8090']
 
-  - job_name: 'promtail'
-    static_configs:
-      - targets: ['promtail:8093']
-
   - job_name: 'identity-service'
     metrics_path: '/actuator/prometheus'
     scrape_interval: 10s

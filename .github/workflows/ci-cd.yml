@@ -1,0 +1,109 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # -------------------------------------------------------------
+  # 1. FRONTEND: Lint & Build Validation
+  # -------------------------------------------------------------
+  frontend-lint-and-build:
+    name: Frontend Lint & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/app
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: frontend/app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Build production bundle
+        run: npm run build
+
+  # -------------------------------------------------------------
+  # 2. BACKEND: Spring Boot Microservices Tests
+  # -------------------------------------------------------------
+  backend-tests:
+    name: Backend Tests (${{ matrix.service.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - name: Chat Service
+            dir: services/chat-service
+          - name: Identity Service
+            dir: services/identity-service/demo
+          - name: Org Service
+            dir: services/org-service
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Run Maven Tests
+        working-directory: ${{ matrix.service.dir }}
+        run: ./mvnw test -q
+
+  # -------------------------------------------------------------
+  # 3. DOCKER: Compose Configuration Validation
+  # -------------------------------------------------------------
+  validate-compose:
+    name: Validate Docker Compose
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create mock .env from example
+        run: cp .env.example .env
+
+      - name: Check Compose Syntax
+        run: docker compose config -q
+
+  # -------------------------------------------------------------
+  # 4. DEPLOY: Continuous Deployment to OCI Free Tier VM via SSH
+  # -------------------------------------------------------------
+  deploy:
+    name: Deploy to OCI VM
+    needs: [frontend-lint-and-build, backend-tests, validate-compose]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Execute Remote Deploy on OCI Instance
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USERNAME }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          port: ${{ secrets.OCI_SSH_PORT || 22 }}
+          script: |
+            if [ -f ~/ft_transcendence/deploy/deploy.sh ]; then
+              bash ~/ft_transcendence/deploy/deploy.sh
+            else
+              echo "❌ ERROR: ~/ft_transcendence/deploy/deploy.sh not found on VM!"
+              exit 1
+            fi
+
