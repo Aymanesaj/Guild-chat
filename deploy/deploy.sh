@@ -30,10 +30,10 @@ echo "📥 Fetching latest changes from Git..."
 git fetch origin main
 git reset --hard origin/main
 
-# 4. Export UID and DOCKER_SOCK for docker-compose compatibility
-export UID=$(id -u)
-if [ -S "/var/run/user/${UID}/docker.sock" ]; then
-    export DOCKER_SOCK="/var/run/user/${UID}/docker.sock"
+# 4. Export DOCKER_SOCK for docker-compose compatibility
+CURRENT_UID=$(id -u)
+if [ -S "/var/run/user/${CURRENT_UID}/docker.sock" ]; then
+    export DOCKER_SOCK="/var/run/user/${CURRENT_UID}/docker.sock"
 else
     export DOCKER_SOCK="/var/run/docker.sock"
 fi
