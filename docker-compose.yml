@@ -183,7 +183,7 @@ services:
     restart: always
 
   nginx-exporter:
-    image: nginx/nginx-prometheus-exporter:1.1.0
+    build: ./infra/docker-exporter/
     container_name: nginx-exporter
     command:
       - -nginx.scrape-uri=http://nginx:8080/nginx_status
