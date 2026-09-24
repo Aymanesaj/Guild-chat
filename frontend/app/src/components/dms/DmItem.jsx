@@ -1,7 +1,8 @@
 import styled from "styled-components";
 import { useOpenUserPreview } from "../../hooks/useOpenUserPreview";
 import { useRoomNavigation } from "../layout/RoomNavigationContext";
-import { Avatar, StatusDot } from "../ui";
+import { StatusDot } from "../ui";
+import UserAvatar from "../profile/UserAvatar";
 
 const DmItemRoot = styled.li`
   display: flex;
@@ -101,7 +102,7 @@ function DmItem({ conversation }) {
     <DmItemRoot>
       <DmItemButton type="button" onClick={openConversation}>
         <DmAvatarWrap onClick={openPreview(peer)}>
-          <Avatar name={conversation.username} $size={44} />
+          <UserAvatar avatar={conversation.avatar} name={conversation.username} $size={44} />
           <DmStatus
             $online={conversation.status === "online"}
             $size={13}

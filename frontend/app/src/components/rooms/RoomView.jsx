@@ -64,7 +64,7 @@ function RoomView({ roomId, roomName, isDm }) {
         />
       </RoomMain>
 
-      {isMembersOpen && <MembersSidebar roomId={roomId} />}
+      {!isDm && isMembersOpen && <MembersSidebar roomId={roomId} />}
     </RoomViewShell>
   );
 }

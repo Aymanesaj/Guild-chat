@@ -39,16 +39,19 @@ function RoomHeader({ roomName, isDm, onToggleMembers }) {
         <h2>{roomName}</h2>
       </HeaderTitle>
 
-      <Button
-        type="button"
-        $variant="ghost"
-        $size="sm"
-        onClick={onToggleMembers}
-        title="Toggle members"
-      >
-        <TbUsers size={18} />
-        Members
-      </Button>
+      {/* A DM has exactly two members and no roster to manage. */}
+      {!isDm && (
+        <Button
+          type="button"
+          $variant="ghost"
+          $size="sm"
+          onClick={onToggleMembers}
+          title="Toggle members"
+        >
+          <TbUsers size={18} />
+          Members
+        </Button>
+      )}
     </PanelHeader>
   );
 }

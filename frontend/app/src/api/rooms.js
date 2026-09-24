@@ -102,7 +102,7 @@ export async function deleteRoom(roomId) {
   return request(`${ROOMS}/${roomId}`, { method: "DELETE" }, "Failed to delete room");
 }
 
-/** -> [{ id, username, display_name, status, role: "owner" | "admin" | "member" }] */
+/** -> [{ id, username, display_name, avatar, status, role: "owner" | "admin" | "member" }] */
 export async function getRoomMembers(roomId) {
   const members = await listMembers(roomId);
   const users = await resolveUsers(members.map((member) => member.userId));
@@ -113,6 +113,7 @@ export async function getRoomMembers(roomId) {
       id: userId,
       username: user?.username ?? "Unknown user",
       display_name: user?.display_name ?? null,
+      avatar: user?.avatar ?? null,
       status: user?.status ?? "offline",
       role,
     };
@@ -180,6 +181,7 @@ export function toConversation(room) {
     id: room.id,
     userId: peer?.id ?? null,
     username: peer?.username ?? room.name ?? "Direct message",
+    avatar: peer?.avatar ?? null,
     status: peer?.status ?? "offline",
     lastMessage: last?.content ?? "",
     timestamp: formatTimestamp(last?.sent_at),

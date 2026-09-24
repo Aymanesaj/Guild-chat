@@ -8,13 +8,13 @@ import { getFriendsList } from "../../api/friends";
 import { usePresence } from "../../hooks/usePresence";
 import { useProfileOverlay } from "../layout/ProfileOverlayContext";
 import {
-  Avatar,
   ConfirmDialog,
   EmptyState,
   IconButton,
   InlineError,
   StatusText,
 } from "../ui";
+import UserAvatar from "../profile/UserAvatar";
 
 const MembersSidebarRoot = styled.aside`
   width: 260px;
@@ -239,7 +239,7 @@ function MembersSidebar({ roomId }) {
 
                   return (
                     <FriendRow key={friend.id}>
-                      <Avatar name={friend.username} $size={28} />
+                      <UserAvatar avatar={friend.avatar} name={friend.username} $size={28} />
 
                       <FriendName>{friend.username}</FriendName>
 

@@ -21,12 +21,13 @@ import { resolveUsers } from "./users";
 
 const CHAT = "/api/chat";
 
-function normalizeMessage(message, username) {
+function normalizeMessage(message, sender) {
   return {
     id: message.id,
     room_id: message.room_id,
     sender_id: message.sender_id,
-    sender_username: username ?? null,
+    sender_username: sender?.username ?? null,
+    sender_avatar: sender?.avatar ?? null,
     reply_to_id: message.reply_to_id ?? null,
     content: message.content,
     sent_at: message.created_at,
@@ -35,10 +36,10 @@ function normalizeMessage(message, username) {
   };
 }
 
-/** Attaches sender usernames: chat stores ids only, names come from identity. */
+/** Attaches senders: chat stores ids only, names and avatars come from identity. */
 async function withUsernames(messages) {
   const senders = await resolveUsers(messages.map((message) => message.sender_id));
-  return messages.map((message) => normalizeMessage(message, senders.get(message.sender_id)?.username));
+  return messages.map((message) => normalizeMessage(message, senders.get(message.sender_id)));
 }
 
 /**

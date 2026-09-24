@@ -10,7 +10,8 @@ import {
 import { ProfileName } from "../layout/Sidebar";
 import { formatTimestamp } from "../../api/rooms";
 import { useOpenUserPreview } from "../../hooks/useOpenUserPreview";
-import { Avatar, Button, EmptyState, IconButton, InlineError, Input, Spinner } from "../ui";
+import { Button, EmptyState, IconButton, InlineError, Input, Spinner } from "../ui";
+import UserAvatar from "../profile/UserAvatar";
 
 const PanelCenter = styled.div`
   display: grid;
@@ -93,6 +94,11 @@ const MessageContent = styled.p`
   margin: var(--space-1) 0 0;
   color: var(--text-primary);
   overflow-wrap: anywhere;
+
+  /* The "(edited)" marker is metadata, so it matches the timestamp. */
+  small {
+    color: var(--text-tertiary);
+  }
 `;
 
 const ReplyQuote = styled.button`
@@ -222,7 +228,7 @@ function MessageItem({
   return (
     <MessageItemRoot id={`message-${message.id}`}>
       <MessageAvatarWrap onClick={canPreview ? openPreview(sender) : undefined}>
-        <Avatar name={message.sender_username} $size={36} />
+        <UserAvatar avatar={message.sender_avatar} name={message.sender_username} $size={36} />
       </MessageAvatarWrap>
 
       <MessageBody>
