@@ -31,3 +31,4 @@ backups/
 !scripts/*.sh
 !infra/backup/*.sh
 !deploy/deploy.sh
+!infra/docker-exporter/*.sh

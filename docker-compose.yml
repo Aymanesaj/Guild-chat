@@ -164,8 +164,7 @@ services:
 
   docker-exporter:
     container_name: docker-exporter
-    # build: ./infra/exporter/
-    image: seraph919/docker-exporter:v2.4
+    build: ./infra/docker-exporter/
     expose:
     - "8090"
     volumes:
@@ -183,7 +182,7 @@ services:
     restart: always
 
   nginx-exporter:
-    build: ./infra/docker-exporter/
+    image: nginx/nginx-prometheus-exporter:1.1.0
     container_name: nginx-exporter
     command:
       - -nginx.scrape-uri=http://nginx:8080/nginx_status
