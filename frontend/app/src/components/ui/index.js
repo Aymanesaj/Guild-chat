@@ -12,4 +12,5 @@ export {
   Spinner,
 } from "./Feedback";
 export { default as ConfirmDialog } from "./ConfirmDialog";
+export { default as SlidePanel } from "./SlidePanel";
 export { default as Skeleton } from "./Skeleton";
