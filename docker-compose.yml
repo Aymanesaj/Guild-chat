@@ -50,6 +50,9 @@ services:
     build: services/org-service/.
     container_name: org-service
     environment:
+      SPRING_DATASOURCE_URL: ${ORG_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${ORG_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${ORG_DATASOURCE_PASSWORD}
       PORT: 8082
     env_file:
       - ./.env
