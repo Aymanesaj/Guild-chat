@@ -13,6 +13,8 @@ import com.fttranscendence.chatservice.dto.MessageResponse;
 import com.fttranscendence.chatservice.model.Message;
 import com.fttranscendence.chatservice.service.MessageCreatedEvent;
 import com.fttranscendence.chatservice.service.MessageEditedEvent;
+import com.fttranscendence.chatservice.service.MessageDeletedEvent;
+
 /**
  * Pushes stored messages to every socket subscribed to their room.
  *
@@ -56,5 +58,11 @@ public class RoomBroadcaster {
     public void onEdited(MessageEditedEvent event) {
         Message message = event.message();
         broadcast(message.getRoomId(), WsEvents.MESSAGE_EDITED, MessageResponse.from(message));
+    }
+
+    @EventListener
+    public void onDelete(MessageDeletedEvent event){
+        Message message = event.message();
+        broadcast(message.getRoomId() , WsEvents.MESSAGE_DELETED , MessageResponse.from(message));
     }
 }

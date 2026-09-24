@@ -157,4 +157,48 @@ class OrgClientTest {
 
         assertThat(System.currentTimeMillis() - start).isLessThan(2000);
     }
+
+    // ------------------------------------------------ role (for moderation)
+
+    private static Consumer<StreamObserver<CheckMembershipResponse>> repliesWithRole(String role) {
+        return observer -> {
+            observer.onNext(CheckMembershipResponse.newBuilder().setIsMember(true).setRole(role).build());
+            observer.onCompleted();
+        };
+    }
+
+    @Test
+    @DisplayName("membership carries the role org-service sends")
+    void membershipCarriesRole() throws Exception {
+        OrgClient client = clientFor(repliesWithRole("ADMIN"), null, 1000);
+
+        Membership membership = client.membership(USER_ID, ROOM);
+
+        assertThat(membership.member()).isTrue();
+        assertThat(membership.role()).isEqualTo("ADMIN");
+        assertThat(membership.canModerate()).isTrue();
+    }
+
+    @Test
+    @DisplayName("no role from org-service (the field is not sent yet) means a plain member")
+    void missingRoleIsPlainMember() throws Exception {
+        OrgClient client = clientFor(replies(true), null, 1000);
+
+        Membership membership = client.membership(USER_ID, ROOM);
+
+        assertThat(membership.member()).isTrue();
+        assertThat(membership.role()).isEmpty();
+        assertThat(membership.canModerate()).isFalse();
+    }
+
+    @Test
+    @DisplayName("NOT_FOUND from org-service is Membership.NONE, which can never moderate")
+    void notFoundIsNone() throws Exception {
+        OrgClient client = clientFor(
+                observer -> observer.onError(io.grpc.Status.NOT_FOUND.asRuntimeException()), null, 1000);
+
+        assertThat(client.membership(USER_ID, ROOM)).isEqualTo(Membership.NONE);
+        assertThat(new Membership(false, "ADMIN").canModerate())
+                .as("a role without membership grants nothing").isFalse();
+    }
 }
