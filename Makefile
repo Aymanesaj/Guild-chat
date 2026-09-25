@@ -59,6 +59,9 @@ backup:
 restore:
 	@./scripts/restore.sh $(SNAPSHOT)
 
+test-recovery:
+	@./scripts/test-disaster-recovery.sh
+
 status:
 	@curl -k -s https://localhost:8443/api/v1/endpoints/statuses | jq '.[] | {name: .name, group: .group, status: (if .results[-1].success then "HEALTHY" else "UNHEALTHY" end), duration_ms: (.results[-1].duration / 1000000)}' 2>/dev/null || echo "Open https://localhost:8443/status/ in browser."
 	@STATUS_USER=$$(grep -E '^STATUS_PAGE_USER=' .env 2>/dev/null | cut -d= -f2); \
