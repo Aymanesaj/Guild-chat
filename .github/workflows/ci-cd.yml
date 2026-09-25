@@ -7,6 +7,9 @@ on:
     branches: [ "main" ]
 
 jobs:
+  # -------------------------------------------------------------
+  # 1. FRONTEND: Lint & Build Validation
+  # -------------------------------------------------------------
   frontend-lint-and-build:
     name: Frontend Lint & Build
     runs-on: ubuntu-latest
@@ -33,6 +36,9 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
+  # -------------------------------------------------------------
+  # 2. BACKEND: Spring Boot Microservices Tests
+  # -------------------------------------------------------------
   backend-tests:
     name: Backend Tests (${{ matrix.service.name }})
     runs-on: ubuntu-latest
@@ -61,6 +67,9 @@ jobs:
         working-directory: ${{ matrix.service.dir }}
         run: ./mvnw test -q
 
+  # -------------------------------------------------------------
+  # 3. DOCKER: Compose Configuration Validation
+  # -------------------------------------------------------------
   validate-compose:
     name: Validate Docker Compose
     runs-on: ubuntu-latest
@@ -74,6 +83,9 @@ jobs:
       - name: Check Compose Syntax
         run: docker compose config -q
 
+  # -------------------------------------------------------------
+  # 4. DEPLOY: Continuous Deployment to OCI Free Tier VM via SSH
+  # -------------------------------------------------------------
   deploy:
     name: Deploy to OCI VM
     needs: [frontend-lint-and-build, backend-tests, validate-compose]
@@ -90,7 +102,7 @@ jobs:
           script: |
             if [ -d ~/ft_transcendence ]; then
               cd ~/ft_transcendence
-              echo "📥 Pulling latest changes from main..."
+              echo "📥 Pulling latest code from main..."
               git fetch origin main
               git reset --hard origin/main
               bash deploy/deploy.sh

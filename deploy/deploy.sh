@@ -3,11 +3,7 @@ set -eo pipefail
 
 cd "$(dirname "$0")/.."
 
-if [ "$1" = "--pull" ]; then
-    echo "📥 Pulling latest changes from Git..."
-    git fetch origin main
-    git reset --hard origin/main
-fi
+git pull origin main
 
 if [ ! -f .env ]; then
     echo "❌ ERROR: .env file is missing in $(pwd)"
@@ -23,6 +19,8 @@ fi
 
 echo "🔨 Building and launching containers..."
 docker compose up -d --build --remove-orphans
+docker compose restart nginx
+
 
 echo "🧹 Pruning dangling images..."
 docker image prune -f
