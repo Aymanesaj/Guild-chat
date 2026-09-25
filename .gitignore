@@ -34,5 +34,6 @@ certs/*
 !gateway/script.sh
 !scripts/*.sh
 !infra/backup/*.sh
-!deploy/deploy.sh
+!deploy/*.sh
+!deploy/*.md
 !infra/docker-exporter/*.sh
