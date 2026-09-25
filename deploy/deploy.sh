@@ -3,12 +3,6 @@ set -eo pipefail
 
 cd "$(dirname "$0")/.."
 
-if [ "$1" = "--pull" ]; then
-    echo "📥 Pulling latest changes from Git..."
-    git fetch origin main
-    git reset --hard origin/main
-fi
-
 if [ ! -f .env ]; then
     echo "❌ ERROR: .env file is missing in $(pwd)"
     exit 1
