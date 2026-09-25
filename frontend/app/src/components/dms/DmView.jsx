@@ -40,7 +40,7 @@ function DmView() {
       try {
         setConversations(await listDmConversations());
         setLoading("success");
-      } catch (error) {
+      } catch {
         setLoading("error");
       }
     }

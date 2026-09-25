@@ -41,9 +41,9 @@ function App() {
   const logOut = async () => {
     try {
       await logoutUser();
+    } catch {
       // The local session is dropped either way: a failed server-side logout
       // still signs the user out of this tab.
-    } catch {
     } finally {
       setUser(null);
     }

@@ -172,7 +172,7 @@ function Sidebar({
         const data = await getRooms();
         setRooms(data);
         setLoaded("success");
-      } catch (error) {
+      } catch {
         setLoaded("error");
       }
     }

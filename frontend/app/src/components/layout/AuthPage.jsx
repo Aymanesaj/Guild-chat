@@ -142,8 +142,10 @@ function LoginView({ setView, onLogin, values, onChange, error, loading }) {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    await onLogin(values.email, values.password);
-    navigate("/app");
+    // A failed sign-in is reported through `error`; stay on the form.
+    if (await onLogin(values.email, values.password)) {
+      navigate("/app");
+    }
   };
 
   return (
@@ -188,8 +190,10 @@ function SignupView({ setView, onSignup, values, onChange, error, loading }) {
 
   const handleSignup = async (e) => {
     e.preventDefault();
-    await onSignup(values.username, values.email, values.password, values.confirmPassword);
-    navigate("/app");
+    // Covers both a rejected registration and a local password mismatch.
+    if (await onSignup(values.username, values.email, values.password, values.confirmPassword)) {
+      navigate("/app");
+    }
   };
 
   return (
@@ -262,19 +266,21 @@ function AuthPage( { onLogin } ) {
     }));
   };
 
+  /** Resolves to true when the session is established, so the view can navigate. */
   const handleLogin = async (email, password) => {
     setLoading(true);
     setError("");
 
     try {
       onLogin(await loginUser(email, password));
+      return true;
     } catch (err) {
       if (err?.status >= 500) {
         setError("Something went wrong. Please try again later.");
       } else {
         setError(err.message);
       }
-      throw err;
+      return false;
     } finally {
       setLoading(false);
     }
@@ -283,7 +289,7 @@ function AuthPage( { onLogin } ) {
   const handleSignup = async (username, email, password, confirmPassword) => {
     if (password !== confirmPassword) {
       setError("Passwords do not match");
-      return;
+      return false;
     }
 
     setLoading(true);
@@ -291,13 +297,14 @@ function AuthPage( { onLogin } ) {
 
     try {
       onLogin(await registerUser(username, email, password));
+      return true;
     } catch (err) {
       if (err?.status >= 500) {
         setError("Something went wrong. Please try again later.");
       } else {
         setError(err.message);
       }
-      throw err;
+      return false;
     } finally {
       setLoading(false);
     }
