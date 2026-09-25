@@ -19,6 +19,8 @@ services:
       - 443:8443
       - 8000:8080
       - 8443:8443
+    volumes:
+      - ./certs:/certs:ro
     networks:
       - private
     depends_on:
