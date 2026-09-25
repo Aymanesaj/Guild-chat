@@ -1,24 +1,18 @@
 Docs/
 docs/
-.env
-infra/exporter/
+z.env
 test.js
 tmp/*
 .vscode/
 *.sh
-*.md
 config/
 services/chat-service/target/
 .idea/
 notes/*
-
-CLAUDE.md
-!GEMINI.md
-
+.env
 # shared with the frontend dev — must be tracked despite the *.md rule above
 # shared documentation — must be tracked despite the *.md rule above
 !services/chat-service/API_CONTRACT.md
-!docs/frontend-backend-gaps.md
 
 node_modules/
 frontend/app/dist/
@@ -26,9 +20,23 @@ frontend/app/dist/
 # backup dumps directory
 backups/
 
+# ssl certificates directory
+certs/*
+!certs/.gitkeep
+
 # track project scripts
 !gateway/script.sh
 !scripts/*.sh
 !infra/backup/*.sh
-!deploy/deploy.sh
+!deploy/*.md
 !infra/docker-exporter/*.sh
+
+# track devops documentation
+!gateway/*.md
+!scripts/*.md
+!infra/*.md
+!infra/**/*.md
+!docs/*.md
+
+# track the root readme
+!README.md

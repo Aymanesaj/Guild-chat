@@ -1,5 +1,6 @@
 import MemberItem from "./MemberItem";
 import styled from "styled-components";
+import { TbShieldCheck, TbShieldOff, TbUserX } from "react-icons/tb";
 
 const MemberListRoot = styled.ul`
   display: flex;
@@ -10,23 +11,79 @@ const MemberListRoot = styled.ul`
   list-style: none;
 `;
 
-function canKickMember({ currentUserId, currentUserRole, member }) {
-  if (currentUserRole !== "owner" && currentUserRole !== "admin") return false;
-  if (member.id === currentUserId) return false;
-  if (member.role === "owner") return false;
-  if (currentUserRole === "admin" && member.role === "admin") return false;
-  return true;
+/**
+ * What the current user may do to a given member.
+ *
+ * org-service is deliberately asymmetric: kicking needs owner *or* admin, but
+ * only the owner may hand out or take back the admin role. Mirroring that here
+ * keeps the menu from offering an option that comes back a 403.
+ */
+function memberActions({
+  currentUserId,
+  currentUserRole,
+  member,
+  onKick,
+  onPromote,
+  onDemote,
+}) {
+  if (currentUserRole !== "owner" && currentUserRole !== "admin") return [];
+  if (member.id === currentUserId) return [];
+  if (member.role === "owner") return [];
+  if (currentUserRole === "admin" && member.role === "admin") return [];
+
+  const actions = [];
+
+  if (currentUserRole === "owner") {
+    actions.push(
+      member.role === "admin"
+        ? {
+            key: "demote",
+            label: "Remove admin",
+            icon: TbShieldOff,
+            onSelect: () => onDemote?.(member),
+          }
+        : {
+            key: "promote",
+            label: "Make admin",
+            icon: TbShieldCheck,
+            onSelect: () => onPromote?.(member),
+          }
+    );
+  }
+
+  actions.push({
+    key: "kick",
+    label: "Kick user",
+    icon: TbUserX,
+    danger: true,
+    onSelect: () => onKick?.(member),
+  });
+
+  return actions;
 }
 
-function MemberList({ members, currentUserId, currentUserRole, onKick }) {
+function MemberList({
+  members,
+  currentUserId,
+  currentUserRole,
+  onKick,
+  onPromote,
+  onDemote,
+}) {
   return (
     <MemberListRoot>
       {members.map((member) => (
         <MemberItem
           key={member.id}
           member={member}
-          canKick={canKickMember({ currentUserId, currentUserRole, member })}
-          onKick={onKick}
+          actions={memberActions({
+            currentUserId,
+            currentUserRole,
+            member,
+            onKick,
+            onPromote,
+            onDemote,
+          })}
         />
       ))}
     </MemberListRoot>

@@ -1,6 +1,6 @@
 import styled from "styled-components";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { TbEye, TbEyeOff } from "react-icons/tb";
 import { loginUser, registerUser } from "../../api/authentication.js";
 import {
@@ -13,6 +13,7 @@ import {
 export const Container = styled.div`
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   background:
@@ -92,6 +93,19 @@ export const Footer = styled.div`
   color: var(--text-secondary);
 `;
 
+const LegalNote = styled.p`
+  margin: var(--space-4) 0 0;
+  max-width: 420px;
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+
+  a {
+    color: var(--text-secondary);
+    text-decoration: underline;
+  }
+`;
+
 export const ErrorText = styled.p`
   margin: -2px 0 0;
   min-height: 18px;
@@ -111,7 +125,7 @@ export const Accent = styled.span`
 `;
 
 /** Password field with a show/hide toggle. */
-function PasswordInput({ placeholder, value, onChange }) {
+function PasswordInput({ placeholder, value, onChange, ...rest }) {
   const [visible, setVisible] = useState(false);
 
   return (
@@ -122,6 +136,7 @@ function PasswordInput({ placeholder, value, onChange }) {
         required
         value={value}
         onChange={onChange}
+        {...rest}
       />
       <IconButton
         type="button"
@@ -141,8 +156,10 @@ function LoginView({ setView, onLogin, values, onChange, error, loading }) {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    await onLogin(values.email, values.password);
-    navigate("/app");
+    // A failed sign-in is reported through `error`; stay on the form.
+    if (await onLogin(values.email, values.password)) {
+      navigate("/app");
+    }
   };
 
   return (
@@ -152,12 +169,16 @@ function LoginView({ setView, onLogin, values, onChange, error, loading }) {
       <Form onSubmit={handleLogin}>
         <Input
           type="text"
+          name="identifier"
+          autoComplete="username"
           placeholder="Email or username"
           required
           value={values.email}
           onChange={(e) => onChange("email", e.target.value)}
         />
         <PasswordInput
+          name="password"
+          autoComplete="current-password"
           placeholder="Password"
           value={values.password}
           onChange={(e) => onChange("password", e.target.value)}
@@ -183,8 +204,10 @@ function SignupView({ setView, onSignup, values, onChange, error, loading }) {
 
   const handleSignup = async (e) => {
     e.preventDefault();
-    await onSignup(values.username, values.email, values.password, values.confirmPassword);
-    navigate("/app");
+    // Covers both a rejected registration and a local password mismatch.
+    if (await onSignup(values.username, values.email, values.password, values.confirmPassword)) {
+      navigate("/app");
+    }
   };
 
   return (
@@ -193,24 +216,32 @@ function SignupView({ setView, onSignup, values, onChange, error, loading }) {
 
       <Form onSubmit={handleSignup}>
         <Input
+          name="username"
+          autoComplete="username"
           placeholder="Username"
           required
           value={values.username}
           onChange={(e) => onChange("username", e.target.value)}
         />
         <Input
-          type="text"
-          placeholder="Email or username"
+          type="email"
+          name="email"
+          autoComplete="email"
+          placeholder="Email"
           required
           value={values.email}
           onChange={(e) => onChange("email", e.target.value)}
         />
         <PasswordInput
+          name="password"
+          autoComplete="new-password"
           placeholder="Password"
           value={values.password}
           onChange={(e) => onChange("password", e.target.value)}
         />
         <PasswordInput
+          name="confirmPassword"
+          autoComplete="new-password"
           placeholder="Confirm Password"
           value={values.confirmPassword}
           onChange={(e) => onChange("confirmPassword", e.target.value)}
@@ -249,19 +280,21 @@ function AuthPage( { onLogin } ) {
     }));
   };
 
+  /** Resolves to true when the session is established, so the view can navigate. */
   const handleLogin = async (email, password) => {
     setLoading(true);
     setError("");
 
     try {
       onLogin(await loginUser(email, password));
+      return true;
     } catch (err) {
       if (err?.status >= 500) {
         setError("Something went wrong. Please try again later.");
       } else {
         setError(err.message);
       }
-      throw err;
+      return false;
     } finally {
       setLoading(false);
     }
@@ -270,7 +303,7 @@ function AuthPage( { onLogin } ) {
   const handleSignup = async (username, email, password, confirmPassword) => {
     if (password !== confirmPassword) {
       setError("Passwords do not match");
-      return;
+      return false;
     }
 
     setLoading(true);
@@ -278,13 +311,14 @@ function AuthPage( { onLogin } ) {
 
     try {
       onLogin(await registerUser(username, email, password));
+      return true;
     } catch (err) {
       if (err?.status >= 500) {
         setError("Something went wrong. Please try again later.");
       } else {
         setError(err.message);
       }
-      throw err;
+      return false;
     } finally {
       setLoading(false);
     }
@@ -327,6 +361,11 @@ function AuthPage( { onLogin } ) {
 
         {renderView()}
       </Card>
+
+      <LegalNote>
+        By continuing you agree to our <Link to="/terms">Terms of Service</Link>{" "}
+        and <Link to="/privacy">Privacy Policy</Link>.
+      </LegalNote>
     </Container>
   );
 }

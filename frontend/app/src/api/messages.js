@@ -163,8 +163,10 @@ async function handleFrame(frame) {
       dispatch(data.room_id, { type: "deleted", id: data.id });
       break;
     case "error":
-      // e.g. NOT_A_MEMBER after being removed from a room; the socket stays open.
-      console.warn(`chat socket: ${data.code}: ${data.message}`);
+      // e.g. NOT_A_MEMBER after being removed from a room; the socket stays
+      // open and the room view reflects the state, so this is a debug-level
+      // note rather than a console warning.
+      console.debug(`chat socket: ${data.code}: ${data.message}`);
       break;
     default:
       break; // unknown events are ignored so the server can add new ones
