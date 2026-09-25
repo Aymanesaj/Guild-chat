@@ -1048,6 +1048,8 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
             <HiddenFileInput
               ref={avatarInputRef}
+              id="avatar-upload"
+              name="avatar"
               type="file"
               accept="image/*"
               onChange={handleAvatarFileChange}
