@@ -26,9 +26,9 @@ function App() {
       .then((me) => {
         if (active) setUser(me);
       })
-      .catch((error) => {
-        console.error("Failed to restore session:", error);
-      })
+      // A rejected /me just means no session to restore: `checking` clears in
+      // finally and the routes below send the user to /auth.
+      .catch(() => {})
       .finally(() => {
         if (active) setChecking(false);
       });
@@ -41,8 +41,9 @@ function App() {
   const logOut = async () => {
     try {
       await logoutUser();
-    } catch (error) {
-      console.error("Failed to log out cleanly:", error);
+    } catch {
+      // The local session is dropped either way: a failed server-side logout
+      // still signs the user out of this tab.
     } finally {
       setUser(null);
     }

@@ -118,8 +118,7 @@ function MembersSidebar({ roomId, onClose }) {
         const roomMembers = await getRoomMembers(roomId);
         setMembers(roomMembers);
         setLoading("success");
-      } catch (error) {
-        console.error("Error fetching room members:", error);
+      } catch {
         setLoading("error");
       }
     };
@@ -139,8 +138,7 @@ function MembersSidebar({ roomId, onClose }) {
         const friendsData = await getFriendsList();
         setFriends(Array.isArray(friendsData) ? friendsData : []);
         setFriendsLoading("success");
-      } catch (error) {
-        console.error("Error fetching friends:", error);
+      } catch {
         setFriendsLoading("error");
       }
     };
@@ -169,8 +167,7 @@ function MembersSidebar({ roomId, onClose }) {
       await removeMember(roomId, pendingKick.id);
       setMembers((prev) => prev.filter((item) => item.id !== pendingKick.id));
       setPendingKick(null);
-    } catch (error) {
-      console.error("Error removing member:", error);
+    } catch {
       setKickError(`Couldn't remove ${pendingKick.username}.`);
     } finally {
       setKicking(false);
@@ -193,8 +190,7 @@ function MembersSidebar({ roomId, onClose }) {
         )
       );
       setPendingRole(null);
-    } catch (error) {
-      console.error("Error updating member role:", error);
+    } catch {
       setRoleError(
         nextRole === "admin"
           ? `Couldn't make ${member.username} an admin.`
@@ -216,7 +212,6 @@ function MembersSidebar({ roomId, onClose }) {
         { ...friend, role: "member" },
       ]);
     } catch (error) {
-      console.error("Error adding member:", error);
       setAddError(error?.message || `Couldn't add ${friend.username}.`);
     } finally {
       setAddingId(null);
