@@ -26,9 +26,14 @@ frontend/app/dist/
 # backup dumps directory
 backups/
 
+# ssl certificates directory
+certs/*
+!certs/.gitkeep
+
 # track project scripts
 !gateway/script.sh
 !scripts/*.sh
 !infra/backup/*.sh
-!deploy/deploy.sh
+!deploy/*.sh
+!deploy/*.md
 !infra/docker-exporter/*.sh
