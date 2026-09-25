@@ -73,14 +73,12 @@ perform_backup() {
     echo "[$(date)] <<< Backup snapshot ${TIMESTAMP} finished successfully!"
 }
 
-# Initial delay before starting automated schedule (prevents wiping 'latest' snapshot on clean boot)
-INITIAL_DELAY="${BACKUP_INITIAL_DELAY:-300}"
-echo "Automated backup service initialized. First scheduled snapshot in ${INITIAL_DELAY}s..."
-sleep "$INITIAL_DELAY"
+# Run immediate backup on startup
+perform_backup
 
 # Loop on schedule
 while true; do
-    perform_backup
     echo "Next automated backup scheduled in ${BACKUP_INTERVAL} seconds..."
     sleep "$BACKUP_INTERVAL"
+    perform_backup
 done
