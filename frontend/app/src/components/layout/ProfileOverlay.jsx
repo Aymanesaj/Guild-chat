@@ -5,12 +5,13 @@ import {
   TbCheck,
   TbDoorExit,
   TbPencil,
-  TbSearch,
+  TbSend,
   TbUserMinus,
   TbX,
 } from "react-icons/tb";
 
 import { useProfileOverlay } from "./ProfileOverlayContext";
+import { useRoomNavigation } from "./RoomNavigationContext";
 import { useAvatarUrl } from "../../hooks/useAvatarUrl";
 import UserAvatar from "../profile/UserAvatar";
 
@@ -33,7 +34,7 @@ import {
   sendFriendRequest,
 } from "../../api/friends";
 
-import { getRooms, leaveRoom } from "../../api/rooms";
+import { getOrCreateDm, getRooms, leaveRoom } from "../../api/rooms";
 
 import { isAvailable } from "../../api/features";
 
@@ -140,6 +141,8 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
     loadingProfile,
     notifyRoomsChanged,
   } = useProfileOverlay();
+
+  const { navigateToRoom } = useRoomNavigation();
 
   const { avatarUrl, loading: avatarLoading } = useAvatarUrl(
     user.avatar_file
@@ -252,9 +255,12 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [sectionError, setSectionError] = useState("");
 
-  // Add friend — the search box sits at the right of the friends tabs row.
+  // Add friend — the invite box sits at the right of the friends tabs row.
   const [friendUsername, setFriendUsername] = useState("");
   const [addingFriend, setAddingFriend] = useState(false);
+
+  // The friend whose DM is being opened, so only that row's button is busy.
+  const [openingDmId, setOpeningDmId] = useState(null);
 
   // Confirmation
   const [confirmAction, setConfirmAction] = useState(null);
@@ -643,7 +649,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
   // Friend search
   // ---------------------------------------------------------------------------
 
-  const handleFriendSearchAdd = async (event) => {
+  const handleFriendInviteAdd = async (event) => {
     event.preventDefault();
 
     const query = friendUsername.trim();
@@ -677,6 +683,35 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
 
   // ---------------------------------------------------------------------------
+  // Direct messages
+  // ---------------------------------------------------------------------------
+
+  /* Opening the room is enough — the composer is waiting there, so nothing is
+     sent from here. DMs stay friends-only because this is a friends list. */
+  const handleOpenDm = async (friend) => {
+    if (openingDmId) return;
+
+    setOpeningDmId(friend.id);
+    setSectionError("");
+
+    try {
+      const room = await getOrCreateDm(friend.id);
+
+      navigateToRoom(room);
+      onClose();
+    } catch (error) {
+      console.error("Failed to open DM:", error);
+
+      setSectionError(
+        error?.message || `Couldn't open a chat with ${friend.username}.`
+      );
+    } finally {
+      setOpeningDmId(null);
+    }
+  };
+
+
+  // ---------------------------------------------------------------------------
   // Rendering helpers
   // ---------------------------------------------------------------------------
 
@@ -693,15 +728,27 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
               </RowName>
 
               {!isPreview && (
-                <ActionButton
-                  type="button"
-                  onClick={() =>
-                    requestRemoveFriend(friend)
-                  }
-                  aria-label={`Remove ${friend.username}`}
-                >
-                  <TbUserMinus size={16} />
-                </ActionButton>
+                <RowActions>
+                  <ActionButton
+                    type="button"
+                    onClick={() => handleOpenDm(friend)}
+                    disabled={openingDmId === friend.id}
+                    aria-label={`Message ${friend.username}`}
+                    title={`Message ${friend.username}`}
+                  >
+                    <TbSend size={16} />
+                  </ActionButton>
+
+                  <ActionButton
+                    type="button"
+                    onClick={() =>
+                      requestRemoveFriend(friend)
+                    }
+                    aria-label={`Remove ${friend.username}`}
+                  >
+                    <TbUserMinus size={16} />
+                  </ActionButton>
+                </RowActions>
               )}
             </ListRow>
           ))
@@ -822,7 +869,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                   {request.sender?.username}
                 </RowName>
 
-                <RequestActions>
+                <RowActions>
                   <ActionButton
                     type="button"
                     onClick={async () => {
@@ -862,7 +909,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                   >
                     <TbX size={16} />
                   </ActionButton>
-                </RequestActions>
+                </RowActions>
               </RequestRow>
             ))
           ) : (
@@ -900,7 +947,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                 {request.receiver?.username}
               </RowName>
 
-              <RequestActions>
+              <RowActions>
                 <ActionButton
                   type="button"
                   onClick={() =>
@@ -912,7 +959,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                 >
                   <TbX size={16} />
                 </ActionButton>
-              </RequestActions>
+              </RowActions>
             </RequestRow>
           ))
         ) : (
@@ -1274,28 +1321,29 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                       Sent
                     </ManagementTab>
 
-                    <FriendSearch
-                      onSubmit={handleFriendSearchAdd}
+                    <FriendInvite
+                      onSubmit={handleFriendInviteAdd}
                     >
-                      <FriendSearchInput
+                      <FriendInviteInput
                         value={friendUsername}
                         onChange={(e) =>
                           setFriendUsername(
                             e.target.value
                           )
                         }
-                        placeholder="Exact username"
-                        aria-label="Add a friend by username"
+                        placeholder="Request by username"
+                        aria-label="Send a friend invite by username"
                       />
 
-                      <FriendSearchButton
+                      <FriendInviteButton
                         type="submit"
                         disabled={addingFriend}
-                        aria-label="Add a friend"
+                        aria-label="Send friend invite"
+                        title="Send friend invite"
                       >
-                        <TbSearch size={16} />
-                      </FriendSearchButton>
-                    </FriendSearch>
+                        <TbSend size={16} />
+                      </FriendInviteButton>
+                    </FriendInvite>
                   </>
                 ) : (
                   <>
@@ -1745,7 +1793,7 @@ const RequestRow = styled(ListRow)`
   justify-content: space-between;
 `;
 
-const RequestActions = styled.div`
+const RowActions = styled.div`
   display: flex;
   align-items: center;
   gap: var(--space-1);
@@ -1764,7 +1812,7 @@ const EmptyState = styled.div`
 // =============================================================================
 
 /* Add-a-friend box, at the far right of the friends tabs row. */
-const FriendSearch = styled.form`
+const FriendInvite = styled.form`
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1781,7 +1829,7 @@ const FriendSearch = styled.form`
   }
 `;
 
-const FriendSearchInput = styled(KitInput)`
+const FriendInviteInput = styled(KitInput)`
   width: 170px;
   padding: 6px 10px;
   font-size: var(--text-sm);
@@ -1795,7 +1843,7 @@ const FriendSearchInput = styled(KitInput)`
   }
 `;
 
-const FriendSearchButton = styled(KitIconButton).attrs({ $size: 28 })`
+const FriendInviteButton = styled(KitIconButton).attrs({ $size: 28 })`
   border-color: var(--border-strong);
 `;
 

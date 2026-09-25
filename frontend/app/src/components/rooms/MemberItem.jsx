@@ -1,8 +1,10 @@
+import { useState } from "react";
 import styled from "styled-components";
-import { TbUserX } from "react-icons/tb";
+import { TbDots } from "react-icons/tb";
 import { useOpenUserPreview } from "../../hooks/useOpenUserPreview";
 import { IconButton, StatusDot } from "../ui";
 import UserAvatar from "../profile/UserAvatar";
+import MemberActionsMenu from "./MemberActionsMenu";
 
 const MemberItemRoot = styled.li`
   display: flex;
@@ -53,8 +55,9 @@ const MemberRole = styled.span`
   text-transform: capitalize;
 `;
 
-function MemberItem({ member, canKick, onKick }) {
+function MemberItem({ member, actions }) {
   const openPreview = useOpenUserPreview();
+  const [menuRect, setMenuRect] = useState(null);
 
   return (
     <MemberItemRoot>
@@ -69,17 +72,26 @@ function MemberItem({ member, canKick, onKick }) {
         <MemberRole>{member.role}</MemberRole>
       )}
 
-      {canKick && (
+      {actions.length > 0 && (
         <IconButton
           type="button"
           $size={24}
-          $danger
-          onClick={() => onKick?.(member)}
-          aria-label={`Remove ${member.username} from room`}
-          title={`Remove ${member.username}`}
+          onClick={(event) => setMenuRect(event.currentTarget.getBoundingClientRect())}
+          aria-label={`Manage ${member.username}`}
+          title={`Manage ${member.username}`}
+          aria-haspopup="menu"
+          aria-expanded={Boolean(menuRect)}
         >
-          <TbUserX size={16} />
+          <TbDots size={16} />
         </IconButton>
+      )}
+
+      {menuRect && (
+        <MemberActionsMenu
+          anchorRect={menuRect}
+          actions={actions}
+          onClose={() => setMenuRect(null)}
+        />
       )}
     </MemberItemRoot>
   );

@@ -199,8 +199,8 @@ function SignupView({ setView, onSignup, values, onChange, error, loading }) {
           onChange={(e) => onChange("username", e.target.value)}
         />
         <Input
-          type="text"
-          placeholder="Email or username"
+          type="email"
+          placeholder="Email"
           required
           value={values.email}
           onChange={(e) => onChange("email", e.target.value)}
