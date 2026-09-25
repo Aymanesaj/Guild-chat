@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "../ui";
 import Hero from "./Hero";
 import Features from "./Features";
+import LegalFooter from "../legal/LegalFooter";
 import { Page, Container, Section, SectionTitle, SectionLead } from "./styles";
 
 const Nav = styled.nav`
@@ -43,15 +44,6 @@ const ClosingActions = styled.div`
   margin-top: var(--space-6);
 `;
 
-const Footer = styled.footer`
-  margin-top: auto;
-  padding: var(--space-5) 0;
-  border-top: 1px solid var(--border-subtle);
-  font-size: var(--text-sm);
-  color: var(--text-tertiary);
-  text-align: center;
-`;
-
 function Landing({ isAuth }) {
   const target = isAuth ? "/app" : "/auth";
   const label = isAuth ? "Open app" : "Create an account";
@@ -85,9 +77,7 @@ function Landing({ isAuth }) {
         </Container>
       </Closing>
 
-      <Footer>
-        <Container>CHATAPP — Built for ft_transcendence</Container>
-      </Footer>
+      <LegalFooter />
     </Page>
   );
 }
