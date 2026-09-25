@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
+import { Link } from "react-router-dom";
 import { TbHash, TbLogout, TbMessageCircle, TbPlus } from "react-icons/tb";
 import { useProfileOverlay } from "./ProfileOverlayContext";
 import { getRooms, createRoom } from "../../api/rooms";
@@ -139,6 +140,24 @@ const ProfileIdentity = styled.div`
   min-width: 0;
 `;
 
+const LegalLinks = styled.nav`
+  display: flex;
+  justify-content: center;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+  font-size: var(--text-xs);
+
+  a {
+    color: var(--text-tertiary);
+    text-decoration: none;
+
+    &:hover {
+      color: var(--text-primary);
+      text-decoration: underline;
+    }
+  }
+`;
+
 export const ProfileName = styled.button`
   border: 0;
   padding: 0;
@@ -222,6 +241,12 @@ function Sidebar({
       />
 
       <ProfilePreview onLogout={onLogout} />
+
+      {/* Opened in a new tab so reading them doesn't drop the current room. */}
+      <LegalLinks aria-label="Legal">
+        <Link to="/privacy" target="_blank">Privacy Policy</Link>
+        <Link to="/terms" target="_blank">Terms of Service</Link>
+      </LegalLinks>
     </SidebarRoot>
   );
 }
