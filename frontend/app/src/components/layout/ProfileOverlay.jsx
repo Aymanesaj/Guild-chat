@@ -178,8 +178,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       await uploadAvatar(file);
       await refreshProfile();
     } catch (error) {
-      console.error("Failed to upload avatar:", error);
-
       setAvatarError(
         error?.message || "Failed to upload avatar."
       );
@@ -210,6 +208,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const [draft, setDraft] = useState({
     displayName: user.displayName ?? "",
@@ -298,10 +297,12 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       bio: user.bio ?? "",
     });
 
+    setSaveError("");
     setIsEditing(true);
   };
 
   const cancelEditing = () => {
+    setSaveError("");
     setIsEditing(false);
   };
 
@@ -311,6 +312,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
     }
 
     setSaving(true);
+    setSaveError("");
 
     try {
       const updated = await updateProfile({
@@ -325,7 +327,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
       setIsEditing(false);
     } catch (error) {
-      console.error("Failed to update profile:", error);
+      setSaveError(error?.message || "Failed to update profile.");
     } finally {
       setSaving(false);
     }
@@ -348,8 +350,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
       setFriends(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error("Failed to load friends preview:", error);
-
       setSectionError(
         error?.message || "Failed to load friends."
       );
@@ -370,8 +370,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
       setRooms(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error("Failed to load rooms preview:", error);
-
       setSectionError(
         error?.message || "Failed to load rooms."
       );
@@ -403,8 +401,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       setFriendsOffset(nextOffset + batch.length);
       setFriendsHasMore(batch.length === MANAGEMENT_PAGE_SIZE);
     } catch (error) {
-      console.error("Failed to load friends:", error);
-
       setSectionError(
         error?.message || "Failed to load friends."
       );
@@ -433,8 +429,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       setRequestsOffset(nextOffset + batch.length);
       setRequestsHasMore(batch.length === MANAGEMENT_PAGE_SIZE);
     } catch (error) {
-      console.error("Failed to load friend requests:", error);
-
       setSectionError(
         error?.message || "Failed to load requests."
       );
@@ -461,8 +455,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       setRoomsOffset(nextOffset + batch.length);
       setRoomsHasMore(batch.length === MANAGEMENT_PAGE_SIZE);
     } catch (error) {
-      console.error("Failed to load rooms:", error);
-
       setSectionError(
         error?.message || "Failed to load rooms."
       );
@@ -491,8 +483,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       setSentOffset(nextOffset + batch.length);
       setSentHasMore(batch.length === MANAGEMENT_PAGE_SIZE);
     } catch (error) {
-      console.error("Failed to load sent requests:", error);
-
       setSectionError(
         error?.message || "Failed to load sent requests."
       );
@@ -634,8 +624,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
       setConfirmAction(null);
     } catch (error) {
-      console.error("Failed to apply profile action:", error);
-
       setConfirmError(
         error?.message || "Failed to apply action."
       );
@@ -671,8 +659,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       // Show the new pending request (the tab change reloads the list).
       setManagementTab("sent");
     } catch (error) {
-      console.error("Failed to add friend:", error);
-
       setSectionError(
         error?.message || "Failed to add friend."
       );
@@ -700,8 +686,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       navigateToRoom(room);
       onClose();
     } catch (error) {
-      console.error("Failed to open DM:", error);
-
       setSectionError(
         error?.message || `Couldn't open a chat with ${friend.username}.`
       );
@@ -1175,6 +1159,10 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                   </IconButton>
                 )}
               </HeaderRow>
+
+              {isEditing && saveError && (
+                <HelperText $error>{saveError}</HelperText>
+              )}
 
               <Divider />
 

@@ -119,7 +119,6 @@ function MembersSidebar({ roomId, onClose }) {
         setMembers(roomMembers);
         setLoading("success");
       } catch (error) {
-        console.error("Error fetching room members:", error);
         setLoading("error");
       }
     };
@@ -140,7 +139,6 @@ function MembersSidebar({ roomId, onClose }) {
         setFriends(Array.isArray(friendsData) ? friendsData : []);
         setFriendsLoading("success");
       } catch (error) {
-        console.error("Error fetching friends:", error);
         setFriendsLoading("error");
       }
     };
@@ -170,7 +168,6 @@ function MembersSidebar({ roomId, onClose }) {
       setMembers((prev) => prev.filter((item) => item.id !== pendingKick.id));
       setPendingKick(null);
     } catch (error) {
-      console.error("Error removing member:", error);
       setKickError(`Couldn't remove ${pendingKick.username}.`);
     } finally {
       setKicking(false);
@@ -194,7 +191,6 @@ function MembersSidebar({ roomId, onClose }) {
       );
       setPendingRole(null);
     } catch (error) {
-      console.error("Error updating member role:", error);
       setRoleError(
         nextRole === "admin"
           ? `Couldn't make ${member.username} an admin.`
@@ -216,7 +212,6 @@ function MembersSidebar({ roomId, onClose }) {
         { ...friend, role: "member" },
       ]);
     } catch (error) {
-      console.error("Error adding member:", error);
       setAddError(error?.message || `Couldn't add ${friend.username}.`);
     } finally {
       setAddingId(null);

@@ -173,7 +173,6 @@ function Sidebar({
         setRooms(data);
         setLoaded("success");
       } catch (error) {
-        console.error("Error fetching rooms:", error);
         setLoaded("error");
       }
     }
@@ -190,7 +189,6 @@ function Sidebar({
       setCreateOpen(false);
       if (onRoomChange) onRoomChange(newRoom);
     } catch (err) {
-      console.error("Failed to create room:", err);
       setCreateError(err?.message || "Failed to create room");
     }
   }

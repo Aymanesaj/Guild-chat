@@ -111,7 +111,7 @@ export const Accent = styled.span`
 `;
 
 /** Password field with a show/hide toggle. */
-function PasswordInput({ placeholder, value, onChange }) {
+function PasswordInput({ placeholder, value, onChange, ...rest }) {
   const [visible, setVisible] = useState(false);
 
   return (
@@ -122,6 +122,7 @@ function PasswordInput({ placeholder, value, onChange }) {
         required
         value={value}
         onChange={onChange}
+        {...rest}
       />
       <IconButton
         type="button"
@@ -152,12 +153,16 @@ function LoginView({ setView, onLogin, values, onChange, error, loading }) {
       <Form onSubmit={handleLogin}>
         <Input
           type="text"
+          name="identifier"
+          autoComplete="username"
           placeholder="Email or username"
           required
           value={values.email}
           onChange={(e) => onChange("email", e.target.value)}
         />
         <PasswordInput
+          name="password"
+          autoComplete="current-password"
           placeholder="Password"
           value={values.password}
           onChange={(e) => onChange("password", e.target.value)}
@@ -193,6 +198,8 @@ function SignupView({ setView, onSignup, values, onChange, error, loading }) {
 
       <Form onSubmit={handleSignup}>
         <Input
+          name="username"
+          autoComplete="username"
           placeholder="Username"
           required
           value={values.username}
@@ -200,17 +207,23 @@ function SignupView({ setView, onSignup, values, onChange, error, loading }) {
         />
         <Input
           type="email"
+          name="email"
+          autoComplete="email"
           placeholder="Email"
           required
           value={values.email}
           onChange={(e) => onChange("email", e.target.value)}
         />
         <PasswordInput
+          name="password"
+          autoComplete="new-password"
           placeholder="Password"
           value={values.password}
           onChange={(e) => onChange("password", e.target.value)}
         />
         <PasswordInput
+          name="confirmPassword"
+          autoComplete="new-password"
           placeholder="Confirm Password"
           value={values.confirmPassword}
           onChange={(e) => onChange("confirmPassword", e.target.value)}

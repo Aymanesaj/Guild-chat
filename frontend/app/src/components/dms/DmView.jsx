@@ -41,7 +41,6 @@ function DmView() {
         setConversations(await listDmConversations());
         setLoading("success");
       } catch (error) {
-        console.error(error);
         setLoading("error");
       }
     }
