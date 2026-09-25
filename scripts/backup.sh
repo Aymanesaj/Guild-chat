@@ -8,7 +8,6 @@ BACKUP_DIR="${PROJECT_DIR}/backups"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 mkdir -p "$BACKUP_DIR"
 
-# Load database credentials from .env if present
 if [ -f "$ENV_FILE" ]; then
     get_env_val() {
         grep -E "^${1}=" "$ENV_FILE" | head -n 1 | cut -d '=' -f 2- | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"
@@ -32,7 +31,6 @@ echo " Timestamp: ${TIMESTAMP}"
 echo " Destination: ${BACKUP_DIR}"
 echo "=========================================="
 
-# 1. Backup PostgreSQL
 PG_FILE="${BACKUP_DIR}/postgres_${TIMESTAMP}.sql.gz"
 PG_LATEST="${BACKUP_DIR}/postgres_latest.sql.gz"
 
@@ -42,7 +40,6 @@ docker exec -e PGPASSWORD="${POSTGRES_PASSWORD}" postgres \
 cp -f "$PG_FILE" "$PG_LATEST"
 echo "  -> Created: ${PG_FILE} ($(du -h "$PG_FILE" | cut -f1))"
 
-# 2. Backup MongoDB
 MONGO_FILE="${BACKUP_DIR}/mongo_${TIMESTAMP}.archive.gz"
 MONGO_LATEST="${BACKUP_DIR}/mongo_latest.archive.gz"
 
@@ -61,4 +58,3 @@ echo "=========================================="
 echo " Backup completed successfully!"
 echo " Latest symlinks updated in ${BACKUP_DIR}"
 echo "=========================================="
-

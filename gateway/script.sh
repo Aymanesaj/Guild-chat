@@ -29,5 +29,4 @@ if [ ! -f /etc/nginx/conf/server.crt ]; then
         -addext "subjectAltName=DNS:guild-chat.tech,DNS:www.guild-chat.tech,DNS:localhost,IP:127.0.0.1"
 fi
 
-# Execute the official OWASP CRS entrypoint so CRS rules are configured
 exec /docker-entrypoint.sh "$@"

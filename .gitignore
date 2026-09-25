@@ -37,3 +37,10 @@ certs/*
 !deploy/*.sh
 !deploy/*.md
 !infra/docker-exporter/*.sh
+
+# track devops documentation
+!gateway/*.md
+!scripts/*.md
+!infra/*.md
+!infra/**/*.md
+!docs/*.md

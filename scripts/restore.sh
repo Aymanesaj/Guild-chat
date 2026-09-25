@@ -6,7 +6,6 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="${PROJECT_DIR}/.env"
 BACKUP_DIR="${PROJECT_DIR}/backups"
 
-# Load database credentials from .env if present
 if [ -f "$ENV_FILE" ]; then
     get_env_val() {
         grep -E "^${1}=" "$ENV_FILE" | head -n 1 | cut -d '=' -f 2- | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"
@@ -34,7 +33,6 @@ if [ ! -d "$BACKUP_DIR" ]; then
     exit 1
 fi
 
-# Determine which PostgreSQL backup to restore
 if [ -n "$1" ]; then
     PG_FILE="${BACKUP_DIR}/postgres_${1}.sql.gz"
     MONGO_FILE="${BACKUP_DIR}/mongo_${1}.archive.gz"
@@ -55,9 +53,7 @@ echo " - PostgreSQL: $(basename "$PG_FILE")"
 echo " - MongoDB:    $(basename "$MONGO_FILE")"
 echo ""
 
-# 1. Restore PostgreSQL
 echo ">>> Restoring PostgreSQL database '${POSTGRES_DB}'..."
-# Terminate existing connections so restore runs cleanly (connect via local socket)
 docker exec -i -e PGPASSWORD="${POSTGRES_PASSWORD}" postgres psql -h /var/run/postgresql -U "$POSTGRES_USER" -d postgres -c "
 SELECT pg_terminate_backend(pid) FROM pg_stat_activity 
 WHERE datname = '${POSTGRES_DB}' AND pid <> pg_backend_pid();
@@ -66,7 +62,6 @@ WHERE datname = '${POSTGRES_DB}' AND pid <> pg_backend_pid();
 gunzip -c "$PG_FILE" | docker exec -i -e PGPASSWORD="${POSTGRES_PASSWORD}" postgres psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "$POSTGRES_DB" > /dev/null
 echo ">>> PostgreSQL restored successfully!"
 
-# 2. Restore MongoDB
 if [ -f "$MONGO_FILE" ]; then
     echo ">>> Restoring MongoDB database..."
     MONGO_AUTH=""
@@ -81,7 +76,6 @@ else
     echo "Notice: MongoDB backup file '$MONGO_FILE' not found, skipped."
 fi
 
-# 3. Verification Summary
 echo ""
 echo "=========================================="
 echo " Disaster Recovery Complete! Verifying..."
@@ -99,4 +93,3 @@ fi
 
 echo ""
 echo "System successfully restored to backup point!"
-

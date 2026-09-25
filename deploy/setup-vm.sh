@@ -5,7 +5,6 @@ echo "======================================================"
 echo " ft_transcendence - OCI Free Tier VM Bootstrap Script"
 echo "======================================================"
 
-# Ensure script is run with sudo or as root
 if [ "$EUID" -ne 0 ]; then
     echo "❌ Please run this script with sudo: sudo bash setup-vm.sh"
     exit 1
@@ -14,7 +13,6 @@ fi
 ACTUAL_USER="${SUDO_USER:-$USER}"
 echo "👤 Target user: ${ACTUAL_USER}"
 
-# 1. Update OS and install prerequisites
 echo "📦 Updating packages and installing prerequisites..."
 apt-get update -y
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
@@ -28,7 +26,6 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
     netfilter-persistent \
     certbot
 
-# 2. Install Docker Engine and Compose Plugin (if not installed)
 if ! command -v docker &> /dev/null; then
     echo "🐳 Installing Docker Engine and Compose..."
     curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
@@ -38,11 +35,9 @@ else
     echo "🐳 Docker is already installed."
 fi
 
-# 3. Add user to docker group
 echo "🔑 Adding ${ACTUAL_USER} to the docker group..."
 usermod -aG docker "${ACTUAL_USER}"
 
-# 4. Configure Docker daemon log rotation (protects OCI boot volume disk space)
 echo "⚙️ Configuring Docker daemon logging..."
 mkdir -p /etc/docker
 cat <<EOF > /etc/docker/daemon.json
@@ -56,10 +51,7 @@ cat <<EOF > /etc/docker/daemon.json
 EOF
 systemctl restart docker
 
-# 5. Open ports in OS-level firewall (Oracle Cloud Ubuntu iptables)
 echo "🛡️ Configuring host firewall rules (iptables)..."
-# Oracle Cloud Ubuntu images include default DROP/REJECT rules at the bottom of INPUT chain.
-# We insert ACCEPT rules at the top.
 PORTS=("22" "80" "443" "8000" "8443")
 for PORT in "${PORTS[@]}"; do
     if ! iptables -C INPUT -p tcp --dport "$PORT" -j ACCEPT 2>/dev/null; then
@@ -73,7 +65,6 @@ done
 echo "💾 Saving iptables rules..."
 netfilter-persistent save
 
-# 6. Prepare SSL Certificates directory
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)"
 if [ -d "$REPO_DIR" ]; then
     echo "🔒 Preparing certs directory in ${REPO_DIR}/certs..."

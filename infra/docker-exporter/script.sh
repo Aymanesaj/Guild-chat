@@ -5,12 +5,9 @@ WEB_ROOT="/tmp/metrics_www"
 DATA_FILE="$WEB_ROOT/metrics.prom"
 NGINX_STATUS_URL="${NGINX_STATUS_URL:-http://nginx/nginx_status}"
 
-# =====================================================================
-# LOGGING
-# =====================================================================
 LOG_LEVEL="${LOG_LEVEL:-INFO}"
 LOG_FILE="$WEB_ROOT/exporter.log"
-LOG_MAX_BYTES=$((5 * 1024 * 1024))  # rotate at 5MB
+LOG_MAX_BYTES=$((5 * 1024 * 1024))
 
 declare -A LOG_LEVELS=( [DEBUG]=0 [INFO]=1 [WARN]=2 [ERROR]=3 )
 
@@ -30,7 +27,6 @@ log() {
     mkdir -p "$WEB_ROOT" 2>/dev/null
     echo "$line" >> "$LOG_FILE" 2>/dev/null
 
-    # simple size-based rotation, keep one previous file
     if [[ -f "$LOG_FILE" ]]; then
         local size
         size=$(stat -c%s "$LOG_FILE" 2>/dev/null || wc -c < "$LOG_FILE" 2>/dev/null)
@@ -40,8 +36,6 @@ log() {
     fi
 }
 
-# time a command, logging start/end/duration/status at DEBUG,
-# and an ERROR line if it failed. Usage: time_stage "label" cmd args...
 time_stage() {
     local label="$1"; shift
     local start end dur status
@@ -60,10 +54,6 @@ time_stage() {
 
 log INFO "Exporter starting (PID $$, LOG_LEVEL=$LOG_LEVEL, PORT=$PORT)"
 
-# Postgres connection: PGHOST, PGPORT, PGUSER, PGDATABASE, PGPASSWORD are all
-# standard libpq env vars — psql reads them automatically, so just set them
-# in the container's env_file (docker-compose) and nothing else is needed here.
-
 mkdir -p "$WEB_ROOT"
 
 collect_data() {
@@ -77,12 +67,8 @@ collect_data() {
         TMP_FILE="/tmp/stats_new.prom"
         > "$TMP_FILE"
 
-        # =====================================================================
-        # 1. HOST HARDWARE METRICS (NATIVE BASH)
-        # =====================================================================
         log DEBUG "Collecting host hardware metrics"
 
-        # 1a. System Uptime
         if [[ -f /proc/uptime ]]; then
             uptime_seconds=$(awk '{print $1}' /proc/uptime)
             echo "# HELP node_uptime_seconds_total System uptime." >> "$TMP_FILE"
@@ -90,7 +76,6 @@ collect_data() {
             echo "node_uptime_seconds_total $uptime_seconds" >> "$TMP_FILE"
         fi
 
-        # 1b. CPU Package Power (Intel/AMD RAPL)
         for rapl in /sys/class/powercap/intel-rapl/intel-rapl:*; do
             if [[ -d "$rapl" ]] && grep -qi "package" "$rapl/name" 2>/dev/null; then
                 e1=$(cat "$rapl/energy_uj" 2>/dev/null)
@@ -106,7 +91,6 @@ collect_data() {
             fi
         done
 
-        # 1c. CPU Core Temperatures
         has_temp_header=0
         for hwmon in /sys/class/hwmon/hwmon*; do
             if [[ -f "$hwmon/name" ]] && grep -q "coretemp" "$hwmon/name"; then
@@ -131,7 +115,6 @@ collect_data() {
             fi
         done
 
-        # 1d. CPU Core Usages (Reads /proc/stat twice over 0.2 seconds)
         declare -A idle1 total1
         while read -r line; do
             if [[ "$line" =~ ^cpu[0-9]+ ]]; then
@@ -165,7 +148,6 @@ collect_data() {
             fi
         done < /proc/stat
 
-        # 1e. CPU Total Usage (aggregate cpu line)
         read -r cpu_name user nice sys idle iowait irq softirq steal guest guest_nice < <(grep '^cpu ' /proc/stat)
         cpu_total_idle=$((idle + iowait))
         cpu_total_all=$((user + nice + sys + idle + iowait + irq + softirq + steal))
@@ -182,7 +164,6 @@ collect_data() {
             echo "node_cpu_total_usage_percent $cpu_total_pct" >> "$TMP_FILE"
         fi
 
-        # 1f. Load Average
         if [[ -f /proc/loadavg ]]; then
             read -r load1 load5 load15 _ < /proc/loadavg
             echo "# HELP node_load_average System load average." >> "$TMP_FILE"
@@ -192,7 +173,6 @@ collect_data() {
             echo "node_load_average{interval=\"15m\"} $load15" >> "$TMP_FILE"
         fi
 
-        # 1g. Host Memory
         if [[ -f /proc/meminfo ]]; then
             mem_total=$(awk '/^MemTotal:/     {print $2 * 1024}' /proc/meminfo)
             mem_avail=$(awk '/^MemAvailable:/ {print $2 * 1024}' /proc/meminfo)
@@ -212,10 +192,8 @@ collect_data() {
             echo "node_memory_cached_bytes $mem_cached" >> "$TMP_FILE"
         fi
 
-        # 1h. Host Network (per interface from /proc/net/dev)
         has_net_header=0
         while read -r line; do
-            # skip header lines
             [[ "$line" == *"|"* ]] && continue
             iface=$(echo "$line" | awk -F: '{print $1}' | tr -d ' ')
             [[ -z "$iface" ]] && continue
@@ -232,11 +210,9 @@ collect_data() {
             echo "node_network_transmit_bytes_total{interface=\"$iface\"} $tx_bytes" >> "$TMP_FILE"
         done < /proc/net/dev
 
-        # 1i. Disk Space (per mount point)
         has_disk_header=0
         while IFS= read -r line; do
             mountpoint=$(echo "$line" | awk '{print $6}')
-            # only real filesystems — skip pseudo mounts
             fstype=$(echo "$line" | awk '{print $1}')
             [[ "$fstype" == tmpfs || "$fstype" == devtmpfs || "$fstype" == sysfs || \
                "$fstype" == proc  || "$fstype" == cgroup*  || "$fstype" == overlay ]] && continue
@@ -264,10 +240,8 @@ collect_data() {
             echo "node_disk_available_bytes{mountpoint=\"$mp_label\"} $avail_bytes" >> "$TMP_FILE"
         done < /proc/mounts
 
-        # 1j. Disk I/O (from /proc/diskstats — physical devices only)
         has_diskio_header=0
         while read -r _ _ dev reads _ sectors_read _ writes _ sectors_written _; do
-            # skip loop, ram, dm devices; keep sd*, nvme*, vd*, xvd*
             [[ "$dev" =~ ^(loop|ram|dm) ]] && continue
             [[ "$dev" =~ ^(sd|nvme|vd|xvd) ]] || continue
             read_bytes=$((sectors_read    * 512))
@@ -283,9 +257,6 @@ collect_data() {
             echo "node_disk_written_bytes_total{device=\"$dev\"} $write_bytes" >> "$TMP_FILE"
         done < /proc/diskstats
 
-        # =====================================================================
-        # 2. NGINX STUB_STATUS METRICS
-        # =====================================================================
         log DEBUG "Fetching nginx stub_status from $NGINX_STATUS_URL"
         nginx_body=$(curl -sf --max-time 2 "$NGINX_STATUS_URL" 2>/dev/null)
         if [[ -z "$nginx_body" ]]; then
@@ -337,16 +308,11 @@ EOF
             echo "nginx_connections_waiting $nginx_waiting"         >> "$TMP_FILE"
         fi
 
-        # =====================================================================
-        # 3. POSTGRESQL METRICS
-        # =====================================================================
-
         TAB=$'\t'
         PSQL=(psql -tAX -F "$TAB" -v ON_ERROR_STOP=1)
 
         log DEBUG "Querying Postgres at ${PGHOST:-unset}:${PGPORT:-unset}/${PGDATABASE:-unset} as ${PGUSER:-unset}"
 
-        # 3a. Connections in use vs max_connections (the #1 "why did prod fall over" metric)
         pg_conn_out=$("${PSQL[@]}" -c "
             SELECT
                 (SELECT count(*) FROM pg_stat_activity),
@@ -384,7 +350,6 @@ EOF
                 log WARN "Postgres has $pg_idle_in_txn connections idle-in-transaction (possible leak)"
             fi
 
-            # 3b. Per-database size, transactions, cache hit ratio, deadlocks, temp files
             echo "# HELP pg_database_size_bytes Size of each database on disk." >> "$TMP_FILE"
             echo "# TYPE pg_database_size_bytes gauge" >> "$TMP_FILE"
             echo "# HELP pg_xact_commit_total Committed transactions per database." >> "$TMP_FILE"
@@ -426,7 +391,6 @@ EOF
                 echo "pg_temp_bytes_total{database=\"$dbname_label\"} $tempbytes"     >> "$TMP_FILE"
             done
 
-            # 3c. Table bloat indicator: dead tuples per table (top offenders only, capped at 20)
             echo "# HELP pg_table_dead_tuples Estimated dead (unvacuumed) tuples per table." >> "$TMP_FILE"
             echo "# TYPE pg_table_dead_tuples gauge" >> "$TMP_FILE"
             echo "# HELP pg_table_seconds_since_vacuum Seconds since last autovacuum ran on the table." >> "$TMP_FILE"
@@ -447,7 +411,6 @@ EOF
                 echo "pg_table_seconds_since_vacuum{table=\"$table_label\"} $vacuumage"    >> "$TMP_FILE"
             done
 
-            # 3d. Replication lag (only emits rows if this instance has replicas/standbys)
             pg_repl_out=$("${PSQL[@]}" -c "
                 SELECT application_name,
                        COALESCE(EXTRACT(EPOCH FROM replay_lag)::numeric, 0)
@@ -463,7 +426,6 @@ EOF
                 done
             fi
 
-            # 3e. Locks currently held/waited on (blocking query indicator)
             pg_locks_out=$("${PSQL[@]}" -c "
                 SELECT count(*) FILTER (WHERE granted),
                        count(*) FILTER (WHERE NOT granted)
@@ -480,9 +442,6 @@ EOF
             fi
         fi
 
-        # =====================================================================
-        # 4. DOCKER CONTAINER METRICS
-        # =====================================================================
         curl -s --unix-socket "$SOCKET" http://localhost/containers/json | \
             jq -r '.[] | [.Id, (.Names[0] | ltrimstr("/")), .Image, (.Id[:12])] | @tsv' \
             > /tmp/ids.tmp 2>/dev/null
@@ -514,7 +473,6 @@ EOF
                 )
             ' >> "$TMP_FILE" 2>/dev/null
 
-            # 4a. Container restart count + OOM killed flag
             curl -s --unix-socket "$SOCKET" \
                 "http://localhost/containers/${clean_id}/json" | \
             jq -r --arg name "$name" --arg image "$image" --arg id "$clean_id" '
@@ -536,9 +494,6 @@ EOF
 # TYPE container_started_at_seconds gauge
 EOF
 
-        # Atomic swap: write to a temp file inside the web root, then rename.
-        # rename() is atomic on the same filesystem, so httpd never serves a
-        # half-written file, and there's no listen/accept race like with `nc`.
         cp "$TMP_FILE" "$WEB_ROOT/.metrics.tmp"
         mv "$WEB_ROOT/.metrics.tmp" "$DATA_FILE"
 

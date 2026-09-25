@@ -1,9 +1,5 @@
 services:
 
-# -----------------------------------------------------------
-# ---------------------- Reverse proxy ----------------------
-# -----------------------------------------------------------
-
   nginx:
     container_name: nginx
     build:
@@ -47,10 +43,6 @@ services:
       retries: 5
     restart: always
 
-# -----------------------------------------------------------
-# ------------------------ Frontend -------------------------
-# -----------------------------------------------------------
-
   frontend:
     build:
       context: ./frontend/app
@@ -66,11 +58,6 @@ services:
       timeout: 3s
       retries: 3
     restart: always
-
-# -----------------------------------------------------------
-# --------------------- Micro services ----------------------
-# -----------------------------------------------------------
-
 
   org-service:
     build: services/org-service/.
@@ -162,10 +149,6 @@ services:
     restart: always
 
 
-# -----------------------------------------------------------
-# --------------------- Data exporters ----------------------
-# -----------------------------------------------------------
-
   docker-exporter:
     container_name: docker-exporter
     build: ./infra/docker-exporter/
@@ -196,7 +179,6 @@ services:
       - nginx
     restart: always
 
-
   prometheus:
     container_name: prometheus
     image: prom/prometheus
@@ -215,7 +197,6 @@ services:
       - private
     restart: always
 
-
   alertmanager:
     container_name: alertmanager
     image: prom/alertmanager:latest
@@ -229,10 +210,6 @@ services:
       - private
     restart: always
 
-
-# -----------------------------------------------------------
-# -------------------- Data visualization -------------------
-# -----------------------------------------------------------
   grafana:
     build: ./infra/grafana/
     container_name: grafana
@@ -252,11 +229,6 @@ services:
       - ./.env
     restart: always
 
-
-# -----------------------------------------------------------
-# ------------------------ Data Base ------------------------
-# -----------------------------------------------------------
-
   postgres:
     image: postgres:16-alpine
     container_name: postgres
@@ -275,10 +247,6 @@ services:
     restart: always
     networks:
       - private
-
-# -----------------------------------------------------------
-# --------- Health Status Page & Automated Backups ----------
-# -----------------------------------------------------------
 
   status-page:
     image: twinproduction/gatus:latest
@@ -309,14 +277,6 @@ services:
         condition: service_healthy
     restart: always
 
-
-
-
-# -----------------------------------------------------------
-# ------------------------ Volumes ------------------------
-# -----------------------------------------------------------
-
-
 volumes:
   database:
     name: "database"
@@ -328,11 +288,6 @@ volumes:
     name: "identity_avatars"
   mongo_data:
     name: "mongo_data"
-
-# -----------------------------------------------------------
-# ------------------------ Networks ------------------------
-# -----------------------------------------------------------
-
 
 networks:
   private:

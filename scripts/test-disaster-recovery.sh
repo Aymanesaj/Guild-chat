@@ -9,13 +9,12 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 echo -e "${BLUE}======================================================${NC}"
 echo -e "${BLUE}    ft_transcendence: Live Disaster Recovery Defense  ${NC}"
 echo -e "${BLUE}======================================================${NC}"
 
-# 1. Insert test records
 echo -e "\n${YELLOW}[STEP 1/5] Injecting test records into PostgreSQL & MongoDB...${NC}"
 docker exec -i postgres sh -c 'psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
   CREATE TABLE IF NOT EXISTS defense_recovery_test (id serial PRIMARY KEY, note text, created_at timestamptz DEFAULT now());
@@ -28,12 +27,10 @@ docker exec -i mongodb sh -c 'mongosh -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONG
 
 echo -e "${GREEN}✓ Test data created in both databases.${NC}"
 
-# 2. Trigger on-demand backup
 echo -e "\n${YELLOW}[STEP 2/5] Triggering on-demand backup snapshot (make backup)...${NC}"
 ./scripts/backup.sh
 echo -e "${GREEN}✓ Backup snapshot successfully created.${NC}"
 
-# 3. Simulate catastrophic disaster
 echo -e "\n${RED}[STEP 3/5] Simulating catastrophic disaster (destroying data)...${NC}"
 docker exec -i postgres sh -c 'psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
   DROP TABLE defense_recovery_test;
@@ -43,7 +40,6 @@ docker exec -i mongodb sh -c 'mongosh -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONG
   db.messages.deleteOne({ content: \"DEFENSE_TEST_CHAT_MESSAGE\" });
 "' > /dev/null
 
-# Verify destruction
 PG_CHECK=$(docker exec -i postgres sh -c 'psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -c "
   SELECT to_regclass('\''defense_recovery_test'\'');
 "' 2>/dev/null | tr -d '[:space:]')
@@ -59,11 +55,9 @@ if [ "$MONGO_CHECK" = "0" ]; then
   echo -e "  - MongoDB: message 'DEFENSE_TEST_CHAT_MESSAGE' is ${RED}GONE${NC} (Confirmed Data Loss)"
 fi
 
-# 4. Execute restore
 echo -e "\n${YELLOW}[STEP 4/5] Executing Disaster Recovery Restore (make restore)...${NC}"
 ./scripts/restore.sh
 
-# 5. Verify resurrection
 echo -e "\n${YELLOW}[STEP 5/5] Verifying restored data...${NC}"
 PG_RESULT=$(docker exec -i postgres sh -c 'psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -c "
   SELECT note FROM defense_recovery_test LIMIT 1;
@@ -73,7 +67,6 @@ MONGO_RESULT=$(docker exec -i mongodb sh -c 'mongosh -u "$MONGO_INITDB_ROOT_USER
   print(db.messages.countDocuments({ content: \"DEFENSE_TEST_CHAT_MESSAGE\" }));
 "' 2>/dev/null | tr -d '[:space:]')
 
-# Cleanup test records
 docker exec -i postgres sh -c 'psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "DROP TABLE IF EXISTS defense_recovery_test;"' > /dev/null 2>&1 || true
 docker exec -i mongodb sh -c 'mongosh -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin chatdb --eval "db.messages.deleteOne({ content: \"DEFENSE_TEST_CHAT_MESSAGE\" });"' > /dev/null 2>&1 || true
 
