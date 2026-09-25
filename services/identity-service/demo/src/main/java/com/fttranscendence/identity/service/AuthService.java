@@ -85,17 +85,15 @@ public class AuthService {
 
 		if (identifier.contains("@")) {
 			identifier = normalizeEmail(identifier);
-			user = userRepository.findByEmailIgnoreCase(identifier);
+			user = userRepository.findByEmailIgnoreCase(identifier)
+				.orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
 		} else {
 			if (!identifier.matches("^[a-zA-Z0-9_]+$")) {
 				throw new BadCredentialsException("Invalid credentials");
 			}
 			identifier = normalizeUsername(identifier);
-			user = userRepository.findByUsernameIgnoreCase(identifier);
-		}
-
-		if (user == null) {
-			throw new BadCredentialsException("Invalid credentials");
+			user = userRepository.findByUsernameIgnoreCase(identifier)
+				.orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
 		}
 
 		if (user.getPasswordHash() == null || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
