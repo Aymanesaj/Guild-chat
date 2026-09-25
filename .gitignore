@@ -36,4 +36,7 @@ certs/*
 !scripts/*.md
 !infra/*.md
 !infra/**/*.md
+!docs/*.md
 
+# track the root readme
+!README.md
