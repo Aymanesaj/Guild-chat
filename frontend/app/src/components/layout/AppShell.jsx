@@ -128,10 +128,16 @@ function AppShellContent({ onLogout }) {
 
   // A loaded list that no longer contains the open room means we were removed
   // from it. Without this the room view stays mounted and subscribed while the
-  // sidebar no longer lists it. Guarded on "success" so neither the initial
-  // empty list nor a failed tick can eject anyone.
+  // sidebar no longer lists it.
+  //
+  // Only group rooms can be judged this way: `rooms` comes from GET /rooms,
+  // which org-service scopes to group rooms (DMs live under /rooms/dm), so a DM
+  // is never in it and testing one here would close it the moment it opened.
+  // Guarded on "success" too, so neither the first empty list nor a failed tick
+  // can eject anyone.
   useEffect(() => {
-    if (roomsState !== "success" || !activeRoomId) return;
+    if (roomsState !== "success") return;
+    if (activeRoomId?.type !== "group") return;
     if (rooms.some((room) => room.id === activeRoomId.id)) return;
     handleDirectMessages();
   }, [rooms, roomsState, activeRoomId, handleDirectMessages]);
