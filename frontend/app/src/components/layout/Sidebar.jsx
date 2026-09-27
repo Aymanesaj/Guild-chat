@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import styled from "styled-components";
 import { Link } from "react-router-dom";
 import { TbHash, TbLogout, TbMessageCircle, TbPlus } from "react-icons/tb";
 import { useProfileOverlay } from "./ProfileOverlayContext";
-import { getRooms, createRoom } from "../../api/rooms";
+import { createRoom } from "../../api/rooms";
 import CreateRoomInput from "./CreateRoomInput";
 import { useAvatarUrl } from "../../hooks/useAvatarUrl";
 import { Avatar, IconButton, InlineError, StatusText } from "../ui";
@@ -172,39 +172,32 @@ export const ProfileName = styled.button`
   }
 `;
 
+/**
+ * The rooms list belongs to AppShell: it is polled for the whole session, and
+ * the shell is the only place that knows both the list and the open room, which
+ * is what it takes to notice we were removed from the room being viewed.
+ */
 function Sidebar({
   isDirectMessages,
   activeRoomId,
+  rooms,
+  roomsState,
+  onRoomCreated,
   onRoomChange,
   onDirectMessages,
   onLogout
 }) {
-  const { roomsRefreshTick } = useProfileOverlay();
-  const [rooms, setRooms] = useState([]);
-  const [loaded, setLoaded] = useState("loading");
   const [createOpen, setCreateOpen] = useState(false);
   const [createError, setCreateError] = useState(null);
-
-  useEffect(() => {
-    async function loadRooms() {
-      try {
-        const data = await getRooms();
-        setRooms(data);
-        setLoaded("success");
-      } catch {
-        setLoaded("error");
-      }
-    }
-
-    loadRooms();
-  }, [roomsRefreshTick]);
 
   async function handleCreateRoom(name) {
     setCreateError(null);
 
     try {
       const newRoom = await createRoom(name);
-      setRooms((prev) => [newRoom, ...prev]);
+      // Shown straight away rather than on the next poll, which also stops the
+      // navigation below from landing on a room the list doesn't have yet.
+      onRoomCreated(newRoom);
       setCreateOpen(false);
       if (onRoomChange) onRoomChange(newRoom);
     } catch (err) {
@@ -226,7 +219,7 @@ function Sidebar({
         isDirectMessages={isDirectMessages}
         activeRoomId={activeRoomId}
         onRoomChange={onRoomChange}
-        state={loaded}
+        state={roomsState}
         onCreate={() => {
           setCreateError(null);
           setCreateOpen((s) => !s);

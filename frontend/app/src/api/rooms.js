@@ -209,29 +209,53 @@ export function toConversation(room) {
   };
 }
 
-/** DM rooms with their newest message attached, newest conversation first. */
-export async function listDmConversations() {
+/** One room's newest message, for the preview line under a conversation. */
+async function attachLastMessage(room) {
+  try {
+    const [last] = await request(
+      `/api/chat/rooms/${room.id}/messages${buildQuery({ limit: 1 })}`,
+      {},
+      "Failed to load messages",
+    );
+    return {
+      ...room,
+      last_message: last ? { content: last.deleted ? "Message deleted" : last.content, sent_at: last.created_at } : null,
+    };
+  } catch {
+    return { ...room, last_message: null };
+  }
+}
+
+const dmSortKey = (room) =>
+  new Date(room.last_message?.sent_at ?? room.updated_at ?? room.created_at ?? 0).getTime();
+
+/** Newest conversation first. A copy: React state is never sorted in place. */
+export function sortDmRooms(rooms) {
+  return [...rooms].sort((a, b) => dmSortKey(b) - dmSortKey(a));
+}
+
+/**
+ * The caller's DM rooms, reusing the previews already in `known`.
+ *
+ * Fetching a preview costs one request per room, so doing it for the whole list
+ * every time makes this N+1 — too expensive to poll. A room we have already
+ * seen keeps the preview we have; only rooms that are new to us are fetched. So
+ * a steady-state poll is a single request, and the extra ones happen only on
+ * the tick where a new conversation first appears.
+ *
+ * The flip side is that an existing conversation's preview and position don't
+ * refresh: this call discovers conversations, it doesn't track their contents.
+ * Rooms that have disappeared are simply absent from the result.
+ */
+export async function syncDmRooms(known = []) {
+  const previews = new Map(known.map((room) => [room.id, room.last_message]));
   const rooms = await getDmRooms();
 
-  const withLast = await Promise.all(
-    rooms.map(async (room) => {
-      try {
-        const [last] = await request(
-          `/api/chat/rooms/${room.id}/messages${buildQuery({ limit: 1 })}`,
-          {},
-          "Failed to load messages",
-        );
-        return {
-          ...room,
-          last_message: last ? { content: last.deleted ? "Message deleted" : last.content, sent_at: last.created_at } : null,
-        };
-      } catch {
-        return { ...room, last_message: null };
-      }
-    }),
+  return Promise.all(
+    rooms.map((room) =>
+      previews.has(room.id)
+        ? { ...room, last_message: previews.get(room.id) }
+        : attachLastMessage(room),
+    ),
   );
-
-  const sortKey = (room) =>
-    new Date(room.last_message?.sent_at ?? room.updated_at ?? room.created_at ?? 0).getTime();
-  return withLast.sort((a, b) => sortKey(b) - sortKey(a)).map(toConversation);
 }
