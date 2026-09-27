@@ -1,9 +1,12 @@
-# FRONTEND
-- Add a check box to the terms and conditions. 
-- OAuth button.
-- make the add friend and join room and more seemless, and unhance the user experince in the chat page.
-- check the input credentials if they are valid (we need to check them in both front and back.)
+# TODO List
 
+*When you complete a task from this list, delete it or cross it out*
 
-# AUTH
-- add mulitble step verification. 
+## FRONTEND
+- [ ] Add a checkbox to the terms and conditions
+- [ ] OAuth button
+- [ ] Make the add friend and join room features more seamless, and enhance the user experience in the chat page
+- [ ] Check the input credentials for validity (we need to check them in both frontend and backend)
+
+## AUTH
+- [ ] Add multi-step verification 
