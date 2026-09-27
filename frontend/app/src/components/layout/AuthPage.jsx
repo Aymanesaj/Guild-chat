@@ -1,6 +1,6 @@
 import styled from "styled-components";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { TbEye, TbEyeOff } from "react-icons/tb";
 import { loginUser, registerUser } from "../../api/authentication.js";
 import {
@@ -13,6 +13,7 @@ import {
 export const Container = styled.div`
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   background:
@@ -90,6 +91,19 @@ export const Footer = styled.div`
   text-align: center;
   font-size: var(--text-sm);
   color: var(--text-secondary);
+`;
+
+const LegalNote = styled.p`
+  margin: var(--space-4) 0 0;
+  max-width: 420px;
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+
+  a {
+    color: var(--text-secondary);
+    text-decoration: underline;
+  }
 `;
 
 export const ErrorText = styled.p`
@@ -347,6 +361,11 @@ function AuthPage( { onLogin } ) {
 
         {renderView()}
       </Card>
+
+      <LegalNote>
+        By continuing you agree to our <Link to="/terms">Terms of Service</Link>{" "}
+        and <Link to="/privacy">Privacy Policy</Link>.
+      </LegalNote>
     </Container>
   );
 }

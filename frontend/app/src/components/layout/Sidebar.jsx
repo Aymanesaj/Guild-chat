@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import styled from "styled-components";
+import { Link } from "react-router-dom";
 import { TbHash, TbLogout, TbMessageCircle, TbPlus } from "react-icons/tb";
 import { useProfileOverlay } from "./ProfileOverlayContext";
-import { getRooms, createRoom } from "../../api/rooms";
+import { createRoom } from "../../api/rooms";
 import CreateRoomInput from "./CreateRoomInput";
 import { useAvatarUrl } from "../../hooks/useAvatarUrl";
 import { Avatar, IconButton, InlineError, StatusText } from "../ui";
@@ -139,6 +140,24 @@ const ProfileIdentity = styled.div`
   min-width: 0;
 `;
 
+const LegalLinks = styled.nav`
+  display: flex;
+  justify-content: center;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+  font-size: var(--text-xs);
+
+  a {
+    color: var(--text-tertiary);
+    text-decoration: none;
+
+    &:hover {
+      color: var(--text-primary);
+      text-decoration: underline;
+    }
+  }
+`;
+
 export const ProfileName = styled.button`
   border: 0;
   padding: 0;
@@ -153,39 +172,32 @@ export const ProfileName = styled.button`
   }
 `;
 
+/**
+ * The rooms list belongs to AppShell: it is polled for the whole session, and
+ * the shell is the only place that knows both the list and the open room, which
+ * is what it takes to notice we were removed from the room being viewed.
+ */
 function Sidebar({
   isDirectMessages,
   activeRoomId,
+  rooms,
+  roomsState,
+  onRoomCreated,
   onRoomChange,
   onDirectMessages,
   onLogout
 }) {
-  const { roomsRefreshTick } = useProfileOverlay();
-  const [rooms, setRooms] = useState([]);
-  const [loaded, setLoaded] = useState("loading");
   const [createOpen, setCreateOpen] = useState(false);
   const [createError, setCreateError] = useState(null);
-
-  useEffect(() => {
-    async function loadRooms() {
-      try {
-        const data = await getRooms();
-        setRooms(data);
-        setLoaded("success");
-      } catch {
-        setLoaded("error");
-      }
-    }
-
-    loadRooms();
-  }, [roomsRefreshTick]);
 
   async function handleCreateRoom(name) {
     setCreateError(null);
 
     try {
       const newRoom = await createRoom(name);
-      setRooms((prev) => [newRoom, ...prev]);
+      // Shown straight away rather than on the next poll, which also stops the
+      // navigation below from landing on a room the list doesn't have yet.
+      onRoomCreated(newRoom);
       setCreateOpen(false);
       if (onRoomChange) onRoomChange(newRoom);
     } catch (err) {
@@ -207,7 +219,7 @@ function Sidebar({
         isDirectMessages={isDirectMessages}
         activeRoomId={activeRoomId}
         onRoomChange={onRoomChange}
-        state={loaded}
+        state={roomsState}
         onCreate={() => {
           setCreateError(null);
           setCreateOpen((s) => !s);
@@ -222,6 +234,12 @@ function Sidebar({
       />
 
       <ProfilePreview onLogout={onLogout} />
+
+      {/* Opened in a new tab so reading them doesn't drop the current room. */}
+      <LegalLinks aria-label="Legal">
+        <Link to="/privacy" target="_blank">Privacy Policy</Link>
+        <Link to="/terms" target="_blank">Terms of Service</Link>
+      </LegalLinks>
     </SidebarRoot>
   );
 }
