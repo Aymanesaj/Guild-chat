@@ -38,6 +38,23 @@ public class AuthService {
 	public AuthResponse register(RegisterRequest request) {
 		String username = normalizeUsername(request.username());
 		String email = normalizeEmail(request.email());
+
+		if (username.isBlank() || email.isBlank() || request.password().isBlank()) {
+			throw new ApiRequestException(HttpStatus.BAD_REQUEST, "Username, email or password are blank");
+		}
+
+		if (request.password().length() < 8) {
+			throw new ApiRequestException(HttpStatus.BAD_REQUEST, "Password must be at least 8 characters long");
+		}
+
+		if (!username.matches("^[a-zA-Z0-9_]+$")) {
+			throw new ApiRequestException(HttpStatus.BAD_REQUEST, "Username can only contain letters, numbers and underscores");
+		}
+
+		if (!email.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) {
+			throw new ApiRequestException(HttpStatus.BAD_REQUEST, "Email is not valid");
+		}
+
 		if (userRepository.existsByUsernameIgnoreCase(username)) {
 			throw new ApiRequestException(HttpStatus.CONFLICT, "Username is already taken");
 		}
@@ -59,9 +76,25 @@ public class AuthService {
 	@Transactional
 	public AuthResponse login(LoginRequest request) {
 		String identifier = request.identifier().trim();
-		UserEntity user = userRepository.findByEmailIgnoreCase(identifier)
-			.or(() -> userRepository.findByUsernameIgnoreCase(identifier))
-			.orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+
+		if (identifier.isBlank() || request.password().isBlank()) {
+			throw new BadCredentialsException("Invalid credentials");
+		}
+
+		UserEntity user;
+
+		if (identifier.contains("@")) {
+			identifier = normalizeEmail(identifier);
+			user = userRepository.findByEmailIgnoreCase(identifier)
+				.orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+		} else {
+			if (!identifier.matches("^[a-zA-Z0-9_]+$")) {
+				throw new BadCredentialsException("Invalid credentials");
+			}
+			identifier = normalizeUsername(identifier);
+			user = userRepository.findByUsernameIgnoreCase(identifier)
+				.orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+		}
 
 		if (user.getPasswordHash() == null || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
 			throw new BadCredentialsException("Invalid credentials");
