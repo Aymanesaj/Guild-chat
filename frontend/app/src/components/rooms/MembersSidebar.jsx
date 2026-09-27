@@ -3,7 +3,7 @@ import styled from "styled-components";
 import { TbArrowLeft, TbUserPlus, TbUsersGroup, TbX } from "react-icons/tb";
 
 import MemberList from "./MemberList";
-import { addMember, getRoomMembers, removeMember } from "../../api/rooms";
+import { addMember, assignRole, getRoomMembers, removeMember } from "../../api/rooms";
 import { getFriendsList } from "../../api/friends";
 import { usePresence } from "../../hooks/usePresence";
 import { useProfileOverlay } from "../layout/ProfileOverlayContext";
@@ -99,6 +99,10 @@ function MembersSidebar({ roomId, onClose }) {
   const [kickError, setKickError] = useState(null);
   const [pendingKick, setPendingKick] = useState(null);
   const [kicking, setKicking] = useState(false);
+  // Its own slot: ConfirmDialog shows one thing at a time.
+  const [pendingRole, setPendingRole] = useState(null);
+  const [roleError, setRoleError] = useState(null);
+  const [roleBusy, setRoleBusy] = useState(false);
 
   const presence = usePresence(members.map((member) => member.id));
 
@@ -114,8 +118,7 @@ function MembersSidebar({ roomId, onClose }) {
         const roomMembers = await getRoomMembers(roomId);
         setMembers(roomMembers);
         setLoading("success");
-      } catch (error) {
-        console.error("Error fetching room members:", error);
+      } catch {
         setLoading("error");
       }
     };
@@ -135,8 +138,7 @@ function MembersSidebar({ roomId, onClose }) {
         const friendsData = await getFriendsList();
         setFriends(Array.isArray(friendsData) ? friendsData : []);
         setFriendsLoading("success");
-      } catch (error) {
-        console.error("Error fetching friends:", error);
+      } catch {
         setFriendsLoading("error");
       }
     };
@@ -165,11 +167,37 @@ function MembersSidebar({ roomId, onClose }) {
       await removeMember(roomId, pendingKick.id);
       setMembers((prev) => prev.filter((item) => item.id !== pendingKick.id));
       setPendingKick(null);
-    } catch (error) {
-      console.error("Error removing member:", error);
+    } catch {
       setKickError(`Couldn't remove ${pendingKick.username}.`);
     } finally {
       setKicking(false);
+    }
+  };
+
+  const confirmRoleChange = async () => {
+    if (!pendingRole) return;
+
+    const { member, nextRole } = pendingRole;
+
+    setRoleBusy(true);
+    setRoleError(null);
+    try {
+      await assignRole(roomId, member.id, nextRole);
+      // The endpoint answers 204 with no body, so the roster is updated here.
+      setMembers((prev) =>
+        prev.map((item) =>
+          item.id === member.id ? { ...item, role: nextRole } : item
+        )
+      );
+      setPendingRole(null);
+    } catch {
+      setRoleError(
+        nextRole === "admin"
+          ? `Couldn't make ${member.username} an admin.`
+          : `Couldn't remove ${member.username}'s admin role.`
+      );
+    } finally {
+      setRoleBusy(false);
     }
   };
 
@@ -184,7 +212,6 @@ function MembersSidebar({ roomId, onClose }) {
         { ...friend, role: "member" },
       ]);
     } catch (error) {
-      console.error("Error adding member:", error);
       setAddError(error?.message || `Couldn't add ${friend.username}.`);
     } finally {
       setAddingId(null);
@@ -247,6 +274,9 @@ function MembersSidebar({ roomId, onClose }) {
             {kickError && !pendingKick && (
               <InlineError role="alert">{kickError}</InlineError>
             )}
+            {roleError && !pendingRole && (
+              <InlineError role="alert">{roleError}</InlineError>
+            )}
             {loading === "success" && (
               <MemberList
                 members={members.map((member) => ({
@@ -256,6 +286,12 @@ function MembersSidebar({ roomId, onClose }) {
                 currentUserId={currentUser?.id}
                 currentUserRole={currentUserRole}
                 onKick={setPendingKick}
+                onPromote={(member) =>
+                  setPendingRole({ member, nextRole: "admin" })
+                }
+                onDemote={(member) =>
+                  setPendingRole({ member, nextRole: "member" })
+                }
               />
             )}
           </>
@@ -326,6 +362,31 @@ function MembersSidebar({ roomId, onClose }) {
         onCancel={() => {
           setPendingKick(null);
           setKickError(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(pendingRole)}
+        title={
+          pendingRole?.nextRole === "admin" ? "Make admin?" : "Remove admin?"
+        }
+        text={
+          pendingRole
+            ? pendingRole.nextRole === "admin"
+              ? `Give ${pendingRole.member.username} admin rights in this room?`
+              : `Take away ${pendingRole.member.username}'s admin rights?`
+            : ""
+        }
+        error={roleError}
+        confirmLabel={
+          pendingRole?.nextRole === "admin" ? "Make admin" : "Remove admin"
+        }
+        busyLabel="Saving..."
+        busy={roleBusy}
+        onConfirm={confirmRoleChange}
+        onCancel={() => {
+          setPendingRole(null);
+          setRoleError(null);
         }}
       />
     </MembersSidebarRoot>

@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import AppShell from "./components/layout/AppShell.jsx";
 import AuthPage from "./components/layout/AuthPage.jsx";
 import Landing from "./components/landing/Landing.jsx";
+import Privacy from "./components/legal/Privacy.jsx";
+import Terms from "./components/legal/Terms.jsx";
 import { getMe, hasSession, logoutUser, LOGOUT_EVENT } from "./api/authentication.js";
 
 function App() {
@@ -26,9 +28,9 @@ function App() {
       .then((me) => {
         if (active) setUser(me);
       })
-      .catch((error) => {
-        console.error("Failed to restore session:", error);
-      })
+      // A rejected /me just means no session to restore: `checking` clears in
+      // finally and the routes below send the user to /auth.
+      .catch(() => {})
       .finally(() => {
         if (active) setChecking(false);
       });
@@ -41,8 +43,9 @@ function App() {
   const logOut = async () => {
     try {
       await logoutUser();
-    } catch (error) {
-      console.error("Failed to log out cleanly:", error);
+    } catch {
+      // The local session is dropped either way: a failed server-side logout
+      // still signs the user out of this tab.
     } finally {
       setUser(null);
     }
@@ -59,6 +62,10 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Landing isAuth={hasLikelySession} />} />
+
+        {/* Public either way: readable before signing up and after signing in. */}
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
 
         <Route
           path="/auth"

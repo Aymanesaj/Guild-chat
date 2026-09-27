@@ -1,3 +1,4 @@
+import { forwardRef, useId } from "react";
 import styled, { css } from "styled-components";
 
 const fieldStyles = css`
@@ -32,16 +33,30 @@ const fieldStyles = css`
   }
 `;
 
-const Input = styled.input`
+const StyledInput = styled.input`
   ${fieldStyles}
 `;
 
-export const TextArea = styled.textarea`
+const StyledTextArea = styled.textarea`
   ${fieldStyles}
   resize: vertical;
   min-height: 84px;
   line-height: 1.5;
 `;
+
+/**
+ * Falls back to a generated id so fields always satisfy the browser's
+ * "form field should have an id or name" autofill hint.
+ */
+const Input = forwardRef(function Input({ id, ...props }, ref) {
+  const fallbackId = useId();
+  return <StyledInput ref={ref} id={id ?? fallbackId} {...props} />;
+});
+
+export const TextArea = forwardRef(function TextArea({ id, ...props }, ref) {
+  const fallbackId = useId();
+  return <StyledTextArea ref={ref} id={id ?? fallbackId} {...props} />;
+});
 
 export const Label = styled.label`
   display: block;

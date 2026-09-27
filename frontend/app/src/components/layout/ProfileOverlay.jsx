@@ -5,12 +5,13 @@ import {
   TbCheck,
   TbDoorExit,
   TbPencil,
-  TbSearch,
+  TbSend,
   TbUserMinus,
   TbX,
 } from "react-icons/tb";
 
 import { useProfileOverlay } from "./ProfileOverlayContext";
+import { useRoomNavigation } from "./RoomNavigationContext";
 import { useAvatarUrl } from "../../hooks/useAvatarUrl";
 import UserAvatar from "../profile/UserAvatar";
 
@@ -33,7 +34,7 @@ import {
   sendFriendRequest,
 } from "../../api/friends";
 
-import { getRooms, leaveRoom } from "../../api/rooms";
+import { getOrCreateDm, getRooms, leaveRoom } from "../../api/rooms";
 
 import { isAvailable } from "../../api/features";
 
@@ -141,6 +142,8 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
     notifyRoomsChanged,
   } = useProfileOverlay();
 
+  const { navigateToRoom } = useRoomNavigation();
+
   const { avatarUrl, loading: avatarLoading } = useAvatarUrl(
     user.avatar_file
   );
@@ -175,8 +178,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       await uploadAvatar(file);
       await refreshProfile();
     } catch (error) {
-      console.error("Failed to upload avatar:", error);
-
       setAvatarError(
         error?.message || "Failed to upload avatar."
       );
@@ -207,6 +208,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const [draft, setDraft] = useState({
     displayName: user.displayName ?? "",
@@ -252,9 +254,12 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [sectionError, setSectionError] = useState("");
 
-  // Add friend — the search box sits at the right of the friends tabs row.
+  // Add friend — the invite box sits at the right of the friends tabs row.
   const [friendUsername, setFriendUsername] = useState("");
   const [addingFriend, setAddingFriend] = useState(false);
+
+  // The friend whose DM is being opened, so only that row's button is busy.
+  const [openingDmId, setOpeningDmId] = useState(null);
 
   // Confirmation
   const [confirmAction, setConfirmAction] = useState(null);
@@ -292,10 +297,12 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       bio: user.bio ?? "",
     });
 
+    setSaveError("");
     setIsEditing(true);
   };
 
   const cancelEditing = () => {
+    setSaveError("");
     setIsEditing(false);
   };
 
@@ -305,6 +312,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
     }
 
     setSaving(true);
+    setSaveError("");
 
     try {
       const updated = await updateProfile({
@@ -319,7 +327,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
       setIsEditing(false);
     } catch (error) {
-      console.error("Failed to update profile:", error);
+      setSaveError(error?.message || "Failed to update profile.");
     } finally {
       setSaving(false);
     }
@@ -342,8 +350,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
       setFriends(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error("Failed to load friends preview:", error);
-
       setSectionError(
         error?.message || "Failed to load friends."
       );
@@ -364,8 +370,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
       setRooms(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error("Failed to load rooms preview:", error);
-
       setSectionError(
         error?.message || "Failed to load rooms."
       );
@@ -397,8 +401,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       setFriendsOffset(nextOffset + batch.length);
       setFriendsHasMore(batch.length === MANAGEMENT_PAGE_SIZE);
     } catch (error) {
-      console.error("Failed to load friends:", error);
-
       setSectionError(
         error?.message || "Failed to load friends."
       );
@@ -427,8 +429,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       setRequestsOffset(nextOffset + batch.length);
       setRequestsHasMore(batch.length === MANAGEMENT_PAGE_SIZE);
     } catch (error) {
-      console.error("Failed to load friend requests:", error);
-
       setSectionError(
         error?.message || "Failed to load requests."
       );
@@ -455,8 +455,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       setRoomsOffset(nextOffset + batch.length);
       setRoomsHasMore(batch.length === MANAGEMENT_PAGE_SIZE);
     } catch (error) {
-      console.error("Failed to load rooms:", error);
-
       setSectionError(
         error?.message || "Failed to load rooms."
       );
@@ -485,8 +483,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       setSentOffset(nextOffset + batch.length);
       setSentHasMore(batch.length === MANAGEMENT_PAGE_SIZE);
     } catch (error) {
-      console.error("Failed to load sent requests:", error);
-
       setSectionError(
         error?.message || "Failed to load sent requests."
       );
@@ -628,8 +624,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
       setConfirmAction(null);
     } catch (error) {
-      console.error("Failed to apply profile action:", error);
-
       setConfirmError(
         error?.message || "Failed to apply action."
       );
@@ -643,7 +637,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
   // Friend search
   // ---------------------------------------------------------------------------
 
-  const handleFriendSearchAdd = async (event) => {
+  const handleFriendInviteAdd = async (event) => {
     event.preventDefault();
 
     const query = friendUsername.trim();
@@ -665,13 +659,38 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       // Show the new pending request (the tab change reloads the list).
       setManagementTab("sent");
     } catch (error) {
-      console.error("Failed to add friend:", error);
-
       setSectionError(
         error?.message || "Failed to add friend."
       );
     } finally {
       setAddingFriend(false);
+    }
+  };
+
+
+  // ---------------------------------------------------------------------------
+  // Direct messages
+  // ---------------------------------------------------------------------------
+
+  /* Opening the room is enough — the composer is waiting there, so nothing is
+     sent from here. DMs stay friends-only because this is a friends list. */
+  const handleOpenDm = async (friend) => {
+    if (openingDmId) return;
+
+    setOpeningDmId(friend.id);
+    setSectionError("");
+
+    try {
+      const room = await getOrCreateDm(friend.id);
+
+      navigateToRoom(room);
+      onClose();
+    } catch (error) {
+      setSectionError(
+        error?.message || `Couldn't open a chat with ${friend.username}.`
+      );
+    } finally {
+      setOpeningDmId(null);
     }
   };
 
@@ -693,15 +712,27 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
               </RowName>
 
               {!isPreview && (
-                <ActionButton
-                  type="button"
-                  onClick={() =>
-                    requestRemoveFriend(friend)
-                  }
-                  aria-label={`Remove ${friend.username}`}
-                >
-                  <TbUserMinus size={16} />
-                </ActionButton>
+                <RowActions>
+                  <ActionButton
+                    type="button"
+                    onClick={() => handleOpenDm(friend)}
+                    disabled={openingDmId === friend.id}
+                    aria-label={`Message ${friend.username}`}
+                    title={`Message ${friend.username}`}
+                  >
+                    <TbSend size={16} />
+                  </ActionButton>
+
+                  <ActionButton
+                    type="button"
+                    onClick={() =>
+                      requestRemoveFriend(friend)
+                    }
+                    aria-label={`Remove ${friend.username}`}
+                  >
+                    <TbUserMinus size={16} />
+                  </ActionButton>
+                </RowActions>
               )}
             </ListRow>
           ))
@@ -822,7 +853,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                   {request.sender?.username}
                 </RowName>
 
-                <RequestActions>
+                <RowActions>
                   <ActionButton
                     type="button"
                     onClick={async () => {
@@ -862,7 +893,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                   >
                     <TbX size={16} />
                   </ActionButton>
-                </RequestActions>
+                </RowActions>
               </RequestRow>
             ))
           ) : (
@@ -900,7 +931,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                 {request.receiver?.username}
               </RowName>
 
-              <RequestActions>
+              <RowActions>
                 <ActionButton
                   type="button"
                   onClick={() =>
@@ -912,7 +943,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                 >
                   <TbX size={16} />
                 </ActionButton>
-              </RequestActions>
+              </RowActions>
             </RequestRow>
           ))
         ) : (
@@ -1001,6 +1032,8 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
             <HiddenFileInput
               ref={avatarInputRef}
+              id="avatar-upload"
+              name="avatar"
               type="file"
               accept="image/*"
               onChange={handleAvatarFileChange}
@@ -1126,6 +1159,10 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                   </IconButton>
                 )}
               </HeaderRow>
+
+              {isEditing && saveError && (
+                <HelperText $error>{saveError}</HelperText>
+              )}
 
               <Divider />
 
@@ -1274,28 +1311,29 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                       Sent
                     </ManagementTab>
 
-                    <FriendSearch
-                      onSubmit={handleFriendSearchAdd}
+                    <FriendInvite
+                      onSubmit={handleFriendInviteAdd}
                     >
-                      <FriendSearchInput
+                      <FriendInviteInput
                         value={friendUsername}
                         onChange={(e) =>
                           setFriendUsername(
                             e.target.value
                           )
                         }
-                        placeholder="Exact username"
-                        aria-label="Add a friend by username"
+                        placeholder="Request by username"
+                        aria-label="Send a friend invite by username"
                       />
 
-                      <FriendSearchButton
+                      <FriendInviteButton
                         type="submit"
                         disabled={addingFriend}
-                        aria-label="Add a friend"
+                        aria-label="Send friend invite"
+                        title="Send friend invite"
                       >
-                        <TbSearch size={16} />
-                      </FriendSearchButton>
-                    </FriendSearch>
+                        <TbSend size={16} />
+                      </FriendInviteButton>
+                    </FriendInvite>
                   </>
                 ) : (
                   <>
@@ -1745,7 +1783,7 @@ const RequestRow = styled(ListRow)`
   justify-content: space-between;
 `;
 
-const RequestActions = styled.div`
+const RowActions = styled.div`
   display: flex;
   align-items: center;
   gap: var(--space-1);
@@ -1764,7 +1802,7 @@ const EmptyState = styled.div`
 // =============================================================================
 
 /* Add-a-friend box, at the far right of the friends tabs row. */
-const FriendSearch = styled.form`
+const FriendInvite = styled.form`
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1781,7 +1819,7 @@ const FriendSearch = styled.form`
   }
 `;
 
-const FriendSearchInput = styled(KitInput)`
+const FriendInviteInput = styled(KitInput)`
   width: 170px;
   padding: 6px 10px;
   font-size: var(--text-sm);
@@ -1795,7 +1833,7 @@ const FriendSearchInput = styled(KitInput)`
   }
 `;
 
-const FriendSearchButton = styled(KitIconButton).attrs({ $size: 28 })`
+const FriendInviteButton = styled(KitIconButton).attrs({ $size: 28 })`
   border-color: var(--border-strong);
 `;
 

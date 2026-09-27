@@ -39,6 +39,13 @@ public abstract class MongoTestSupport {
 
     @DynamicPropertySource
     static void mongoProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.data.mongodb.host", MONGO::getHost);
+        registry.add("spring.data.mongodb.port", () -> MONGO.getMappedPort(27017));
+        registry.add("spring.data.mongodb.database", () -> DATABASE);
+        registry.add("spring.data.mongodb.username", () -> USERNAME);
+        registry.add("spring.data.mongodb.password", () -> PASSWORD);
+        registry.add("spring.data.mongodb.authentication-database", () -> "admin");
+
         registry.add("CHAT_MONGO_HOST", MONGO::getHost);
         registry.add("CHAT_MONGO_PORT", () -> MONGO.getMappedPort(27017));
         registry.add("CHAT_MONGO_DB", () -> DATABASE);
