@@ -30,3 +30,4 @@ backups/
 !gateway/script.sh
 !scripts/*.sh
 !infra/backup/*.sh
+.idea/
