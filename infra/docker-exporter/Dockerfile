@@ -1,6 +1,6 @@
 FROM alpine:latest
 
-RUN apk add --no-cache curl jq busybox-extras postgresql-client bash 
+RUN apk add --no-cache curl jq busybox-extras bash
 
 COPY script.sh /
 

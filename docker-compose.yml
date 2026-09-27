@@ -141,8 +141,6 @@ services:
       start_period: 15s
     env_file:
       - ./.env
-    volumes:
-      - identity_avatars:/tmp/identity-avatars
     depends_on:
       postgres:
         condition: service_healthy
@@ -158,8 +156,6 @@ services:
       - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
     networks:
     - private
-    env_file:
-    - ./.env
     healthcheck:
       test: ["CMD", "curl", "-f", "http://docker-exporter:8090/metrics.prom"]
       interval: 30s

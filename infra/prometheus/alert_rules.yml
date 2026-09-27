@@ -10,26 +10,8 @@ groups:
           summary: "Microservice {{ $labels.job }} is DOWN"
           description: "Microservice target {{ $labels.job }} at {{ $labels.instance }} has been down for > 30 seconds."
 
-      - alert: ContainerDown
-        expr: max_over_time(container_running[5m]) == 1 unless container_running == 1
-        for: 30s
-        labels:
-          severity: critical
-        annotations:
-          summary: "Container {{ $labels.container }} is DOWN"
-          description: "Container {{ $labels.container }} was active recently but is no longer reporting as running."
-
-      - alert: ContainerOOMKilled
-        expr: container_oom_killed == 1
-        for: 0m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Container {{ $labels.container }} OOM KILLED"
-          description: "The Linux kernel has forcefully killed container {{ $labels.container }} due to out-of-memory constraints."
-
       - alert: HighContainerCpuUsage
-        expr: container_cpu_usage_percentage > 85
+        expr: rate(container_cpu_usage_total_nanoseconds[1m]) / 1000000000 * 100 > 85
         for: 2m
         labels:
           severity: warning
