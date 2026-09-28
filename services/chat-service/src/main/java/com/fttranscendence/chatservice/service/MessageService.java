@@ -133,13 +133,6 @@ public class MessageService {
         return loadVisible(userId,  messageId);
     }
 
-    /**
-    /* Shared by GET, PATCH and DELETE on /messages/:id.
-    /*
-    /* A non-member gets the SAME 404 as an unknown id: a 403 would confirm
-    /* that the message exists in a room they cannot read. The room id is not
-    /* in the URL here, so unlike history there is nothing public to protect.
-    */
     private Message findMessage(String messageId){
         if (!ObjectId.isValid(messageId)){
             throw ApiException.badRequest("INVALID_MESSAGE_ID", "'id' is not a valid message id");

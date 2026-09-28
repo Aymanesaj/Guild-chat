@@ -29,7 +29,7 @@ import jakarta.validation.Valid;
 @RestController
 @RequestMapping("/messages/{messageId}")
 public class MessageItemController {
-    public final MessageService messageService;
+    private final MessageService messageService;
 
     public MessageItemController(MessageService messageService) {
         this.messageService = messageService;
