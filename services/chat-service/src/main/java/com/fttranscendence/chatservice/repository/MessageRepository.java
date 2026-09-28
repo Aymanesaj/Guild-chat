@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 
 import org.springframework.data.domain.Limit;
+import org.springframework.data.mongodb.repository.Aggregation;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.data.mongodb.repository.Update;
@@ -39,4 +40,22 @@ public interface MessageRepository extends MongoRepository<Message , String> {
     @Query("{ '_id': ?0, 'deleted_at': null }")
     @Update("{ '$set': { 'content': ?1, 'edited_at': ?2 } }")
     long applyEditIfLive(String id, String content, Instant editedAt);
+
+
+
+  /**
+     * Newest message of each room, in one query. Rooms with no messages are
+     * simply absent from the result.
+     *
+     * The sort is room_id ASC, _id DESC: the exact shape of the
+     * room_id_1__id_-1 index, so Mongo reads one index entry per room
+     * instead of every message.
+     */
+    @Aggregation(pipeline= {
+        "{ '$match': { 'room_id': { '$in' : ?0 }  } } ",
+        "{ '$sort': { 'room_id' : 1 , '_id' : -1 } }",
+        "{ '$group': { '_id' : '$room_id' , 'latest' : { '$first' : '$$ROOT'  } } } ",
+        "{ '$replaceRoot' : { 'newRoot' : '$latest' } }"
+    })
+    List<Message> findLatestMessagesByRoomIds(List<Long> roomIds);
 }

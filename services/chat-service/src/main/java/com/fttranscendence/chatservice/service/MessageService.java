@@ -3,7 +3,9 @@ package com.fttranscendence.chatservice.service;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.bson.types.ObjectId;
 import org.springframework.context.ApplicationEventPublisher;
@@ -26,6 +28,7 @@ public class MessageService {
 
     static final int DEFAULT_LIMIT = 50;
     static final int MAX_LIMIT = 100;
+    static final int MAX_PREVIEW_ROOMS = 100;
 
     private final MessageRepository messageRepository;
     private final OrgClient orgClient;
@@ -111,6 +114,42 @@ public class MessageService {
         }
 
         return messageRepository.findByRoomIdAndIdLessThanOrderByIdDesc(roomId, before, pageSize);
+    }
+
+    /**
+     * Newest message of each requested room, for conversation previews.
+     *
+     * Rooms the caller is not a member of are left out entirely: not an
+     * error, so the answer cannot be used to probe which rooms exist.
+     * A room the caller is in but with no messages yet maps to null.
+     */
+
+    public Map<Long, Message> latestMessages(String userId, List<Long> roomIds) {
+        List<Long> wanted = roomIds == null ? List.of() : roomIds.stream().distinct().toList();
+
+
+        if (wanted.isEmpty()) {
+            throw ApiException.badRequest("MISSING_IDS", "'ids' must list at least one room id");
+        }
+        if (wanted.size() > MAX_PREVIEW_ROOMS) {
+            throw ApiException.badRequest("TOO_MANY_IDS", "'ids' must list at most " + MAX_PREVIEW_ROOMS + " room ids");
+        }
+
+
+        List<Long> allowed = wanted.stream()
+        .filter( roomId -> orgClient.isMember(userId , roomId))
+        .toList();
+        Map<Long, Message> latest = new LinkedHashMap<>();
+
+        allowed.forEach(roomId -> latest.put(roomId , null));
+
+
+        if(!allowed.isEmpty()) {
+            messageRepository.findLatestMessagesByRoomIds(allowed)
+            .forEach(message -> latest.put(message.getRoomId() , message));
+        }
+
+        return latest ;
     }
 
     private int validateLimit(Integer limit) {

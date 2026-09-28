@@ -185,4 +185,73 @@ class MessageRepositoryTest extends MongoTestSupport {
 
         assertThat(repository.findById(other.getId()).orElseThrow().isDeleted()).isFalse();
     }
+
+    // ---- findLatestMessagesByRoomIds: conversation previews ----
+
+    @Test
+    @DisplayName("latest per room: the newest message of each requested room, one each")
+    void latestPerRoomPicksTheNewest() {
+        send(ROOM, "old");
+        send(ROOM, "newest in room");
+        send(OTHER_ROOM, "old other");
+        send(OTHER_ROOM, "newest in other");
+
+        List<Message> latest = repository.findLatestMessagesByRoomIds(List.of(ROOM, OTHER_ROOM));
+
+        assertThat(latest)
+                .extracting(Message::getContent)
+                .containsExactlyInAnyOrder("newest in room", "newest in other");
+    }
+
+    @Test
+    @DisplayName("latest per room: newest means highest _id, even when created_at disagrees")
+    void latestPerRoomOrdersById() {
+        // saved second, so its ObjectId is higher, but its created_at is older
+        repository.save(Message.create(ROOM, ALICE, null, "first saved", "text", Instant.parse("2026-09-20T12:00:00Z")));
+        repository.save(Message.create(ROOM, ALICE, null, "second saved", "text", Instant.parse("2020-01-01T00:00:00Z")));
+
+        List<Message> latest = repository.findLatestMessagesByRoomIds(List.of(ROOM));
+
+        assertThat(latest).extracting(Message::getContent).containsExactly("second saved");
+    }
+
+    @Test
+    @DisplayName("latest per room: rooms not asked for are ignored; rooms with no messages are absent")
+    void latestPerRoomOnlyTheRequestedRooms() {
+        send(ROOM, "in room");
+        send(OTHER_ROOM, "not asked for");
+
+        List<Message> latest = repository.findLatestMessagesByRoomIds(List.of(ROOM, 12345L));
+
+        assertThat(latest).extracting(Message::getRoomId).containsExactly(ROOM);
+    }
+
+    @Test
+    @DisplayName("latest per room: a deleted newest message is still the newest (the DTO hides it)")
+    void latestPerRoomIncludesDeleted() {
+        send(ROOM, "older");
+        Message newest = send(ROOM, "deleted newest");
+        repository.markDeletedIfLive(newest.getId(), Instant.now());
+
+        List<Message> latest = repository.findLatestMessagesByRoomIds(List.of(ROOM));
+
+        assertThat(latest).singleElement().satisfies(m -> {
+            assertThat(m.getId()).isEqualTo(newest.getId());
+            assertThat(m.isDeleted()).isTrue();
+        });
+    }
+
+    @Test
+    @DisplayName("latest per room: every field is mapped back, not just content")
+    void latestPerRoomMapsTheWholeDocument() {
+        Message saved = send(ROOM, "hello");
+
+        Message latest = repository.findLatestMessagesByRoomIds(List.of(ROOM)).get(0);
+
+        assertThat(latest.getId()).isEqualTo(saved.getId());
+        assertThat(latest.getRoomId()).isEqualTo(ROOM);
+        assertThat(latest.getSenderId()).isEqualTo(ALICE);
+        assertThat(latest.getContentType()).isEqualTo("text");
+        assertThat(latest.getCreatedAt()).isNotNull();
+    }
 }
