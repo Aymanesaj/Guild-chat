@@ -48,8 +48,8 @@ jobs:
         service:
           - name: Chat Service
             dir: services/chat-service
-          - name: Identity Service
-            dir: services/identity-service/demo
+          # - name: Identity Service
+          #   dir: services/identity-service/demo
           - name: Org Service
             dir: services/org-service
     steps:
