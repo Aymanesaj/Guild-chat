@@ -6,8 +6,8 @@ package com.fttranscendence.chatservice.websocket;
  *
  * Not implemented on purpose:
  *   - "typing"   — dropped for v1 by decision of the chat-service owner
- *   - "presence" — identity owns presence and has no push path into chat
- */
+ *   - "presence" — clients poll GET /presence instead (PresenceRegistry)
+*/
 public final class WsEvents {
 
     // client → server

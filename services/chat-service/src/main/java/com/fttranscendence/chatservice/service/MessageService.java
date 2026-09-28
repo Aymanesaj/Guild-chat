@@ -10,8 +10,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 
-import com.fttranscendence.chatservice.grpc.Membership;
 import com.fttranscendence.chatservice.exception.ApiException;
+import com.fttranscendence.chatservice.grpc.Membership;
 import com.fttranscendence.chatservice.grpc.OrgClient;
 import com.fttranscendence.chatservice.model.Message;
 import com.fttranscendence.chatservice.repository.MessageRepository;
@@ -139,9 +139,7 @@ public class MessageService {
     /* A non-member gets the SAME 404 as an unknown id: a 403 would confirm
     /* that the message exists in a room they cannot read. The room id is not
     /* in the URL here, so unlike history there is nothing public to protect.
-    /*/
-
-    /** 400 for a malformed id, 404 for an unknown one. No membership check. */
+    */
     private Message findMessage(String messageId){
         if (!ObjectId.isValid(messageId)){
             throw ApiException.badRequest("INVALID_MESSAGE_ID", "'id' is not a valid message id");
@@ -155,7 +153,7 @@ public class MessageService {
      * that the message exists in a room they cannot read.
      */
     private Message loadVisible(String userId,  String messageId) {
-        Message message = findMessage(messageId); 
+        Message message = findMessage(messageId);
         if(!orgClient.isMember(userId, message.getRoomId())) {
             throw ApiException.notFound("MESSAGE_NOT_FOUND", "Message does not exist");
         }
