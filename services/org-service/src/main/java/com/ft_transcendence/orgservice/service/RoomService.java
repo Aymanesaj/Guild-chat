@@ -275,7 +275,7 @@ public class RoomService {
         memberRoleRepository.deleteAllByRoomMember(roomMember);
         roomMemberRepository.delete(roomMember);
         if (removeRoom) {
-            deleteRoom(roomId, userId);
+            deleteRoom(roomId);
         }
     }
 
