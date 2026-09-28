@@ -28,6 +28,7 @@ certs/*
 !gateway/script.sh
 !scripts/*.sh
 !infra/backup/*.sh
+.idea/
 !deploy/*.md
 !infra/docker-exporter/*.sh
 

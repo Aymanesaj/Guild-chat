@@ -20,7 +20,7 @@ RUN jlink \
 
 FROM alpine:3.20
 
-RUN apk add --no-cache curl wget \
+RUN apk add --no-cache wget \
     && addgroup -g 1000 app \
     && adduser -u 1000 -G app -s /bin/sh -D app
 

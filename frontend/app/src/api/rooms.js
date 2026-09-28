@@ -29,7 +29,11 @@ function normalizeRoom(room) {
 
 /** org roles are OWNER | ADMIN | MEMBER; the UI compares lowercase. */
 async function listMembers(roomId) {
-  const members = await request(`${ROOMS}/${roomId}/members`, {}, "Failed to fetch room members");
+  const members = await request(
+    `${ROOMS}/${roomId}/members`,
+    {},
+    "Failed to fetch room members",
+  );
   return (members || []).map((member) => ({
     userId: member.userId,
     role: String(member.role || "").toLowerCase(),
@@ -58,7 +62,9 @@ async function withPeers(rooms) {
 
   const users = await resolveUsers(peerIds);
   return rooms.map((room, index) =>
-    room.type === "dm" ? { ...room, peer: users.get(peerIds[index]) ?? null } : room,
+    room.type === "dm"
+      ? { ...room, peer: users.get(peerIds[index]) ?? null }
+      : room,
   );
 }
 
@@ -110,7 +116,11 @@ export async function updateRoom(roomId, { name }) {
 }
 
 export async function deleteRoom(roomId) {
-  return request(`${ROOMS}/${roomId}`, { method: "DELETE" }, "Failed to delete room");
+  return request(
+    `${ROOMS}/${roomId}`,
+    { method: "DELETE" },
+    "Failed to delete room",
+  );
 }
 
 /**
@@ -160,7 +170,11 @@ export async function removeMember(roomId, userId) {
 
 /** The owner can't leave (org answers 403 "Owner cannot leave the room."). */
 export async function leaveRoom(roomId) {
-  return request(`${ROOMS}/${roomId}/members/me`, { method: "DELETE" }, "Failed to leave room");
+  return request(
+    `${ROOMS}/${roomId}/members/me`,
+    { method: "DELETE" },
+    "Failed to leave room",
+  );
 }
 
 /** role: "admin" | "member" — OWNER can't be assigned. */
@@ -208,26 +222,42 @@ export function toConversation(room) {
     timestamp: formatTimestamp(last?.sent_at),
   };
 }
+/** chat-service answers at most 100 rooms per request. */
+const MAX_PREVIEW_ROOMS = 100;
 
-/** One room's newest message, for the preview line under a conversation. */
-async function attachLastMessage(room) {
-  try {
-    const [last] = await request(
-      `/api/chat/rooms/${room.id}/messages${buildQuery({ limit: 1 })}`,
-      {},
-      "Failed to load messages",
-    );
-    return {
-      ...room,
-      last_message: last ? { content: last.deleted ? "Message deleted" : last.content, sent_at: last.created_at } : null,
-    };
-  } catch {
-    return { ...room, last_message: null };
+/** Newest message of each room, in one request per 100 rooms. -> Map<roomId, preview|null> */
+async function fetchLastMessages(roomIds) {
+  const previews = new Map();
+  for (let start = 0; start < roomIds.length; start += MAX_PREVIEW_ROOMS) {
+    const chunk = roomIds.slice(start, start + MAX_PREVIEW_ROOMS);
+    try {
+      const data = await request(
+        `/api/chat/rooms/last-messages${buildQuery({ ids: chunk.join(",") })}`,
+        {},
+        "Failed to load messages",
+      );
+      Object.entries(data || {}).forEach(([id, last]) =>
+        previews.set(
+          Number(id),
+          last
+            ? {
+                content: last.deleted ? "Message deleted" : last.content,
+                sent_at: last.created_at,
+              }
+            : null,
+        ),
+      );
+    } catch {
+      chunk.forEach((id) => previews.set(Number(id), null)); // previews are optional
+    }
   }
+  return previews;
 }
 
 const dmSortKey = (room) =>
-  new Date(room.last_message?.sent_at ?? room.updated_at ?? room.created_at ?? 0).getTime();
+  new Date(
+    room.last_message?.sent_at ?? room.updated_at ?? room.created_at ?? 0,
+  ).getTime();
 
 /** Newest conversation first. A copy: React state is never sorted in place. */
 export function sortDmRooms(rooms) {
@@ -251,11 +281,15 @@ export async function syncDmRooms(known = []) {
   const previews = new Map(known.map((room) => [room.id, room.last_message]));
   const rooms = await getDmRooms();
 
-  return Promise.all(
-    rooms.map((room) =>
-      previews.has(room.id)
-        ? { ...room, last_message: previews.get(room.id) }
-        : attachLastMessage(room),
-    ),
-  );
+  const missing = rooms
+    .filter((room) => !previews.has(room.id))
+    .map((room) => Number(room.id));
+  const fetched = missing.length ? await fetchLastMessages(missing) : new Map();
+
+  return rooms.map((room) => ({
+    ...room,
+    last_message: previews.has(room.id)
+      ? previews.get(room.id)
+      : (fetched.get(Number(room.id)) ?? null),
+  }));
 }

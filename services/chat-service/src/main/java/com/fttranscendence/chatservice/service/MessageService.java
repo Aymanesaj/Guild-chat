@@ -3,15 +3,17 @@ package com.fttranscendence.chatservice.service;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.bson.types.ObjectId;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 
-import com.fttranscendence.chatservice.grpc.Membership;
 import com.fttranscendence.chatservice.exception.ApiException;
+import com.fttranscendence.chatservice.grpc.Membership;
 import com.fttranscendence.chatservice.grpc.OrgClient;
 import com.fttranscendence.chatservice.model.Message;
 import com.fttranscendence.chatservice.repository.MessageRepository;
@@ -26,6 +28,7 @@ public class MessageService {
 
     static final int DEFAULT_LIMIT = 50;
     static final int MAX_LIMIT = 100;
+    static final int MAX_PREVIEW_ROOMS = 100;
 
     private final MessageRepository messageRepository;
     private final OrgClient orgClient;
@@ -113,6 +116,42 @@ public class MessageService {
         return messageRepository.findByRoomIdAndIdLessThanOrderByIdDesc(roomId, before, pageSize);
     }
 
+    /**
+     * Newest message of each requested room, for conversation previews.
+     *
+     * Rooms the caller is not a member of are left out entirely: not an
+     * error, so the answer cannot be used to probe which rooms exist.
+     * A room the caller is in but with no messages yet maps to null.
+     */
+
+    public Map<Long, Message> latestMessages(String userId, List<Long> roomIds) {
+        List<Long> wanted = roomIds == null ? List.of() : roomIds.stream().distinct().toList();
+
+
+        if (wanted.isEmpty()) {
+            throw ApiException.badRequest("MISSING_IDS", "'ids' must list at least one room id");
+        }
+        if (wanted.size() > MAX_PREVIEW_ROOMS) {
+            throw ApiException.badRequest("TOO_MANY_IDS", "'ids' must list at most " + MAX_PREVIEW_ROOMS + " room ids");
+        }
+
+
+        List<Long> allowed = wanted.stream()
+        .filter( roomId -> orgClient.isMember(userId , roomId))
+        .toList();
+        Map<Long, Message> latest = new LinkedHashMap<>();
+
+        allowed.forEach(roomId -> latest.put(roomId , null));
+
+
+        if(!allowed.isEmpty()) {
+            messageRepository.findLatestMessagesByRoomIds(allowed)
+            .forEach(message -> latest.put(message.getRoomId() , message));
+        }
+
+        return latest ;
+    }
+
     private int validateLimit(Integer limit) {
         if (limit == null) {
             return DEFAULT_LIMIT;
@@ -133,15 +172,6 @@ public class MessageService {
         return loadVisible(userId,  messageId);
     }
 
-    /**
-    /* Shared by GET, PATCH and DELETE on /messages/:id.
-    /*
-    /* A non-member gets the SAME 404 as an unknown id: a 403 would confirm
-    /* that the message exists in a room they cannot read. The room id is not
-    /* in the URL here, so unlike history there is nothing public to protect.
-    /*/
-
-    /** 400 for a malformed id, 404 for an unknown one. No membership check. */
     private Message findMessage(String messageId){
         if (!ObjectId.isValid(messageId)){
             throw ApiException.badRequest("INVALID_MESSAGE_ID", "'id' is not a valid message id");
@@ -155,7 +185,7 @@ public class MessageService {
      * that the message exists in a room they cannot read.
      */
     private Message loadVisible(String userId,  String messageId) {
-        Message message = findMessage(messageId); 
+        Message message = findMessage(messageId);
         if(!orgClient.isMember(userId, message.getRoomId())) {
             throw ApiException.notFound("MESSAGE_NOT_FOUND", "Message does not exist");
         }

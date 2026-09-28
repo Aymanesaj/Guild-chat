@@ -71,9 +71,28 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         presenceRegistry.connected(userId, session.getId());
     }
 
+    static final int MAX_FRAMES_PER_SECOND = 20 ;
+    static final String RATE_ATTRIBUTE = "chat.frameRate";
+    /** [0]  = window start (ms) , [1] = frames in window */
+    private boolean overRate(WebSocketSession session) {
+        long now = System.currentTimeMillis();
+        long[] rate = (long[]) session.getAttributes()
+        .computeIfAbsent(RATE_ATTRIBUTE, k -> new long[] {now , 0});
+        if ( now - rate[0] > 1_000) {
+            rate[0] = now;
+            rate[1] = 0;
+        }
+        return ++rate[1] > MAX_FRAMES_PER_SECOND;
+    }
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws IOException {
         JsonNode frame;
+        if(overRate(session)) {
+            frameSender.sendError(guarded(session), "RATE_LIMIT_EXCEEDED" , "Too many frames per second");
+            session.close(CloseStatus.POLICY_VIOLATION);
+
+            return ;
+        }
         try {
             frame = objectMapper.readTree(message.getPayload());
         } catch (JsonProcessingException e) {
