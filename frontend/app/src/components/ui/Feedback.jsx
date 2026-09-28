@@ -56,13 +56,15 @@ const EmptyHint = styled.p`
   font-size: var(--text-sm);
 `;
 
-/** Centered empty placeholder: a large muted icon, a title and an optional hint. */
-export function EmptyState({ icon: Icon, title, hint, ...rest }) {
+/** Centered empty placeholder: a large muted icon, a title, an optional hint
+    and, below them, any action passed as children. */
+export function EmptyState({ icon: Icon, title, hint, children, ...rest }) {
   return (
     <EmptyStateRoot {...rest}>
       {Icon && <Icon size={32} />}
       {title && <EmptyTitle>{title}</EmptyTitle>}
       {hint && <EmptyHint>{hint}</EmptyHint>}
+      {children}
     </EmptyStateRoot>
   );
 }

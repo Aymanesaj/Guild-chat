@@ -14,11 +14,11 @@ import { useProfileOverlay } from "./ProfileOverlayContext";
 import { useRoomNavigation } from "./RoomNavigationContext";
 import { useAvatarUrl } from "../../hooks/useAvatarUrl";
 import UserAvatar from "../profile/UserAvatar";
+import FriendRequestForm from "../profile/FriendRequestForm";
 
 import {
   checkUsernameAvailability,
   forgetAvatar,
-  getUserByUsername,
   updateProfile,
   uploadAvatar,
 } from "../../api/profile";
@@ -31,7 +31,6 @@ import {
   getFriendsList,
   getSentFriendRequests,
   removeFriend,
-  sendFriendRequest,
 } from "../../api/friends";
 
 import { getOrCreateDm, getRooms, leaveRoom } from "../../api/rooms";
@@ -254,10 +253,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [sectionError, setSectionError] = useState("");
 
-  // Add friend — the invite box sits at the right of the friends tabs row.
-  const [friendUsername, setFriendUsername] = useState("");
-  const [addingFriend, setAddingFriend] = useState(false);
-
   // The friend whose DM is being opened, so only that row's button is busy.
   const [openingDmId, setOpeningDmId] = useState(null);
 
@@ -273,7 +268,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
   const openManagement = (section = "friends") => {
     setSectionError("");
-    setFriendUsername("");
     setManagementSection(section);
     setManagementTab(section);
     setView("management");
@@ -281,7 +275,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
   const goBackToProfile = () => {
     setSectionError("");
-    setFriendUsername("");
     setView("profile");
   };
 
@@ -629,41 +622,6 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       );
     } finally {
       setRunningAction(false);
-    }
-  };
-
-
-  // ---------------------------------------------------------------------------
-  // Friend search
-  // ---------------------------------------------------------------------------
-
-  const handleFriendInviteAdd = async (event) => {
-    event.preventDefault();
-
-    const query = friendUsername.trim();
-
-    if (!query) {
-      setSectionError("Enter a username to add.");
-      return;
-    }
-
-    setAddingFriend(true);
-    setSectionError("");
-
-    try {
-      const match = await getUserByUsername(query);
-
-      await sendFriendRequest(match.id);
-
-      setFriendUsername("");
-      // Show the new pending request (the tab change reloads the list).
-      setManagementTab("sent");
-    } catch (error) {
-      setSectionError(
-        error?.message || "Failed to add friend."
-      );
-    } finally {
-      setAddingFriend(false);
     }
   };
 
@@ -1312,28 +1270,9 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                     </ManagementTab>
 
                     <FriendInvite
-                      onSubmit={handleFriendInviteAdd}
-                    >
-                      <FriendInviteInput
-                        value={friendUsername}
-                        onChange={(e) =>
-                          setFriendUsername(
-                            e.target.value
-                          )
-                        }
-                        placeholder="Request by username"
-                        aria-label="Send a friend invite by username"
-                      />
-
-                      <FriendInviteButton
-                        type="submit"
-                        disabled={addingFriend}
-                        aria-label="Send friend invite"
-                        title="Send friend invite"
-                      >
-                        <TbSend size={16} />
-                      </FriendInviteButton>
-                    </FriendInvite>
+                      onSent={() => setManagementTab("sent")}
+                      onError={setSectionError}
+                    />
                   </>
                 ) : (
                   <>
@@ -1802,14 +1741,8 @@ const EmptyState = styled.div`
 // =============================================================================
 
 /* Add-a-friend box, at the far right of the friends tabs row. */
-const FriendInvite = styled.form`
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
+const FriendInvite = styled(FriendRequestForm)`
   padding-bottom: var(--space-2);
-  /* Never force the row wider than the card; shrink before overflowing. */
-  min-width: 0;
 
   /* Once wrapped, it owns the line — so it spans it instead of sitting in the
      middle where "margin-left: auto" would leave it. */
@@ -1817,24 +1750,6 @@ const FriendInvite = styled.form`
     width: 100%;
     margin-left: 0;
   }
-`;
-
-const FriendInviteInput = styled(KitInput)`
-  width: 170px;
-  padding: 6px 10px;
-  font-size: var(--text-sm);
-
-  @media (max-width: 700px) {
-    width: auto;
-    flex: 1;
-    /* Text inputs default to min-width:auto, which is what pushes them past
-       the edge of a flex container. */
-    min-width: 0;
-  }
-`;
-
-const FriendInviteButton = styled(KitIconButton).attrs({ $size: 28 })`
-  border-color: var(--border-strong);
 `;
 
 // =============================================================================
