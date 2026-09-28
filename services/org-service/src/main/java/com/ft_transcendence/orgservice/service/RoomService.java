@@ -279,6 +279,8 @@ public class RoomService {
                                 "User is not a member of this room"
                         )
                 );
+        
+        boolean removeRoom = false;
 
         if (memberRoleRepository
                 .existsByRoomMemberRoomIdAndRoomMemberUserIdAndRoleName(
@@ -286,10 +288,16 @@ public class RoomService {
                         userId,
                         RoleName.OWNER
                 )) {
-            throw new ForbiddenException("Owner cannot leave the room.");
+                        if (roomMemberRepository.countByRoomId(roomId) > 1) {
+                            throw new ForbiddenException("Owner cannot leave the room while there are other members.");
+                        }
+                        removeRoom = true;
         }
         memberRoleRepository.deleteAllByRoomMember(roomMember);
         roomMemberRepository.delete(roomMember);
+        if (removeRoom) {
+            deleteRoom(roomId, userId);
+        }
     }
 
     @Transactional
