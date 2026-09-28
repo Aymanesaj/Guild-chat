@@ -211,31 +211,10 @@ public class RoomService {
         .toList();
     }
 
-    private boolean canDeleteRoom(Long roomId, UUID userId, Room room) {
-        
-        if (room.getType() == RoomType.DM) {
-            return true; // DM rooms can be deleted by any member
-        }
-
-        return memberRoleRepository.existsByRoomMemberRoomIdAndRoomMemberUserIdAndRoleName(
-                roomId,
-                userId,
-                RoleName.OWNER
-        );
-    }
-
     @Transactional
-    public void deleteRoom(Long roomId, UUID userId) {
+    public void deleteRoom(Long roomId) {
         Room room = roomRepository.findById(roomId)
                 .orElseThrow(() -> new NotFoundException("Room not found with id: " + roomId));
-
-        if (!isUserInRoom(roomId, userId)) {
-            throw new NotFoundException("Room not found with id: " + roomId);
-        }
-
-        if (!canDeleteRoom(roomId, userId, room)) {
-            throw new ForbiddenException("User does not have permission to delete this room");
-        }
 
         List<RoomMember> roomMembers = roomMemberRepository.findByRoomId(roomId);
         for (RoomMember roomMember : roomMembers) {
