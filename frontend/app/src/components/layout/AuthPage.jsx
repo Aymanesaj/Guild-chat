@@ -106,6 +106,22 @@ const LegalNote = styled.p`
   }
 `;
 
+/* Consent line under the sign-up button: small and plain so it informs
+   without competing with the form. */
+const SignupConsent = styled.p`
+  margin: 0;
+  text-align: center;
+  font-size: var(--text-xs);
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+
+  a {
+    color: var(--text-secondary);
+    text-decoration: underline;
+  }
+`;
+
 export const ErrorText = styled.p`
   margin: -2px 0 0;
   min-height: 18px;
@@ -252,6 +268,12 @@ function SignupView({ setView, onSignup, values, onChange, error, loading }) {
         <PrimaryButton type="submit" $full disabled={loading}>
           {loading ? "Creating..." : "Create Account"}
         </PrimaryButton>
+
+        <SignupConsent>
+          By creating an account, you agree to the{" "}
+          <Link to="/terms">Terms of Service</Link> and acknowledge the{" "}
+          <Link to="/privacy">Privacy Policy</Link>.
+        </SignupConsent>
       </Form>
 
       <Footer>
@@ -362,10 +384,13 @@ function AuthPage( { onLogin } ) {
         {renderView()}
       </Card>
 
-      <LegalNote>
-        By continuing you agree to our <Link to="/terms">Terms of Service</Link>{" "}
-        and <Link to="/privacy">Privacy Policy</Link>.
-      </LegalNote>
+      {/* Sign-up carries its own consent line under the button. */}
+      {view === "login" && (
+        <LegalNote>
+          By continuing you agree to our <Link to="/terms">Terms of Service</Link>{" "}
+          and <Link to="/privacy">Privacy Policy</Link>.
+        </LegalNote>
+      )}
     </Container>
   );
 }
