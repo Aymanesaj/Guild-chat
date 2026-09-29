@@ -1,0 +1,13 @@
+{
+  "name": "identity-service",
+  "version": "1.0.0",
+  "description": "TypeScript app for Docker deployment",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/main.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

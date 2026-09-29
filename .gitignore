@@ -10,6 +10,7 @@ services/chat-service/target/
 .idea/
 notes/*
 .env
+z/DEVOPS*.md
 # shared with the frontend dev — must be tracked despite the *.md rule above
 # shared documentation — must be tracked despite the *.md rule above
 !services/chat-service/API_CONTRACT.md
@@ -28,14 +29,13 @@ certs/*
 !gateway/script.sh
 !scripts/*.sh
 !infra/backup/*.sh
+!infra/**/*.md
 !deploy/*.md
 !infra/docker-exporter/*.sh
 
 # track devops documentation
 !gateway/*.md
 !scripts/*.md
-!infra/*.md
-!infra/**/*.md
 !docs/*.md
 
 # track the root readme

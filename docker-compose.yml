@@ -128,17 +128,14 @@ services:
       start_period: 10s
     restart: always
 
+
   identity-service:
     build: services/identity-service/.
     container_name: identity-service
     networks:
       - private
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health/readiness"]
-      interval: 20s
-      timeout: 3s
-      retries: 5
-      start_period: 15s
+    ports:
+      - "8083:8083"
     env_file:
       - ./.env
     depends_on:
