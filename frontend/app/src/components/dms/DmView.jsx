@@ -1,11 +1,15 @@
 import DmList from "./DmList";
 import { useCallback, useMemo, useRef, useState } from "react";
 import styled from "styled-components";
-import { TbMessageCircle } from "react-icons/tb";
+import { TbMessageCircle, TbUsers } from "react-icons/tb";
+import FriendsSidebar from "./FriendsSidebar";
 import { sortDmRooms, syncDmRooms, toConversation } from "../../api/rooms";
 import { usePolling } from "../../hooks/usePolling";
 import { usePresence } from "../../hooks/usePresence";
-import { NavToggleButton } from "../layout/NavDrawerContext";
+import { useEscapeKey } from "../../hooks/useEscapeKey";
+import { NavToggleButton, useNavDrawer } from "../layout/NavDrawerContext";
+import { useProfileOverlay } from "../layout/ProfileOverlayContext";
+import { Button, SlidePanel } from "../ui";
 
 /**
  * A DM someone else starts arrives with no notification of any kind: org-service
@@ -17,11 +21,17 @@ const DMS_POLL_MS = 10_000;
 
 const DmViewShell = styled.section`
   display: flex;
-  flex-direction: column;
   height: 100%;
   min-width: 0;
-  padding: var(--space-4);
   background: var(--bg-base);
+`;
+
+const DmMain = styled.div`
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--space-4);
 `;
 
 const PanelHeader = styled.header`
@@ -40,9 +50,35 @@ const PanelHeader = styled.header`
   }
 `;
 
+/* Same trade-off as the room header's Members button: on phones the label
+   gives way to the hamburger. */
+const FriendsButton = styled(Button)`
+  margin-left: auto;
+
+  @media (max-width: 700px) {
+    span {
+      display: none;
+    }
+  }
+`;
+
 function DmView() {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState("loading");
+  const [isFriendsOpen, setFriendsOpen] = useState(false);
+  const { isPhone, closeNav } = useNavDrawer();
+  const { profile, previewUser } = useProfileOverlay();
+
+  const closeFriends = useCallback(() => setFriendsOpen(false), []);
+
+  // Yields Escape to anything stacked above the drawer — see AppShell.
+  useEscapeKey(closeFriends, isPhone && isFriendsOpen && !profile && !previewUser);
+
+  function toggleFriends() {
+    setFriendsOpen(!isFriendsOpen);
+    // Only one drawer at a time on a phone.
+    if (!isFriendsOpen) closeNav();
+  }
 
   // syncDmRooms needs the current list to know which previews it can keep, and
   // reading it from state would either stale the closure or restart the polling
@@ -77,16 +113,41 @@ function DmView() {
 
   return (
     <DmViewShell>
-      <PanelHeader>
-        <NavToggleButton />
-        <TbMessageCircle size={20} />
-        <h2>Direct Messages</h2>
-      </PanelHeader>
+      <DmMain>
+        <PanelHeader>
+          <NavToggleButton />
+          <TbMessageCircle size={20} />
+          <h2>Direct Messages</h2>
 
-      <DmList
-        conversations={withPresence}
-        state={ loading }
-      />
+          <FriendsButton
+            type="button"
+            $variant="ghost"
+            $size="sm"
+            onClick={toggleFriends}
+            title="Toggle friends"
+            aria-label="Toggle friends"
+          >
+            <TbUsers size={18} />
+            <span>Friends</span>
+          </FriendsButton>
+        </PanelHeader>
+
+        <DmList
+          conversations={withPresence}
+          state={ loading }
+        />
+      </DmMain>
+
+      {isFriendsOpen && (
+        <SlidePanel
+          $asOverlay={isPhone}
+          $open={isFriendsOpen}
+          $side="right"
+          onClose={closeFriends}
+        >
+          <FriendsSidebar onClose={closeFriends} />
+        </SlidePanel>
+      )}
     </DmViewShell>
   );
 }
