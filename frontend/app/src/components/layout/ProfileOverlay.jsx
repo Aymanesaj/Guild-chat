@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 import {
-  TbArrowLeft,
   TbCheck,
   TbDoorExit,
   TbPencil,
@@ -66,7 +65,6 @@ const CONFIRM_TEXTS = {
 };
 
 const DEBOUNCE_MS = 400;
-const PREVIEW_LIMIT = 5;
 const MANAGEMENT_PAGE_SIZE = 50;
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
 
@@ -187,13 +185,10 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
 
   // ---------------------------------------------------------------------------
-  // View state
+  // Section state
   // ---------------------------------------------------------------------------
 
-  const [view, setView] = useState("profile");
-
-  const [previewSection, setPreviewSection] = useState("friends");
-
+  // Friends | Rooms, and the sub-tab under it (friends/requests/sent | rooms).
   const [managementSection, setManagementSection] =
     useState("friends");
 
@@ -266,16 +261,11 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
   // Navigation
   // ---------------------------------------------------------------------------
 
-  const openManagement = (section = "friends") => {
+  // Each section opens on its first sub-tab, which shares the section's name.
+  const selectSection = (section) => {
     setSectionError("");
     setManagementSection(section);
     setManagementTab(section);
-    setView("management");
-  };
-
-  const goBackToProfile = () => {
-    setSectionError("");
-    setView("profile");
   };
 
 
@@ -328,52 +318,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
 
 
   // ---------------------------------------------------------------------------
-  // Data loading — preview (profile view, capped at PREVIEW_LIMIT server-side)
-  // ---------------------------------------------------------------------------
-
-  const loadFriendsPreview = async () => {
-    setLoadingSection(true);
-    setSectionError("");
-
-    try {
-      const data = await getFriendsList({
-        limit: PREVIEW_LIMIT,
-        offset: 0,
-      });
-
-      setFriends(Array.isArray(data) ? data : []);
-    } catch (error) {
-      setSectionError(
-        error?.message || "Failed to load friends."
-      );
-    } finally {
-      setLoadingSection(false);
-    }
-  };
-
-  const loadRoomsPreview = async () => {
-    setLoadingSection(true);
-    setSectionError("");
-
-    try {
-      const data = await getRooms({
-        limit: PREVIEW_LIMIT,
-        offset: 0,
-      });
-
-      setRooms(Array.isArray(data) ? data : []);
-    } catch (error) {
-      setSectionError(
-        error?.message || "Failed to load rooms."
-      );
-    } finally {
-      setLoadingSection(false);
-    }
-  };
-
-
-  // ---------------------------------------------------------------------------
-  // Data loading — management (paginated, MANAGEMENT_PAGE_SIZE at a time)
+  // Data loading (paginated, MANAGEMENT_PAGE_SIZE at a time)
   // ---------------------------------------------------------------------------
 
   const loadFriendsPage = async (reset = false) => {
@@ -485,19 +430,9 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
   };
 
 
-  // Profile view loads whichever preview tab is active.
-  // Management view loads whichever management tab is active, from page 1.
+  // Whichever sub-tab is active loads from page 1.
 
   useEffect(() => {
-    if (view === "profile") {
-      if (previewSection === "friends") {
-        loadFriendsPreview();
-      } else {
-        loadRoomsPreview();
-      }
-      return;
-    }
-
     if (managementSection === "friends") {
       if (managementTab === "friends") {
         loadFriendsPage(true);
@@ -510,7 +445,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
       loadRoomsPage(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, previewSection, managementSection, managementTab, user.id]);
+  }, [managementSection, managementTab, user.id]);
 
 
   // ---------------------------------------------------------------------------
@@ -657,7 +592,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
   // Rendering helpers
   // ---------------------------------------------------------------------------
 
-  const renderFriendRows = (items, isPreview = false) => {
+  const renderFriendRows = (items) => {
     return (
       <>
         {items.length > 0 ? (
@@ -669,29 +604,27 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                 {friend.username}
               </RowName>
 
-              {!isPreview && (
-                <RowActions>
-                  <ActionButton
-                    type="button"
-                    onClick={() => handleOpenDm(friend)}
-                    disabled={openingDmId === friend.id}
-                    aria-label={`Message ${friend.username}`}
-                    title={`Message ${friend.username}`}
-                  >
-                    <TbSend size={16} />
-                  </ActionButton>
+              <RowActions>
+                <ActionButton
+                  type="button"
+                  onClick={() => handleOpenDm(friend)}
+                  disabled={openingDmId === friend.id}
+                  aria-label={`Message ${friend.username}`}
+                  title={`Message ${friend.username}`}
+                >
+                  <TbSend size={16} />
+                </ActionButton>
 
-                  <ActionButton
-                    type="button"
-                    onClick={() =>
-                      requestRemoveFriend(friend)
-                    }
-                    aria-label={`Remove ${friend.username}`}
-                  >
-                    <TbUserMinus size={16} />
-                  </ActionButton>
-                </RowActions>
-              )}
+                <ActionButton
+                  type="button"
+                  onClick={() =>
+                    requestRemoveFriend(friend)
+                  }
+                  aria-label={`Remove ${friend.username}`}
+                >
+                  <TbUserMinus size={16} />
+                </ActionButton>
+              </RowActions>
             </ListRow>
           ))
         ) : (
@@ -699,25 +632,12 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
             No friends yet
           </EmptyState>
         )}
-
-        {isPreview && (
-          <CenteredButtonWrap>
-            <PillButton
-              type="button"
-              onClick={() =>
-                openManagement("friends")
-              }
-            >
-              See all
-            </PillButton>
-          </CenteredButtonWrap>
-        )}
       </>
     );
   };
 
 
-  const renderRoomRows = (items, isPreview = false) => {
+  const renderRoomRows = (items) => {
     return (
       <>
         {items.length > 0 ? (
@@ -733,38 +653,23 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
                 {room.name || room.peer?.username || "Direct message"}
               </RowName>
 
-              {!isPreview && (
-                <ActionButton
-                  type="button"
-                  onClick={() =>
-                    requestLeaveRoom(room)
-                  }
-                  aria-label={`Leave ${
-                    room.name || "direct message"
-                  }`}
-                >
-                  <TbDoorExit size={16} />
-                </ActionButton>
-              )}
+              <ActionButton
+                type="button"
+                onClick={() =>
+                  requestLeaveRoom(room)
+                }
+                aria-label={`Leave ${
+                  room.name || "direct message"
+                }`}
+              >
+                <TbDoorExit size={16} />
+              </ActionButton>
             </ListRow>
           ))
         ) : (
           <EmptyState>
             No rooms yet
           </EmptyState>
-        )}
-
-        {isPreview && (
-          <CenteredButtonWrap>
-            <PillButton
-              type="button"
-              onClick={() =>
-                openManagement("rooms")
-              }
-            >
-              See all
-            </PillButton>
-          </CenteredButtonWrap>
         )}
       </>
     );
@@ -779,7 +684,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
     if (managementTab === "friends") {
       return (
         <ExpandedListPanel>
-          {renderFriendRows(friends, false)}
+          {renderFriendRows(friends)}
 
           {friendsHasMore && (
             <CenteredButtonWrap>
@@ -929,7 +834,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
   const renderRoomsManagement = () => {
     return (
       <ExpandedListPanel>
-        {renderRoomRows(rooms, false)}
+        {renderRoomRows(rooms)}
 
         {roomsHasMore && (
           <CenteredButtonWrap>
@@ -954,7 +859,7 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
   return (
     <Overlay onClick={onClose}>
       <Card onClick={(e) => e.stopPropagation()}>
-        {view === "profile" && <Banner />}
+        <Banner />
 
         <CloseButton
           onClick={onClose}
@@ -963,51 +868,47 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
           <TbX size={20} />
         </CloseButton>
 
-        {view === "profile" && (
-          <AvatarWrap>
-            <AvatarButton
-              type="button"
-              onClick={handleAvatarButtonClick}
-              disabled={avatarUploading}
-              aria-label="Update avatar"
-            >
-              {avatarLoading ? null : avatarUrl ? (
-                <AvatarImage src={avatarUrl} alt="" />
-              ) : (
-                <AvatarFallback>
-                  {user.displayName
-                    ?.charAt(0)
-                    ?.toUpperCase() || "?"}
-                </AvatarFallback>
-              )}
-
-              <AvatarOverlay>
-                {avatarUploading
-                  ? "Uploading..."
-                  : "Update avatar"}
-              </AvatarOverlay>
-            </AvatarButton>
-
-            <HiddenFileInput
-              ref={avatarInputRef}
-              id="avatar-upload"
-              name="avatar"
-              type="file"
-              accept="image/*"
-              onChange={handleAvatarFileChange}
-            />
-
-            {avatarError && (
-              <AvatarErrorText>
-                {avatarError}
-              </AvatarErrorText>
+        <AvatarWrap>
+          <AvatarButton
+            type="button"
+            onClick={handleAvatarButtonClick}
+            disabled={avatarUploading}
+            aria-label="Update avatar"
+          >
+            {avatarLoading ? null : avatarUrl ? (
+              <AvatarImage src={avatarUrl} alt="" />
+            ) : (
+              <AvatarFallback>
+                {user.displayName
+                  ?.charAt(0)
+                  ?.toUpperCase() || "?"}
+              </AvatarFallback>
             )}
-          </AvatarWrap>
-        )}
+
+            <AvatarOverlay>
+              {avatarUploading
+                ? "Uploading..."
+                : "Update avatar"}
+            </AvatarOverlay>
+          </AvatarButton>
+
+          <HiddenFileInput
+            ref={avatarInputRef}
+            id="avatar-upload"
+            name="avatar"
+            type="file"
+            accept="image/*"
+            onChange={handleAvatarFileChange}
+          />
+
+          {avatarError && (
+            <AvatarErrorText>
+              {avatarError}
+            </AvatarErrorText>
+          )}
+        </AvatarWrap>
 
         <Content>
-          {view === "profile" ? (
-            <>
               {/* ------------------------------------------------------------- */}
               {/* PROFILE VIEW                                                   */}
               {/* ------------------------------------------------------------- */}
@@ -1143,177 +1044,80 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
               )}
 
               {/* ------------------------------------------------------------- */}
-              {/* PREVIEW                                                        */}
+              {/* FRIENDS / ROOMS                                                */}
               {/* ------------------------------------------------------------- */}
 
-              <PreviewSection>
-                <PreviewTabs>
-                  <PreviewTab
+              <SectionPanel>
+                <SectionTabs>
+                  <SectionTab
                     type="button"
-                    $active={
-                      previewSection === "friends"
-                    }
-                    onClick={() =>
-                      setPreviewSection("friends")
-                    }
+                    $active={managementSection === "friends"}
+                    onClick={() => selectSection("friends")}
                   >
                     Friends
-                  </PreviewTab>
+                  </SectionTab>
 
-                  <PreviewTab
+                  <SectionTab
                     type="button"
-                    $active={
-                      previewSection === "rooms"
-                    }
-                    onClick={() =>
-                      setPreviewSection("rooms")
-                    }
+                    $active={managementSection === "rooms"}
+                    onClick={() => selectSection("rooms")}
                   >
                     Rooms
-                  </PreviewTab>
-                </PreviewTabs>
+                  </SectionTab>
+                </SectionTabs>
 
-                <PreviewPanel>
-                  {loadingSection ? (
-                    <EmptyState>
-                      Loading...
-                    </EmptyState>
-                  ) : sectionError ? (
-                    <EmptyState>
-                      {sectionError}
-                    </EmptyState>
-                  ) : previewSection === "friends" ? (
-                    renderFriendRows(
-                      friends,
-                      true
-                    )
-                  ) : (
-                    renderRoomRows(
-                      rooms,
-                      true
-                    )
-                  )}
-                </PreviewPanel>
-              </PreviewSection>
-            </>
-          ) : (
-            <>
-              {/* ------------------------------------------------------------- */}
-              {/* MANAGEMENT VIEW                                                */}
-              {/* ------------------------------------------------------------- */}
-
-              <ManagementHeader>
-                <BackButton
-                  type="button"
-                  onClick={goBackToProfile}
-                >
-                  <TbArrowLeft size={17} />
-                  Back
-                </BackButton>
-
-                <ManagementTitle>
-                  {managementSection ===
-                  "friends"
-                    ? "Friends"
-                    : "Rooms"}
-                </ManagementTitle>
-
-                <HeaderSpacer />
-              </ManagementHeader>
-
-              <ManagementTabs>
-                {managementSection ===
-                "friends" ? (
-                  <>
-                    <ManagementTab
+                {/* Rooms has a single list, so only friends gets sub-tabs. */}
+                {managementSection === "friends" && (
+                  <SubTabs>
+                    <SubTab
                       type="button"
-                      $active={
-                        managementTab ===
-                        "friends"
-                      }
-                      onClick={() =>
-                        setManagementTab(
-                          "friends"
-                        )
-                      }
+                      $active={managementTab === "friends"}
+                      onClick={() => setManagementTab("friends")}
                     >
                       Friends
-                    </ManagementTab>
+                    </SubTab>
 
-                    <ManagementTab
+                    <SubTab
                       type="button"
-                      $active={
-                        managementTab ===
-                        "requests"
-                      }
-                      onClick={() =>
-                        setManagementTab(
-                          "requests"
-                        )
-                      }
+                      $active={managementTab === "requests"}
+                      onClick={() => setManagementTab("requests")}
                     >
                       Incoming
-                    </ManagementTab>
+                    </SubTab>
 
-                    <ManagementTab
+                    <SubTab
                       type="button"
-                      $active={
-                        managementTab === "sent"
-                      }
-                      onClick={() =>
-                        setManagementTab(
-                          "sent"
-                        )
-                      }
+                      $active={managementTab === "sent"}
+                      onClick={() => setManagementTab("sent")}
                     >
                       Sent
-                    </ManagementTab>
+                    </SubTab>
 
                     <FriendInvite
                       onSent={() => setManagementTab("sent")}
                       onError={setSectionError}
                     />
-                  </>
-                ) : (
-                  <>
-                    <ManagementTab
-                      type="button"
-                      $active={
-                        managementTab === "rooms"
-                      }
-                      onClick={() =>
-                        setManagementTab(
-                          "rooms"
-                        )
-                      }
-                    >
-                      Rooms
-                    </ManagementTab>
-
-                  </>
+                  </SubTabs>
                 )}
-              </ManagementTabs>
 
-              {sectionError && (
-                <InlineError>
-                  {sectionError}
-                </InlineError>
-              )}
-
-              <ManagementContent>
-                {loadingSection ? (
-                  <EmptyState>
-                    Loading...
-                  </EmptyState>
-                ) : managementSection ===
-                  "friends" ? (
-                  renderFriendsManagement()
-                ) : (
-                  renderRoomsManagement()
+                {sectionError && (
+                  <InlineError>
+                    {sectionError}
+                  </InlineError>
                 )}
-              </ManagementContent>
-            </>
-          )}
+
+                <ManagementContent>
+                  {loadingSection ? (
+                    <EmptyState>
+                      Loading...
+                    </EmptyState>
+                  ) : managementSection === "friends" ? (
+                    renderFriendsManagement()
+                  ) : (
+                    renderRoomsManagement()
+                  )}
+                </ManagementContent>
+              </SectionPanel>
         </Content>
 
         {/* ----------------------------------------------------------------- */}
@@ -1583,10 +1387,11 @@ const Bio = styled.p`
 `;
 
 // =============================================================================
-// Profile preview
+// Friends / Rooms — section tabs, then (friends only) a row of sub-tab chips,
+// then the list itself (the only part that scrolls).
 // =============================================================================
 
-const PreviewSection = styled.div`
+const SectionPanel = styled.div`
   flex: 1;
   min-height: 0;
   margin-top: var(--space-5);
@@ -1594,70 +1399,44 @@ const PreviewSection = styled.div`
   flex-direction: column;
 `;
 
-const PreviewTabs = styled(TabList)`
+const SectionTabs = styled(TabList)`
   flex-shrink: 0;
   justify-content: flex-start;
   gap: var(--space-5);
+  margin-bottom: var(--space-3);
 `;
 
-const PreviewTab = Tab;
+const SectionTab = Tab;
 
-const PreviewPanel = styled.div`
-  flex: 1;
-  min-height: 0;
-  margin-top: var(--space-3);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  overflow-y: auto;
-`;
-
-// =============================================================================
-// Management
-// =============================================================================
-
-const ManagementHeader = styled.div`
+const SubTabs = styled.div`
   flex-shrink: 0;
-  display: grid;
-  grid-template-columns: 80px 1fr 80px;
+  display: flex;
   align-items: center;
-  min-height: 48px;
-  margin-top: var(--space-5);
+  gap: var(--space-2);
   padding-bottom: var(--space-3);
-  border-bottom: 1px solid var(--border-subtle);
-`;
-
-const BackButton = styled(KitButton).attrs({ $variant: "secondary", $pill: true, $size: "sm" })`
-  justify-self: start;
-`;
-
-const ManagementTitle = styled.h3`
-  margin: 0;
-  text-align: center;
-  font-size: var(--text-lg);
-  font-weight: 700;
-  color: var(--text-primary);
-`;
-
-const HeaderSpacer = styled.div`
-  width: 80px;
-`;
-
-const ManagementTabs = styled(TabList)`
-  flex-shrink: 0;
-  justify-content: flex-start;
-  gap: var(--space-5);
-  padding-top: var(--space-4);
-  /* The tabs and the search box together are wider than the card gets on a
-     phone, so let the search drop to a line of its own. */
+  /* The chips and the request box together are wider than the card gets on a
+     phone, so let the box drop to a line of its own. */
   flex-wrap: wrap;
+`;
 
-  @media (max-width: 700px) {
-    gap: var(--space-3);
+const SubTab = styled.button`
+  padding: 4px 12px;
+  border: 1px solid
+    ${({ $active }) => ($active ? "var(--accent-500)" : "var(--border-strong)")};
+  border-radius: var(--radius-pill);
+  background: ${({ $active }) => ($active ? "var(--accent-ring)" : "transparent")};
+  color: ${({ $active }) => ($active ? "var(--text-primary)" : "var(--text-secondary)")};
+  font-size: var(--text-sm);
+  font-weight: ${({ $active }) => ($active ? 600 : 500)};
+  transition:
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);
+
+  &:hover {
+    color: var(--text-primary);
   }
 `;
-
-const ManagementTab = Tab;
 
 const ManagementContent = styled.div`
   flex: 1;
@@ -1740,10 +1519,8 @@ const EmptyState = styled.div`
 // Add friend
 // =============================================================================
 
-/* Add-a-friend box, at the far right of the friends tabs row. */
+/* Add-a-friend box, at the far right of the friends sub-tabs row. */
 const FriendInvite = styled(FriendRequestForm)`
-  padding-bottom: var(--space-2);
-
   /* Once wrapped, it owns the line — so it spans it instead of sitting in the
      middle where "margin-left: auto" would leave it. */
   @media (max-width: 700px) {
