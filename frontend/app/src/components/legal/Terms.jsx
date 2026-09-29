@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import LegalPage, { Title, Updated, Heading, Text, List } from "./LegalPage";
 
 const LAST_UPDATED = "29 September 2026";
