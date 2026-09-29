@@ -1,7 +1,32 @@
 ## Identity service
 
-Spring Boot microservice owned by member 3. It handles local auth, JWT issuing,
-profile records, avatar uploads, and GitHub OAuth bootstrap.
+Owner: `obendaou`. The Node.js/TypeScript application uses Fastify and Prisma.
+It currently provides `GET /health`; the API routes and gRPC methods below
+describe the service contract. The previous Java implementation remains in
+`demo/` and is excluded from the Node image.
+
+### Container configuration
+
+The Dockerfile runs `npm ci`, `npm run build`, and then `npm start`
+(`dist/server.js`). Compose loads the root `.env`; use `.env.example` as the
+template. Identity has no inline `environment` block in Compose.
+
+- `IDENTITY_HTTP_PORT=8083` controls Fastify's listener on `0.0.0.0`.
+- `IDENTITY_GRPC_PORT=9090` is the target port used by chat and reserved for
+  the identity gRPC server, which is not implemented yet.
+- Avoid a shared `PORT` variable. Chat and org retain their own Compose
+  overrides, and identity reads only `IDENTITY_HTTP_PORT`.
+- `DATABASE_URL` points to PostgreSQL at `postgres:5432`. JWT and GitHub
+  credentials also come from `.env`, which must not be committed.
+- `identity_avatars` persists files at `/tmp/identity-avatars`; keep
+  `AVATAR_DIR` set to that path. The image runs as the `node` user.
+- Neither identity port is published on the host. Nginx keeps the existing
+  `/api/users/` prefix rewrite, so `/api/users/login` reaches `/login`.
+- Docker and Gatus check `/health`. Identity has no Actuator metrics scrape.
+
+The Prisma schema has no models yet. Client generation and database migration
+commands must be agreed with the application owner before deploying schema
+changes; the image does not run migrations automatically.
 
 ### Public gateway routes
 
@@ -41,7 +66,7 @@ Send `Authorization: Bearer <accessToken>`:
 
 ### gRPC contract (internal, port 9090)
 
-Service: `identity.IdentityService` (proto package `identity`, file `src/main/proto/identity.proto`).
+Service: `identity.IdentityService` (proto package `identity`, file `src/grpc/identity.proto`).
 
 | RPC | Request | Response |
 |---|---|---|
@@ -49,12 +74,14 @@ Service: `identity.IdentityService` (proto package `identity`, file `src/main/pr
 | `GetUser` | `{ user_id }` | `{ user_id, username, display_name, avatar_url }` |
 | `AreFriends` | `{ user_a, user_b }` | `{ are_friends }` |
 
-Chat-service and org-service should call these instead of re-parsing JWTs locally. The gRPC server runs on its own port and is **not** behind the Spring Security filter chain — services calling it must already be inside the cluster network.
+Chat-service and org-service call these over the private network at
+`identity-service:9090`. The Node implementation still needs to provide the handlers.
 
 ### Infra needs (handoff)
 
-- Expose port `9090` on the identity-service container in `docker-compose.yml`.
-- The identity DB needs two new tables: `refresh_tokens` and `friendships`. JPA `ddl-auto=update` will create them in dev; for prod, hand the schema below to the infra owner.
+- Compose exposes port `9090` inside the private network only.
+- The SQL below documents the previous Java data model. The application owner
+  must provide Prisma migrations and agree on their deployment with DevOps.
 
 ```sql
 CREATE TABLE refresh_tokens (
@@ -83,10 +110,12 @@ CREATE INDEX idx_friendships_addressee ON friendships(addressee_id);
 
 ### Local development
 
-From `services/identity-service/demo`:
+From `services/identity-service`:
 
 ```sh
-MAVEN_USER_HOME=/tmp/maven ./mvnw test
+npm ci
+npm run build
+npm run dev
 ```
 
 From the repo root:

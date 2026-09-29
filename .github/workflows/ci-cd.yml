@@ -48,8 +48,6 @@ jobs:
         service:
           - name: Chat Service
             dir: services/chat-service
-          # - name: Identity Service
-          #   dir: services/identity-service/demo
           - name: Org Service
             dir: services/org-service
     steps:
@@ -86,28 +84,28 @@ jobs:
   # -------------------------------------------------------------
   # 4. DEPLOY: Continuous Deployment to OCI Free Tier VM via SSH
   # -------------------------------------------------------------
-  deploy:
-    name: Deploy to OCI VM
-    needs: [frontend-lint-and-build, backend-tests, validate-compose]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Execute Remote Deploy on OCI Instance
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.OCI_HOST }}
-          username: ${{ secrets.OCI_USERNAME }}
-          key: ${{ secrets.OCI_SSH_KEY }}
-          port: ${{ secrets.OCI_SSH_PORT || 22 }}
-          script: |
-            if [ -d ~/ft_transcendence ]; then
-              cd ~/ft_transcendence
-              echo "📥 Pulling latest code from main..."
-              git fetch origin main
-              git reset --hard origin/main
-              bash deploy/deploy.sh
-            else
-              echo "❌ ERROR: ~/ft_transcendence not found on VM!"
-              exit 1
-            fi
+  # deploy:
+  #   name: Deploy to OCI VM
+  #   needs: [frontend-lint-and-build, backend-tests, validate-compose]
+  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Execute Remote Deploy on OCI Instance
+  #       uses: appleboy/ssh-action@v1.2.0
+  #       with:
+  #         host: ${{ secrets.OCI_HOST }}
+  #         username: ${{ secrets.OCI_USERNAME }}
+  #         key: ${{ secrets.OCI_SSH_KEY }}
+  #         port: ${{ secrets.OCI_SSH_PORT || 22 }}
+  #         script: |
+  #           if [ -d ~/ft_transcendence ]; then
+  #             cd ~/ft_transcendence
+  #             echo "📥 Pulling latest code from main..."
+  #             git fetch origin main
+  #             git reset --hard origin/main
+  #             bash deploy/deploy.sh
+  #           else
+  #             echo "❌ ERROR: ~/ft_transcendence not found on VM!"
+  #             exit 1
+  #           fi
 

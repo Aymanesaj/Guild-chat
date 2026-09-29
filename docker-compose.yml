@@ -22,8 +22,8 @@ services:
     depends_on:
       frontend:
         condition: service_healthy
-      identity-service:
-        condition: service_healthy
+      # identity-service:
+      #   condition: service_healthy
       chat-service:
         condition: service_healthy
       org-service:
@@ -128,17 +128,14 @@ services:
       start_period: 10s
     restart: always
 
+
   identity-service:
     build: services/identity-service/.
     container_name: identity-service
     networks:
       - private
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health/readiness"]
-      interval: 20s
-      timeout: 3s
-      retries: 5
-      start_period: 15s
+    expose:
+      - "8083"
     env_file:
       - ./.env
     volumes:
@@ -158,8 +155,6 @@ services:
       - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
     networks:
     - private
-    env_file:
-    - ./.env
     healthcheck:
       test: ["CMD", "curl", "-f", "http://docker-exporter:8090/metrics.prom"]
       interval: 30s

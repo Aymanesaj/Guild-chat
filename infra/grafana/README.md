@@ -30,7 +30,7 @@ The dashboard provider automatically loads and continuously syncs dashboards fro
 | Dashboard | File | Metrics & Visualizations |
 | :--- | :--- | :--- |
 | **Microservices Overview** | `microservices-dashboard.json` | Service health status, HTTP request rates, 2xx/4xx/5xx status breakdowns, JVM heap memory, garbage collection pause times |
-| **Docker & Host Metrics** | `docker-metrics.json` | Host CPU package power (RAPL), core temperatures, memory utilization, disk I/O, network traffic, per-container CPU/RAM limits, and container restarts |
+| **Docker & Host Metrics** | `docker-metrics.json` | System uptime, container CPU and memory utilization, block I/O, network traffic, and container restarts |
 
 Access Grafana at:
 ```

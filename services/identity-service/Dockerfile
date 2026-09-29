@@ -1,39 +1,26 @@
-FROM eclipse-temurin:21-jdk-alpine AS build
+FROM node:lts-alpine AS build
 
-RUN apk add --no-cache maven gcompat
+WORKDIR /usr/src/app
 
-WORKDIR /app
-COPY demo/pom.xml .
-RUN mvn -q -DskipTests dependency:go-offline
-COPY demo/src ./src
-RUN mvn -q -DskipTests package
+COPY package*.json ./
 
-RUN jlink \
-    --add-modules java.base,java.compiler,java.desktop,java.instrument,java.management,java.naming,java.net.http,java.prefs,java.rmi,java.scripting,java.security.jgss,java.security.sasl,java.sql,java.sql.rowset,java.transaction.xa,java.xml,java.xml.crypto,jdk.crypto.ec,jdk.unsupported,jdk.management,jdk.management.agent,jdk.net \
-    --strip-debug \
-    --no-man-pages \
-    --no-header-files \
-    --compress=2 \
-    --output /custom-jre
+RUN npm ci
 
-FROM alpine:3.20
+COPY . .
 
-RUN apk add --no-cache curl \
-    && addgroup -g 1000 app \
-    && adduser -u 1000 -G app -s /bin/sh -D app \
-    && mkdir -p /tmp/identity-avatars \
-    && chown -R app:app /tmp/identity-avatars
+RUN npm run build
+RUN npm prune --omit=dev
 
-ENV JAVA_HOME=/opt/jre
-ENV PATH="${JAVA_HOME}/bin:${PATH}"
+FROM node:lts-alpine AS runtime
 
-COPY --from=build --chown=app:app /custom-jre /opt/jre
+ENV NODE_ENV=production
+WORKDIR /usr/src/app
 
-WORKDIR /app
-COPY --from=build --chown=app:app /app/target/identity-service-0.0.1-SNAPSHOT.jar app.jar
+# Include application-owned runtime assets such as Prisma and protobuf files.
+COPY --from=build --chown=node:node /usr/src/app ./
+RUN mkdir -p /tmp/identity-avatars && chown node:node /tmp/identity-avatars
 
-USER app
+USER node
+EXPOSE 8083 9090
 
-EXPOSE 8083
-
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+CMD ["npm", "start"]

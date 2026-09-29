@@ -5,7 +5,7 @@ const app = buildApp();
 try {
     await app.listen({
         host: "0.0.0.0",
-        port: 8083
+        port: Number(process.env.IDENTITY_HTTP_PORT ?? 8083)
     });
 } catch (error) {
     app.log.error(error);
