@@ -1,16 +1,26 @@
-FROM node:lts-alpine
+FROM node:lts-alpine AS build
 
 WORKDIR /usr/src/app
 
 COPY package*.json ./
 
-RUN npm install
+RUN npm ci
 
-COPY tsconfig.json ./
-COPY src/ ./src/
+COPY . .
 
 RUN npm run build
+RUN npm prune --omit=dev
 
-EXPOSE 8083
+FROM node:lts-alpine AS runtime
 
-CMD ["node", "dist/main.js"]
+ENV NODE_ENV=production
+WORKDIR /usr/src/app
+
+# Include application-owned runtime assets such as Prisma and protobuf files.
+COPY --from=build --chown=node:node /usr/src/app ./
+RUN mkdir -p /tmp/identity-avatars && chown node:node /tmp/identity-avatars
+
+USER node
+EXPOSE 8083 9090
+
+CMD ["npm", "start"]

@@ -40,7 +40,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "up{job=~\"identity-service|chat-service|org-service|prometheus|docker-exporter\"}",
+          "expr": "up{job=~\"chat-service|org-service|prometheus|docker-exporter\"}",
           "legendFormat": "{{job}}",
           "range": true,
           "refId": "A"

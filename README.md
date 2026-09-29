@@ -143,6 +143,10 @@ and consumed by every component.
 
 ### Backend
 
+Identity is migrating to Node.js, TypeScript, Fastify, and Prisma; see its
+[runtime contract](services/identity-service/README.md). The Java/Spring stack
+below continues to apply to chat and org.
+
 | Technology | Version | Why |
 |---|---|---|
 | Java | 21 | Long-term-support release; virtual threads and modern language features. |
@@ -333,7 +337,8 @@ change the defaults before any deployment.
 |---|---|---|
 | Gateway / WAF | `MODSEC_RULE_ENGINE`, `PARANOIA`, `BLOCKING_PARANOIA` | `DetectionOnly` logs, `On` blocks. Paranoia 1 is standard; 2–4 tighten the OWASP CRS. |
 | PostgreSQL | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` | The container init pair plus libpq variables used by the exporter. |
-| Spring datasources | `SPRING_DATASOURCE_URL/USERNAME/PASSWORD`, `ORG_DATASOURCE_URL/USERNAME/PASSWORD` | Identity and org connection strings. |
+| Identity runtime | `IDENTITY_HTTP_PORT`, `IDENTITY_GRPC_PORT`, `AVATAR_DIR`, `DATABASE_URL` | Loaded from `.env`; use internal ports 8083/9090 and avatar storage `/tmp/identity-avatars`. Prisma connects to `postgres:5432`. No shared `PORT` is needed. |
+| Org datasource | `ORG_DATASOURCE_URL/USERNAME/PASSWORD` | Mapped to org's Spring datasource variables by Compose. |
 | JWT | `JWT_SECRET`, `JWT_ISSUER` | **Change `JWT_SECRET`.** The template ships a placeholder; it signs every access token. |
 | GitHub OAuth | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_REDIRECT_URI` | Create an OAuth app on GitHub and point the callback at `<your-host>/api/users/oauth/github/callback`. Leave blank to disable OAuth; email/password still works. |
 | MongoDB | `MONGO_INITDB_ROOT_USERNAME/PASSWORD`, `CHAT_MONGO_DB/USER/PASSWORD/AUTH_DB` | The root pair is applied on first container start only; changing it later requires `docker volume rm mongo_data`. |

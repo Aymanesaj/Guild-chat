@@ -21,11 +21,8 @@ scrape_configs:
     static_configs:
       - targets: ['docker-exporter:8090']
 
-  - job_name: 'identity-service'
-    metrics_path: '/actuator/prometheus'
-    scrape_interval: 10s
-    static_configs:
-      - targets: ['identity-service:8083']
+  # Identity health is checked by Docker and Gatus at /health.
+  # Add a metrics scrape only after agreeing on a Fastify metrics endpoint.
 
   - job_name: 'chat-service'
     metrics_path: '/actuator/prometheus'

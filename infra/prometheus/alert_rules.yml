@@ -2,7 +2,7 @@ groups:
   - name: transcendence_alerts
     rules:
       - alert: MicroserviceDown
-        expr: up{job=~"identity-service|chat-service|org-service"} == 0
+        expr: up{job=~"chat-service|org-service"} == 0
         for: 30s
         labels:
           severity: critical
@@ -36,4 +36,3 @@ groups:
         annotations:
           summary: "High 5xx Error Rate on {{ $labels.job }}"
           description: "Microservice {{ $labels.job }} is experiencing > 5% HTTP 5xx server errors over 5 minutes."
-

@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+.env
+.env.*
+npm-debug.log*
+demo
+DemoApplication.java
+index.html
+**/target

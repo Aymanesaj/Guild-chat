@@ -1,13 +1,29 @@
 {
   "name": "identity-service",
   "version": "1.0.0",
-  "description": "TypeScript app for Docker deployment",
-  "main": "dist/main.js",
+  "description": "Spring Boot microservice owned by member 3. It handles local auth, JWT issuing, profile records, avatar uploads, and GitHub OAuth bootstrap.",
+  "main": "index.js",
   "scripts": {
+    "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/main.js"
+    "start": "node dist/server.js"
+  },
+  "keywords": [],
+  "type": "module",
+  "dependencies": {
+    "@prisma/client": "^7.10.0",
+    "fastify": "^5.12.5"
   },
   "devDependencies": {
-    "typescript": "^5.0.0"
+    "@types/node": "^26.6.3",
+    "prisma": "^7.10.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "allowScripts": {
+    "prisma@7.10.0": true,
+    "@prisma/engines@7.10.0": true,
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": true
   }
 }

@@ -10,7 +10,7 @@ Prometheus scrapes metrics every 10–15 seconds from backend microservices, the
 
 ```mermaid
 flowchart LR
-    Services["Backend Microservices\n(:8081, :8082, :8083)"] -->|/actuator/prometheus| Prom["Prometheus (:9090)"]
+    Services["Chat and Org Services\n(:8081, :8082)"] -->|/actuator/prometheus| Prom["Prometheus (:9090)"]
     DockerExp["Docker Exporter (:8090)"] -->|/metrics.prom| Prom
     NginxExp["Nginx Gateway (:9113)"] -->|/metrics| Prom
     Prom -->|Fires Alerts| AM["Alertmanager (:9093)"]
@@ -27,10 +27,13 @@ Prometheus operates inside the private container network and scrapes the followi
 | :--- | :--- | :--- | :--- |
 | `prometheus` | `localhost:9090` | 15s | Internal Prometheus performance metrics |
 | `docker-exporter` | `docker-exporter:8090/metrics.prom` | 15s | Docker container metrics and system uptime |
-| `identity-service`| `identity-service:8083/actuator/prometheus` | 10s | JVM, GC, memory, and HTTP request metrics |
 | `chat-service`    | `chat-service:8081/actuator/prometheus` | 10s | Chat microservice JVM and socket metrics |
 | `org-service`     | `org-service:8082/actuator/prometheus` | 10s | Organization service JVM and database metrics |
 | `nginx-gateway`   | `nginx-exporter:9113` | 15s | Nginx connection status and request throughput |
+
+Identity uses Fastify. Docker and Gatus monitor `identity-service:8083/health`;
+its Prometheus metrics endpoint and related alerts will be agreed separately.
+Identity container resource metrics remain available through docker-exporter.
 
 ---
 

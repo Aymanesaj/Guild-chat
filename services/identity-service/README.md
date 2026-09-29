@@ -1,0 +1,125 @@
+## Identity service
+
+Owner: `obendaou`. The Node.js/TypeScript application uses Fastify and Prisma.
+It currently provides `GET /health`; the API routes and gRPC methods below
+describe the service contract. The previous Java implementation remains in
+`demo/` and is excluded from the Node image.
+
+### Container configuration
+
+The Dockerfile runs `npm ci`, `npm run build`, and then `npm start`
+(`dist/server.js`). Compose loads the root `.env`; use `.env.example` as the
+template. Identity has no inline `environment` block in Compose.
+
+- `IDENTITY_HTTP_PORT=8083` controls Fastify's listener on `0.0.0.0`.
+- `IDENTITY_GRPC_PORT=9090` is the target port used by chat and reserved for
+  the identity gRPC server, which is not implemented yet.
+- Avoid a shared `PORT` variable. Chat and org retain their own Compose
+  overrides, and identity reads only `IDENTITY_HTTP_PORT`.
+- `DATABASE_URL` points to PostgreSQL at `postgres:5432`. JWT and GitHub
+  credentials also come from `.env`, which must not be committed.
+- `identity_avatars` persists files at `/tmp/identity-avatars`; keep
+  `AVATAR_DIR` set to that path. The image runs as the `node` user.
+- Neither identity port is published on the host. Nginx keeps the existing
+  `/api/users/` prefix rewrite, so `/api/users/login` reaches `/login`.
+- Docker and Gatus check `/health`. Identity has no Actuator metrics scrape.
+
+The Prisma schema has no models yet. Client generation and database migration
+commands must be agreed with the application owner before deploying schema
+changes; the image does not run migrations automatically.
+
+### Public gateway routes
+
+All routes go through the Nginx gateway:
+
+- `POST /api/users/register`
+- `POST /api/users/login`
+- `GET /api/users/oauth/github/url`
+- `GET /api/users/oauth/github/callback?code=...`
+- `GET /api/users/avatars/{filename}`
+
+### Authenticated gateway routes
+
+Send `Authorization: Bearer <accessToken>`:
+
+- `GET /api/users/me`
+- `PUT /api/users/me`
+- `POST /api/users/me/avatar`
+- `GET /api/users/{id}`
+
+### New auth endpoints (refresh + logout)
+
+- `POST /api/users/auth/refresh` — body `{ "refreshToken": "..." }` → returns a new access + refresh pair. The old refresh token is revoked; reusing a revoked refresh token revokes **all** sessions for that user.
+- `POST /api/users/auth/logout` — authenticated; revokes all refresh tokens for the current user.
+
+`AuthResponse` now includes `refreshToken` alongside `accessToken`.
+
+### Friends endpoints (authenticated)
+
+- `POST /api/users/friends/requests` — body `{ "addresseeId": "..." }` → creates a `PENDING` request.
+- `POST /api/users/friends/requests/{id}/accept` — only the addressee may accept.
+- `POST /api/users/friends/requests/{id}/decline` — only the addressee may decline.
+- `DELETE /api/users/friends/{userId}` — removes an accepted friendship.
+- `GET /api/users/friends` — list of accepted friends.
+- `GET /api/users/friends/requests` — `{ "incoming": [...], "outgoing": [...] }`.
+- `GET /api/users/friends/username/get?username=<USERNAME>` — to get by the username.
+
+### gRPC contract (internal, port 9090)
+
+Service: `identity.IdentityService` (proto package `identity`, file `src/grpc/identity.proto`).
+
+| RPC | Request | Response |
+|---|---|---|
+| `ValidateToken` | `{ token }` | `{ valid, user_id, username, email }` |
+| `GetUser` | `{ user_id }` | `{ user_id, username, display_name, avatar_url }` |
+| `AreFriends` | `{ user_a, user_b }` | `{ are_friends }` |
+
+Chat-service and org-service call these over the private network at
+`identity-service:9090`. The Node implementation still needs to provide the handlers.
+
+### Infra needs (handoff)
+
+- Compose exposes port `9090` inside the private network only.
+- The SQL below documents the previous Java data model. The application owner
+  must provide Prisma migrations and agree on their deployment with DevOps.
+
+```sql
+CREATE TABLE refresh_tokens (
+  id UUID PRIMARY KEY,
+  user_id UUID NOT NULL,
+  token_hash VARCHAR(64) NOT NULL UNIQUE,
+  expires_at TIMESTAMP NOT NULL,
+  revoked BOOLEAN NOT NULL DEFAULT FALSE,
+  replaced_by UUID,
+  created_at TIMESTAMP NOT NULL
+);
+CREATE INDEX idx_refresh_tokens_user ON refresh_tokens(user_id);
+
+CREATE TABLE friendships (
+  id UUID PRIMARY KEY,
+  requester_id UUID NOT NULL,
+  addressee_id UUID NOT NULL,
+  status VARCHAR(16) NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL,
+  CONSTRAINT uk_friendships_pair UNIQUE (requester_id, addressee_id)
+);
+CREATE INDEX idx_friendships_requester ON friendships(requester_id);
+CREATE INDEX idx_friendships_addressee ON friendships(addressee_id);
+```
+
+### Local development
+
+From `services/identity-service`:
+
+```sh
+npm ci
+npm run build
+npm run dev
+```
+
+From the repo root:
+
+```sh
+docker compose up --build identity-service
+```
