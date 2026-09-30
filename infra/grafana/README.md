@@ -1,16 +1,9 @@
 # Grafana Visualization Stack
 
-This directory contains the Grafana provisioning configuration, pre-loaded dashboards, and custom minimal container definition for `ft_transcendence`.
-
----
-
-## Minimal Container Architecture (`Dockerfile`)
-
-To optimize container image size and reduce unnecessary dependencies in restricted environments (e.g. 42 Network), Grafana is built using a multi-stage Docker build:
-- Prunes all non-essential datasource plugins except for Prometheus.
-- Runs under rootless user `472` (standard Grafana UID).
-
----
+This directory contains Grafana provisioning and dashboards for `ft_transcendence`.
+Compose uses `grafana/grafana:13.0.3-slim` directly with its default non-root user.
+The previous pruning build copied files over an intact base image, so it did not
+remove plugins from the final image. There is no custom Grafana build now.
 
 ## Datasource Auto-Provisioning (`datasources/prometheus.yml`)
 

@@ -1,6 +1,7 @@
 services:
 
   nginx:
+    mem_limit: 256m
     container_name: nginx
     build:
       context: .
@@ -44,6 +45,7 @@ services:
     restart: always
 
   frontend:
+    mem_limit: 64m
     build:
       context: ./frontend/app
       dockerfile: Dockerfile
@@ -60,6 +62,7 @@ services:
     restart: always
 
   org-service:
+    mem_limit: 1g
     build: services/org-service/.
     container_name: org-service
     environment:
@@ -86,6 +89,7 @@ services:
 
 
   chat-service:
+    mem_limit: 1g
     build:
       context: ./services/
       dockerfile: ./chat-service/Dockerfile
@@ -110,6 +114,7 @@ services:
     restart: always
 
   mongodb:
+    mem_limit: 1g
     image: mongo:7
     container_name: mongodb
     env_file:
@@ -130,6 +135,7 @@ services:
 
 
   identity-service:
+    mem_limit: 512m
     build: services/identity-service/.
     container_name: identity-service
     networks:
@@ -147,14 +153,18 @@ services:
 
 
   docker-exporter:
+    mem_limit: 64m
     container_name: docker-exporter
     build: ./infra/docker-exporter/
     expose:
     - "8090"
-    volumes:
-      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+    environment:
+      DOCKER_API_URL: http://docker-socket-proxy:2375
+    depends_on:
+      - docker-socket-proxy
     networks:
     - private
+    - docker-metrics
     healthcheck:
       test: ["CMD", "curl", "-f", "http://docker-exporter:8090/metrics.prom"]
       interval: 30s
@@ -163,7 +173,23 @@ services:
       start_period: 5s
     restart: always
 
+  docker-socket-proxy:
+    mem_limit: 64m
+    image: tecnativa/docker-socket-proxy:latest
+    environment:
+      CONTAINERS: 1
+      POST: 0
+      EVENTS: 0
+      PING: 0
+      VERSION: 0
+    volumes:
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+    networks:
+      - docker-metrics
+    restart: always
+
   nginx-exporter:
+    mem_limit: 64m
     image: nginx/nginx-prometheus-exporter:1.1.0
     container_name: nginx-exporter
     command:
@@ -175,6 +201,7 @@ services:
     restart: always
 
   prometheus:
+    mem_limit: 512m
     container_name: prometheus
     image: prom/prometheus
     expose:
@@ -193,12 +220,16 @@ services:
     restart: always
 
   alertmanager:
+    mem_limit: 128m
     container_name: alertmanager
     image: prom/alertmanager:latest
+    environment:
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
     volumes:
-      - ./infra/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml
-    command:
-      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - ./infra/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./infra/prometheus/start-alertmanager.sh:/etc/alertmanager/start.sh:ro
+    entrypoint: ["/bin/sh", "/etc/alertmanager/start.sh"]
+    command: ["--storage.path=/alertmanager"]
     expose:
       - "9093"
     networks:
@@ -206,7 +237,8 @@ services:
     restart: always
 
   grafana:
-    build: ./infra/grafana/
+    mem_limit: 512m
+    image: grafana/grafana:13.0.3-slim
     container_name: grafana
     expose:
       - "3000"
@@ -225,6 +257,7 @@ services:
     restart: always
 
   postgres:
+    mem_limit: 512m
     image: postgres:16-alpine
     container_name: postgres
     volumes:
@@ -244,6 +277,7 @@ services:
       - private
 
   status-page:
+    mem_limit: 128m
     image: twinproduction/gatus:latest
     container_name: status-page
     env_file:
@@ -257,6 +291,7 @@ services:
     restart: always
 
   backup-service:
+    mem_limit: 512m
     build: ./infra/backup
     container_name: backup-service
     volumes:
@@ -285,5 +320,7 @@ volumes:
     name: "mongo_data"
 
 networks:
+  docker-metrics:
+    internal: true
   private:
     name: private

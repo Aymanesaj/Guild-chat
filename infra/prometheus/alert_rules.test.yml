@@ -1,0 +1,96 @@
+rule_files:
+- alert_rules.yml
+evaluation_interval: 15s
+tests:
+- name: HTTP ratios, CPU normalization, memory limits, and exporter health
+  interval: 15s
+  input_series:
+  - series: http_server_requests_seconds_count{job="busy-low-errors",status="200",uri="/"}
+    values: 0+14985x40
+  - series: http_server_requests_seconds_count{job="busy-low-errors",status="500",uri="/"}
+    values: 0+15x40
+  - series: http_server_requests_seconds_count{job="quiet-all-errors",status="500",uri="/"}
+    values: 0+0.6x40
+  - series: http_server_requests_seconds_count{job="aggregate-errors",status="200",uri="/"}
+    values: 0+1380x40
+  - series: http_server_requests_seconds_count{job="aggregate-errors",status="500",uri="/one"}
+    values: 0+60x40
+  - series: http_server_requests_seconds_count{job="aggregate-errors",status="503",uri="/two"}
+    values: 0+60x40
+  - series: http_server_requests_seconds_count{job="idle",status="200",uri="/"}
+    values: 0+0x40
+  - series: http_server_requests_seconds_count{job="idle",status="500",uri="/"}
+    values: 0+0x40
+  - series: http_server_requests_seconds_count{job="no-errors",status="200",uri="/"}
+    values: 0+15x40
+  - series: container_cpu_usage_total_nanoseconds{container="one-core",job="docker-exporter",instance="exporter:8090"}
+    values: 0+15000000000x40
+  - series: container_cpu_system_usage_nanoseconds{container="one-core",job="docker-exporter",instance="exporter:8090"}
+    values: 0+60000000000x40
+  - series: container_cpu_usage_total_nanoseconds{container="host-busy",job="docker-exporter",instance="exporter:8090"}
+    values: 0+54000000000x40
+  - series: container_cpu_system_usage_nanoseconds{container="host-busy",job="docker-exporter",instance="exporter:8090"}
+    values: 0+60000000000x40
+  - series: container_memory_usage_bytes{container="healthy-memory",job="docker-exporter",instance="exporter:8090"}
+    values: 500x40
+  - series: container_memory_limit_bytes{container="healthy-memory",job="docker-exporter",instance="exporter:8090"}
+    values: 1024x40
+  - series: container_memory_usage_bytes{container="high-memory",job="docker-exporter",instance="exporter:8090"}
+    values: 900x40
+  - series: container_memory_limit_bytes{container="high-memory",job="docker-exporter",instance="exporter:8090"}
+    values: 1024x40
+  - series: container_memory_usage_bytes{container="zero-limit",job="docker-exporter",instance="exporter:8090"}
+    values: 100x40
+  - series: container_memory_limit_bytes{container="zero-limit",job="docker-exporter",instance="exporter:8090"}
+    values: '0x40'
+  - series: up{job="docker-exporter",instance="healthy"}
+    values: 1x40
+  - series: docker_exporter_collection_success{job="docker-exporter",instance="healthy"}
+    values: 1x40
+  - series: docker_exporter_last_success_timestamp_seconds{job="docker-exporter",instance="healthy"}
+    values: 590x40
+  - series: up{job="docker-exporter",instance="down"}
+    values: '0x40'
+  - series: docker_exporter_collection_success{job="docker-exporter",instance="down"}
+    values: 1x40
+  - series: docker_exporter_last_success_timestamp_seconds{job="docker-exporter",instance="down"}
+    values: 590x40
+  - series: up{job="docker-exporter",instance="failed"}
+    values: 1x40
+  - series: docker_exporter_collection_success{job="docker-exporter",instance="failed"}
+    values: '0x40'
+  - series: docker_exporter_last_success_timestamp_seconds{job="docker-exporter",instance="failed"}
+    values: 590x40
+  - series: up{job="docker-exporter",instance="stale"}
+    values: 1x40
+  - series: docker_exporter_collection_success{job="docker-exporter",instance="stale"}
+    values: 1x40
+  - series: docker_exporter_last_success_timestamp_seconds{job="docker-exporter",instance="stale"}
+    values: '0x40'
+  promql_expr_test:
+  - expr: ALERTS{alertname="HighHttp5xxErrorRate",alertstate="firing"}
+    eval_time: 10m
+    exp_samples:
+    - labels: ALERTS{alertname="HighHttp5xxErrorRate",alertstate="firing",severity="critical",job="quiet-all-errors"}
+      value: 1
+    - labels: ALERTS{alertname="HighHttp5xxErrorRate",alertstate="firing",severity="critical",job="aggregate-errors"}
+      value: 1
+  - expr: ALERTS{alertname="HighContainerCpuUsage",alertstate="firing"}
+    eval_time: 10m
+    exp_samples:
+    - labels: ALERTS{alertname="HighContainerCpuUsage",alertstate="firing",severity="warning",container="host-busy",job="docker-exporter",instance="exporter:8090"}
+      value: 1
+  - expr: ALERTS{alertname="HighContainerMemoryUsage",alertstate="firing"}
+    eval_time: 10m
+    exp_samples:
+    - labels: ALERTS{alertname="HighContainerMemoryUsage",alertstate="firing",severity="warning",container="high-memory",job="docker-exporter",instance="exporter:8090"}
+      value: 1
+  - expr: ALERTS{alertname="DockerExporterUnhealthy",alertstate="firing"}
+    eval_time: 10m
+    exp_samples:
+    - labels: ALERTS{alertname="DockerExporterUnhealthy",alertstate="firing",severity="warning",job="docker-exporter",instance="down"}
+      value: 1
+    - labels: ALERTS{alertname="DockerExporterUnhealthy",alertstate="firing",severity="warning",job="docker-exporter",instance="failed"}
+      value: 1
+    - labels: ALERTS{alertname="DockerExporterUnhealthy",alertstate="firing",severity="warning",job="docker-exporter",instance="stale"}
+      value: 1

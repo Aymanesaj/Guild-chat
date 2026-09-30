@@ -78,8 +78,8 @@ jobs:
       - name: Create mock .env from example
         run: cp .env.example .env
 
-      - name: Check Compose Syntax
-        run: docker compose config -q
+      - name: Check Compose and monitoring
+        run: bash scripts/test-monitoring.sh
 
   # -------------------------------------------------------------
   # 4. DEPLOY: Continuous Deployment to OCI Free Tier VM via SSH

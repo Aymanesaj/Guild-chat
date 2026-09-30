@@ -10,17 +10,18 @@ POSTGRES_PORT="${PGPORT:-5432}"
 POSTGRES_USER="${POSTGRES_USER:-admin}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-admin}"
 POSTGRES_DB="${POSTGRES_DB:-transdb}"
+ORG_POSTGRES_DB="${ORG_POSTGRES_DB:-org_service_db}"
 
 MONGO_HOST="${MONGO_HOST:-mongodb}"
 MONGO_PORT="${MONGO_PORT:-27017}"
 
 mkdir -p "$BACKUP_DIR"
-chmod 777 "$BACKUP_DIR" 2>/dev/null || true
+chmod 755 "$BACKUP_DIR" 2>/dev/null || true
 
 echo "=========================================="
 echo " Starting Automated Backup Service"
 echo " Interval: ${BACKUP_INTERVAL}s | Retention: ${RETENTION_DAYS} days"
-echo " Target DBs: PostgreSQL (${POSTGRES_DB}), MongoDB (${MONGO_HOST})"
+echo " Target DBs: PostgreSQL (${POSTGRES_DB}, ${ORG_POSTGRES_DB}), MongoDB (${MONGO_HOST})"
 echo "=========================================="
 
 perform_backup() {
@@ -32,14 +33,23 @@ perform_backup() {
         sleep 2
     done
 
+    export PGPASSWORD="$POSTGRES_PASSWORD"
+
     PG_FILE="${BACKUP_DIR}/postgres_${TIMESTAMP}.sql.gz"
     PG_LATEST="${BACKUP_DIR}/postgres_latest.sql.gz"
-    export PGPASSWORD="$POSTGRES_PASSWORD"
+
+    ORG_FILE="${BACKUP_DIR}/org_${TIMESTAMP}.sql.gz"
+    ORG_LATEST="${BACKUP_DIR}/org_latest.sql.gz"
+
     echo "Dumping PostgreSQL database '${POSTGRES_DB}'..."
     pg_dump -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" \
         --clean --if-exists --format=p "$POSTGRES_DB" | gzip -9 > "$PG_FILE"
-    cp -f "$PG_FILE" "$PG_LATEST"
-    echo "PostgreSQL backup completed: ${PG_FILE} ($(du -h "$PG_FILE" | cut -f1))"
+    echo "PostgreSQL '${POSTGRES_DB}' backup completed: ${PG_FILE} ($(du -h "$PG_FILE" | cut -f1))"
+
+    echo "Dumping PostgreSQL database '${ORG_POSTGRES_DB}'..."
+    pg_dump -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" \
+        --clean --if-exists --format=p "$ORG_POSTGRES_DB" | gzip -9 > "$ORG_FILE"
+    echo "PostgreSQL '${ORG_POSTGRES_DB}' backup completed: ${ORG_FILE} ($(du -h "$ORG_FILE" | cut -f1))"
 
     MONGO_FILE="${BACKUP_DIR}/mongo_${TIMESTAMP}.archive.gz"
     MONGO_LATEST="${BACKUP_DIR}/mongo_latest.archive.gz"
@@ -53,16 +63,23 @@ perform_backup() {
     if [ -n "$MONGO_AUTH_USER" ] && [ -n "$MONGO_AUTH_PASS" ]; then
         MONGO_AUTH="--username=${MONGO_AUTH_USER} --password=${MONGO_AUTH_PASS} --authenticationDatabase=${MONGO_AUTH_DB}"
     fi
+
     if mongodump --host="${MONGO_HOST}:${MONGO_PORT}" $MONGO_AUTH --archive="$MONGO_FILE" --gzip; then
-        cp -f "$MONGO_FILE" "$MONGO_LATEST"
-        chmod 666 "$PG_FILE" "$PG_LATEST" "$MONGO_FILE" "$MONGO_LATEST" 2>/dev/null || true
         echo "MongoDB backup completed: ${MONGO_FILE} ($(du -h "$MONGO_FILE" | cut -f1))"
+
+        # Update latest copies atomically only when all databases have succeeded
+        cp -f "$PG_FILE" "$PG_LATEST"
+        cp -f "$ORG_FILE" "$ORG_LATEST"
+        cp -f "$MONGO_FILE" "$MONGO_LATEST"
+        chmod 644 "$PG_FILE" "$PG_LATEST" "$ORG_FILE" "$ORG_LATEST" "$MONGO_FILE" "$MONGO_LATEST" 2>/dev/null || true
     else
         echo "⚠️ WARNING: MongoDB backup failed! Check credentials for user '${MONGO_AUTH_USER}' in .env"
+        rm -f "$MONGO_FILE"
     fi
 
     echo "Rotating backups older than ${RETENTION_DAYS} days..."
     find "$BACKUP_DIR" -type f -name "postgres_*.sql.gz" ! -name "postgres_latest.sql.gz" -mtime +"$RETENTION_DAYS" -delete || true
+    find "$BACKUP_DIR" -type f -name "org_*.sql.gz" ! -name "org_latest.sql.gz" -mtime +"$RETENTION_DAYS" -delete || true
     find "$BACKUP_DIR" -type f -name "mongo_*.archive.gz" ! -name "mongo_latest.archive.gz" -mtime +"$RETENTION_DAYS" -delete || true
 
     echo "[$(date)] <<< Backup snapshot ${TIMESTAMP} finished successfully!"

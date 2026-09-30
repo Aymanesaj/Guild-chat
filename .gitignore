@@ -32,11 +32,12 @@ certs/*
 !infra/**/*.md
 !deploy/*.md
 !infra/docker-exporter/*.sh
+!infra/prometheus/*.sh
 
 # track devops documentation
 !gateway/*.md
 !scripts/*.md
 !docs/*.md
-
+.test/
 # track the root readme
 !README.md
