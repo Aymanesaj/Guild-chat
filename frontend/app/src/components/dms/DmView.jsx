@@ -5,21 +5,11 @@ import { TbMessageCircle, TbUsers } from "react-icons/tb";
 import FriendsSidebar from "./FriendsSidebar";
 import { sortDmRooms, syncDmRooms, toConversation } from "../../api/rooms";
 import { onRoomEvent } from "../../api/messages";
-import { usePolling } from "../../hooks/usePolling";
 import { usePresence } from "../../hooks/usePresence";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { NavToggleButton, useNavDrawer } from "../layout/NavDrawerContext";
 import { useProfileOverlay } from "../layout/ProfileOverlayContext";
 import { Button, SlidePanel } from "../ui";
-
-/**
- * Live updates come over the chat socket (onRoomEvent): a DM someone else
- * starts arrives as room.added, a message in any DM as room.activity. Polling
- * is only the safety net for a socket that is down without noticing. Tied to
- * this component's lifetime on purpose — MainPanel unmounts the DM view when a
- * room is opened, which stops the polling with it.
- */
-const DMS_POLL_MS = 60_000;
 
 /**
  * `rooms` with one room.activity event applied to its preview, or `rooms`
@@ -137,7 +127,12 @@ function DmView() {
     }
   }, []);
 
-  usePolling(loadRooms, DMS_POLL_MS);
+  // No polling: the list loads once on mount, then follows the chat socket
+  // (onRoomEvent below) — a DM someone else starts arrives as room.added, a
+  // message in any DM as room.activity, and a reconnect as resync.
+  useEffect(() => {
+    loadRooms();
+  }, [loadRooms]);
 
   useEffect(
     () =>

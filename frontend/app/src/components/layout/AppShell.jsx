@@ -10,19 +10,9 @@ import ProfilePreviewPopover from "../profile/ProfilePreviewPopover";
 import { SlidePanel } from "../ui";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
-import { usePolling } from "../../hooks/usePolling";
 import { PHONE_QUERY } from "../../constants/breakpoints";
 import { connectChat, onRoomEvent } from "../../api/messages";
 import { getRooms } from "../../api/rooms";
-
-/**
- * Membership changes are pushed: org-service tells chat-service, which sends
- * room.added / room.removed / room.updated down the socket (onRoomEvent), and
- * the list refetches at once. Polling is only the safety net for a socket that
- * is down without noticing. Run from the shell rather than the sidebar so it
- * keeps going whichever view is open.
- */
-const ROOMS_POLL_MS = 60_000;
 
 const AppShellRoot = styled.div`
   display: flex;
@@ -84,16 +74,18 @@ function AppShellContent({ onLogout }) {
     }
   }, []);
 
+  // No polling: the list loads once, then refetches only when something says it
+  // changed — the context tick (a local leave) or a socket event below. Lives
+  // in the shell rather than the sidebar so it keeps listening whichever view
+  // is open.
+  //
   // Leaving a room reports itself through the context tick rather than through
-  // addRoom, so invalidate here too: without this, a poll issued just before the
-  // leave can land afterwards and list the room again until the next tick.
+  // addRoom, so bump the sequence first: a fetch issued just before the leave
+  // can land afterwards and would list the room again.
   useEffect(() => {
     mutationSeq.current += 1;
-  }, [roomsRefreshTick]);
-
-  // The tick also reruns the fetch immediately, so a room the user leaves goes
-  // away at once instead of staying listed for up to ROOMS_POLL_MS.
-  usePolling(loadRooms, ROOMS_POLL_MS, roomsRefreshTick);
+    loadRooms();
+  }, [loadRooms, roomsRefreshTick]);
 
   // Added to a room, removed or kicked from one, a room renamed, or the socket
   // reconnected after possibly missing some of those. The event says only
