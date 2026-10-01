@@ -60,24 +60,4 @@ export const TextArea = forwardRef(function TextArea({ id, ...props }, ref) {
   return <StyledTextArea ref={ref} id={id ?? fallbackId} autoComplete="off" {...props} />;
 });
 
-export const Label = styled.label`
-  display: block;
-  margin-bottom: var(--space-2);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: 500;
-`;
-
-export const Field = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-`;
-
-export const FieldError = styled.p`
-  margin: 0;
-  color: var(--danger);
-  font-size: var(--text-sm);
-`;
-
 export default Input;

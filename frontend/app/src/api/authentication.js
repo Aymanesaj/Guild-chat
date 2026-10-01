@@ -1,10 +1,9 @@
-import { jsonBody, refreshSession, request, requestPublic } from "./http";
+import { jsonBody, request, requestPublic } from "./http";
 import { clearTokens, setTokens } from "./tokens";
 import { clearUserCache, normalizeUser, rememberUser } from "./users";
 
-export { authedFetch, ApiError, LOGOUT_EVENT } from "./http";
+export { LOGOUT_EVENT } from "./http";
 export { hasSession } from "./tokens";
-export { refreshSession };
 
 const API_URL = "/api/users";
 

@@ -75,15 +75,9 @@ export async function getRooms(options) {
 }
 
 /** GET /rooms/dm — the caller's DM rooms, each with its peer resolved. */
-export async function getDmRooms(options) {
+async function getDmRooms(options) {
   const rooms = await request(DM_ROOMS, {}, "Failed to fetch conversations");
   return page(await withPeers((rooms || []).map(normalizeRoom)), options);
-}
-
-export async function getRoom(roomId) {
-  const room = await request(`${ROOMS}/${roomId}`, {}, "Failed to fetch room");
-  const [withPeer] = await withPeers([normalizeRoom(room)]);
-  return withPeer;
 }
 
 export async function createRoom(name) {
@@ -104,23 +98,6 @@ export async function getOrCreateDm(userId) {
   );
   const [withPeer] = await withPeers([normalizeRoom(room)]);
   return withPeer;
-}
-
-export async function updateRoom(roomId, { name }) {
-  const room = await request(
-    `${ROOMS}/${roomId}`,
-    { method: "PATCH", ...jsonBody({ name }) },
-    "Failed to update room",
-  );
-  return normalizeRoom(room);
-}
-
-export async function deleteRoom(roomId) {
-  return request(
-    `${ROOMS}/${roomId}`,
-    { method: "DELETE" },
-    "Failed to delete room",
-  );
 }
 
 /**

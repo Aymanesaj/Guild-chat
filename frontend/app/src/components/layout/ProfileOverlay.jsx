@@ -34,8 +34,6 @@ import {
 
 import { getOrCreateDm, getRooms, leaveRoom } from "../../api/rooms";
 
-import { isAvailable } from "../../api/features";
-
 import {
   Button as KitButton,
   ConfirmDialog,
@@ -73,7 +71,7 @@ const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
 // Username availability
 // -----------------------------------------------------------------------------
 
-export function useUsernameAvailability(username, currentUsername) {
+function useUsernameAvailability(username, currentUsername) {
   const [status, setStatus] = useState("idle");
   const controllerRef = useRef(null);
   const timerRef = useRef(null);
@@ -89,13 +87,6 @@ export function useUsernameAvailability(username, currentUsername) {
 
     if (!USERNAME_RE.test(username)) {
       setStatus("invalid");
-      return;
-    }
-
-    // No availability endpoint yet — identity answers 409 on save instead,
-    // so don't block saving on a check that can't succeed.
-    if (!isAvailable("usernameCheck")) {
-      setStatus("idle");
       return;
     }
 
@@ -132,7 +123,7 @@ export function useUsernameAvailability(username, currentUsername) {
 // Component
 // -----------------------------------------------------------------------------
 
-export default function ProfileOverlay({ user, onClose, onSave }) {
+export default function ProfileOverlay({ user, onClose }) {
   const {
     refreshProfile,
     loadingProfile,
@@ -298,15 +289,13 @@ export default function ProfileOverlay({ user, onClose, onSave }) {
     setSaveError("");
 
     try {
-      const updated = await updateProfile({
+      await updateProfile({
         display_name: draft.displayName,
         username: draft.username,
         bio: draft.bio,
       });
 
       await refreshProfile();
-
-      onSave?.(updated);
 
       setIsEditing(false);
     } catch (error) {

@@ -72,7 +72,7 @@ export function jsonBody(payload) {
 }
 
 /** Drops the session locally and tells App to bounce to /auth. */
-export function endSession() {
+function endSession() {
   clearTokens();
   window.dispatchEvent(new Event(LOGOUT_EVENT));
 }
