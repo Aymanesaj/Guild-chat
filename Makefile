@@ -15,7 +15,7 @@ build: run
 	DOCKER_SOCK=$(DOCKER_SOCK) docker compose up --build -d
 
 down:
-	docker compose down
+		docker compose down
 
 clean:
 	docker compose down --remove-orphans

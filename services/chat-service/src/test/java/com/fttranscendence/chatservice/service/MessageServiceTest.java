@@ -737,4 +737,96 @@ class MessageServiceTest {
 
         verifyNoInteractions(orgClient, events);
     }
+
+    // ---- latestMessages: conversation previews ----
+
+    @Test
+    @DisplayName("previews: no ids is a 400 MISSING_IDS, and nothing is asked of org or Mongo")
+    void previewsNeedIds() {
+        assertThatThrownBy(() -> messageService.latestMessages(USER, List.of()))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(e.getCode()).isEqualTo("MISSING_IDS");
+                });
+        assertThatThrownBy(() -> messageService.latestMessages(USER, null))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.getCode()).isEqualTo("MISSING_IDS"));
+        verifyNoInteractions(orgClient, messageRepository);
+    }
+
+    @Test
+    @DisplayName("previews: more than 100 distinct ids is a 400 TOO_MANY_IDS, checked before any org call")
+    void previewsAreCapped() {
+        List<Long> ids = java.util.stream.LongStream.rangeClosed(1, MessageService.MAX_PREVIEW_ROOMS + 1)
+                .boxed().toList();
+
+        assertThatThrownBy(() -> messageService.latestMessages(USER, ids))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.getCode()).isEqualTo("TOO_MANY_IDS"));
+        verifyNoInteractions(orgClient, messageRepository);
+    }
+
+    @Test
+    @DisplayName("previews: exactly 100 ids is allowed, and duplicates count once")
+    void previewsAtTheCapAndDuplicates() {
+        List<Long> ids = new java.util.ArrayList<>(java.util.stream.LongStream
+                .rangeClosed(1, MessageService.MAX_PREVIEW_ROOMS).boxed().toList());
+        ids.add(1L); // 101 entries, 100 distinct
+        when(orgClient.isMember(eq(USER), org.mockito.ArgumentMatchers.anyLong())).thenReturn(false);
+
+        assertThat(messageService.latestMessages(USER, ids)).isEmpty();
+        verify(orgClient, org.mockito.Mockito.times(1)).isMember(USER, 1L);
+    }
+
+    @Test
+    @DisplayName("previews: rooms the caller is not in are left out, not an error")
+    void previewsHideForeignRooms() {
+        when(orgClient.isMember(USER, ROOM)).thenReturn(true);
+        when(orgClient.isMember(USER, OTHER_ROOM)).thenReturn(false);
+        when(messageRepository.findLatestMessagesByRoomIds(List.of(ROOM))).thenReturn(List.of(message("hi")));
+
+        java.util.Map<Long, Message> result = messageService.latestMessages(USER, List.of(ROOM, OTHER_ROOM));
+
+        assertThat(result).containsOnlyKeys(ROOM);
+        verify(messageRepository).findLatestMessagesByRoomIds(List.of(ROOM)); // the foreign room never reaches Mongo
+    }
+
+    @Test
+    @DisplayName("previews: a room the caller is in but with no messages maps to null")
+    void previewsEmptyRoomIsNull() {
+        when(orgClient.isMember(USER, ROOM)).thenReturn(true);
+        when(messageRepository.findLatestMessagesByRoomIds(List.of(ROOM))).thenReturn(List.of());
+
+        java.util.Map<Long, Message> result = messageService.latestMessages(USER, List.of(ROOM));
+
+        assertThat(result).containsEntry(ROOM, null).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("previews: keys come back in the order asked")
+    void previewsKeepRequestOrder() {
+        when(orgClient.isMember(eq(USER), org.mockito.ArgumentMatchers.anyLong())).thenReturn(true);
+        when(messageRepository.findLatestMessagesByRoomIds(any())).thenReturn(List.of());
+
+        java.util.Map<Long, Message> result = messageService.latestMessages(USER, List.of(7L, 3L, 12L));
+
+        assertThat(result.keySet()).containsExactly(7L, 3L, 12L);
+    }
+
+    @Test
+    @DisplayName("previews: not a member of any of them means an empty answer and no Mongo query")
+    void previewsNoMembershipNoQuery() {
+        when(orgClient.isMember(eq(USER), org.mockito.ArgumentMatchers.anyLong())).thenReturn(false);
+
+        assertThat(messageService.latestMessages(USER, List.of(ROOM, OTHER_ROOM))).isEmpty();
+        verifyNoInteractions(messageRepository);
+    }
+
+    @Test
+    @DisplayName("previews: org unreachable is a 503, never a silent empty answer")
+    void previewsOrgOutage() {
+        when(orgClient.isMember(USER, ROOM)).thenThrow(
+                new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "ORG_UNAVAILABLE", "org-service is unavailable"));
+
+        assertThatThrownBy(() -> messageService.latestMessages(USER, List.of(ROOM)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.getCode()).isEqualTo("ORG_UNAVAILABLE"));
+    }
 }

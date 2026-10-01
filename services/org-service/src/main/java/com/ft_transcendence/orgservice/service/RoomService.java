@@ -24,6 +24,11 @@ import com.ft_transcendence.orgservice.exception.ForbiddenException;
 import com.ft_transcendence.orgservice.dto.MemberResponse;
 import com.ft_transcendence.orgservice.dto.UpdateRoomRequest;
 import com.ft_transcendence.orgservice.client.IdentityGrpcClient;
+import com.fttranscendence.chat.grpc.RoomChange;
+import java.util.Collection;
+import java.util.Set;
+import java.util.stream.Collectors;
+import org.springframework.context.ApplicationEventPublisher;
 
 @Service
 public class RoomService {
@@ -33,6 +38,7 @@ public class RoomService {
     private final MemberRoleRepository memberRoleRepository;
     private final IdentityGrpcClient IdentityGrpcClient;
     private final DirectMessageCreationService directMessageCreationService;
+    private final ApplicationEventPublisher events;
 
     public RoomService(
             RoomRepository roomRepository, 
@@ -40,7 +46,8 @@ public class RoomService {
             RoleRepository roleRepository, 
             MemberRoleRepository memberRoleRepository,
             IdentityGrpcClient IdentityGrpcClient,
-            DirectMessageCreationService directMessageCreationService
+            DirectMessageCreationService directMessageCreationService,
+            ApplicationEventPublisher events
     ) {
         this.roomRepository = roomRepository;
         this.roomMemberRepository = roomMemberRepository;
@@ -48,6 +55,29 @@ public class RoomService {
         this.memberRoleRepository = memberRoleRepository;
         this.IdentityGrpcClient = IdentityGrpcClient;
         this.directMessageCreationService = directMessageCreationService;
+        this.events = events;
+    }
+
+    /**
+     * Announces a room change to the given users (see RoomChangedEvent).
+     * chat-service is told only after the surrounding transaction commits;
+     * nothing is published when nobody is affected.
+     */
+    private void publishRoomChange(Long roomId, RoomChange change, Collection<UUID> userIds) {
+        if (userIds.isEmpty()) {
+            return;
+        }
+        events.publishEvent(new RoomChangedEvent(roomId, change, Set.copyOf(userIds)));
+    }
+
+    /**
+     * Everyone currently in the room. Inside a transaction this sees its own
+     * pending changes: Hibernate flushes before running the query.
+     */
+    private Set<UUID> memberIds(Long roomId) {
+        return roomMemberRepository.findByRoomId(roomId).stream()
+                .map(RoomMember::getUserId)
+                .collect(Collectors.toSet());
     }
 
     public List<RoomResponse> getDirectMessageRoomsByUserId(UUID userId) {
@@ -149,6 +179,8 @@ public class RoomService {
 
         memberRole.setRole(newRole);
         memberRoleRepository.save(memberRole);
+        // Everyone's member list shows roles, and the target's permissions changed.
+        publishRoomChange(roomId, RoomChange.ROOM_UPDATED, memberIds(roomId));
     }
 
     @Transactional
@@ -169,6 +201,7 @@ public class RoomService {
         }
 
         room.setName(request.name());
+        publishRoomChange(roomId, RoomChange.ROOM_UPDATED, memberIds(roomId));
 
         return new RoomResponse(
                 room.getId(),
@@ -211,33 +244,15 @@ public class RoomService {
         .toList();
     }
 
-    private boolean canDeleteRoom(Long roomId, UUID userId, Room room) {
-        
-        if (room.getType() == RoomType.DM) {
-            return true; // DM rooms can be deleted by any member
-        }
-
-        return memberRoleRepository.existsByRoomMemberRoomIdAndRoomMemberUserIdAndRoleName(
-                roomId,
-                userId,
-                RoleName.OWNER
-        );
-    }
-
     @Transactional
-    public void deleteRoom(Long roomId, UUID userId) {
+    public void deleteRoom(Long roomId) {
         Room room = roomRepository.findById(roomId)
                 .orElseThrow(() -> new NotFoundException("Room not found with id: " + roomId));
 
-        if (!isUserInRoom(roomId, userId)) {
-            throw new NotFoundException("Room not found with id: " + roomId);
-        }
-
-        if (!canDeleteRoom(roomId, userId, room)) {
-            throw new ForbiddenException("User does not have permission to delete this room");
-        }
-
         List<RoomMember> roomMembers = roomMemberRepository.findByRoomId(roomId);
+        // Collected before the rows go: afterwards nobody is left to tell.
+        publishRoomChange(roomId, RoomChange.ROOM_REMOVED,
+                roomMembers.stream().map(RoomMember::getUserId).toList());
         for (RoomMember roomMember : roomMembers) {
             memberRoleRepository.deleteAllByRoomMember(roomMember);
         }
@@ -279,6 +294,8 @@ public class RoomService {
                                 "User is not a member of this room"
                         )
                 );
+        
+        boolean removeRoom = false;
 
         if (memberRoleRepository
                 .existsByRoomMemberRoomIdAndRoomMemberUserIdAndRoleName(
@@ -286,10 +303,20 @@ public class RoomService {
                         userId,
                         RoleName.OWNER
                 )) {
-            throw new ForbiddenException("Owner cannot leave the room.");
+                        if (roomMemberRepository.countByRoomId(roomId) > 1) {
+                            throw new ForbiddenException("Owner cannot leave the room while there are other members.");
+                        }
+                        removeRoom = true;
         }
         memberRoleRepository.deleteAllByRoomMember(roomMember);
         roomMemberRepository.delete(roomMember);
+        // Covers leaving and being kicked: removeMember ends up here too.
+        publishRoomChange(roomId, RoomChange.ROOM_REMOVED, List.of(userId));
+        if (removeRoom) {
+            deleteRoom(roomId);
+        } else {
+            publishRoomChange(roomId, RoomChange.ROOM_UPDATED, memberIds(roomId));
+        }
     }
 
     @Transactional
@@ -337,6 +364,11 @@ public class RoomService {
         memberRoleAssignment.setRoomMember(roomMember);
         memberRoleAssignment.setRole(memberRole);
         memberRoleRepository.save(memberRoleAssignment);
+
+        Set<UUID> others = memberIds(roomId);
+        others.remove(targetUserId);
+        publishRoomChange(roomId, RoomChange.ROOM_ADDED, List.of(targetUserId));
+        publishRoomChange(roomId, RoomChange.ROOM_UPDATED, others);
     }
 
     private boolean canManageMembers(Long roomId, UUID userId) {
@@ -425,12 +457,16 @@ public class RoomService {
 
         try 
         {
-            return directMessageCreationService.createDirectMessageRoom(
+            RoomResponse created = directMessageCreationService.createDirectMessageRoom(
                     dmUser1,
                     dmUser2,
                     creatorId,
                     targetUserId
             );
+            // Only a DM that did not exist yet is news. Both sides: the
+            // target's DM list must show it before the first message arrives.
+            publishRoomChange(created.id(), RoomChange.ROOM_ADDED, List.of(creatorId, targetUserId));
+            return created;
         }
         catch (DataIntegrityViolationException e)
         {
@@ -488,6 +524,10 @@ public class RoomService {
         memberRoleAssignment.setRoomMember(savedRoomMember);
         memberRoleAssignment.setRole(ownerRole);
         memberRoleRepository.save(memberRoleAssignment);
+
+        // The creator's other tabs and devices: the creating tab already
+        // inserts the room locally.
+        publishRoomChange(savedRoom.getId(), RoomChange.ROOM_ADDED, List.of(creatorId));
 
         return new RoomResponse(savedRoom.getId(), savedRoom.getName(), savedRoom.getCreatedAt()
             , savedRoom.getType(), savedRoom.getUpdatedAt(), null);

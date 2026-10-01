@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.handler.SessionLimitExceededException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -44,7 +45,9 @@ public class FrameSender {
             session.sendMessage(new TextMessage(json));
         } catch (IOException | IllegalStateException e) {
             log.debug("dropping frame '{}' for session {}: {}", event, session.getId(), e.toString());
-        } catch (Exception e) {
+        } catch(SessionLimitExceededException e){
+            log.debug("slow client {} exceeded session limit: {}", session.getId(), e.toString());
+        }catch (Exception e) {
             log.warn("could not serialise frame '{}'", event, e);
         }
     }

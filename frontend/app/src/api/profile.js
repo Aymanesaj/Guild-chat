@@ -25,7 +25,7 @@ export function avatarUrl(avatar) {
   return `${API_BASE}/avatars/${encodeURIComponent(avatar)}`;
 }
 
-export async function getAvatarBlob(avatar) {
+async function getAvatarBlob(avatar) {
   const response = await authedFetch(avatarUrl(avatar));
 
   if (!response.ok) {
@@ -88,7 +88,7 @@ export function forgetAvatar(avatar) {
   pendingAvatars.delete(avatar);
 }
 
-export function clearAvatarCache() {
+function clearAvatarCache() {
   settledAvatars.forEach((objectUrl) => objectUrl && URL.revokeObjectURL(objectUrl));
   settledAvatars.clear();
   pendingAvatars.clear();
@@ -106,9 +106,4 @@ export async function uploadAvatar(file) {
     { method: "POST", body: formData },
     "Failed to upload avatar",
   ).then(normalizeUser);
-}
-
-/** identity `DELETE /me/avatar` -> the updated user. */
-export async function deleteAvatar() {
-  return request(`${API_BASE}/me/avatar`, { method: "DELETE" }, "Failed to remove avatar").then(normalizeUser);
 }

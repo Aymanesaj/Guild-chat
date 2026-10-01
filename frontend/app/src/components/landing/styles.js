@@ -3,7 +3,7 @@ import styled, { keyframes, css } from "styled-components";
 // Hero entrance. Base styles stay at opacity 1, so when the global
 // prefers-reduced-motion block collapses the duration the content simply
 // appears instead of vanishing.
-export const rise = keyframes`
+const rise = keyframes`
   from {
     opacity: 0;
     transform: translateY(14px);

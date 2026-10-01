@@ -17,6 +17,11 @@ import { resolveUsers } from "./users";
  * the server forgets subscriptions when a socket closes, so every (re)connect
  * subscribes again. A POST's own message also arrives as `message.new`, and
  * the hook dedupes it by id.
+ *
+ * Some frames are about the user rather than a room, and arrive without any
+ * subscription: room list changes pushed by org-service through chat
+ * (`room.added` / `room.removed` / `room.updated`) and `room.activity` for
+ * list previews. `onRoomEvent` delivers those.
  */
 
 const CHAT = "/api/chat";
@@ -66,12 +71,6 @@ export async function sendMessage(roomId, content, replyToId) {
   return message;
 }
 
-export async function getMessage(messageId) {
-  const message = await request(`${CHAT}/messages/${messageId}`, {}, "Failed to load message");
-  const [normalized] = await withUsernames([message]);
-  return normalized;
-}
-
 /** Sender only, within 15 minutes of sending. */
 export async function editMessage(messageId, content) {
   const message = await request(
@@ -93,6 +92,10 @@ export async function deleteMessage(messageId) {
 /** roomId (as a string: route params are strings, the server sends numbers) -> Set<handler> */
 const subscribers = new Map();
 const statusListeners = new Set();
+/** Listeners for user-level room events, see onRoomEvent. */
+const roomListeners = new Set();
+/** False until the first successful open of this session: later opens are reconnects. */
+let hasOpened = false;
 
 let socket = null;
 let status = "closed";
@@ -140,6 +143,22 @@ function dispatch(roomId, update) {
   subscribers.get(roomKey(roomId))?.forEach((handler) => handler(update));
 }
 
+function emitRoomEvent(event) {
+  roomListeners.forEach((listener) => listener(event));
+}
+
+/**
+ * room.activity's message, in the `last_message` shape the DM list stores
+ * (see fetchLastMessages in rooms.js), so it can replace a preview as is.
+ */
+function toPreview(message) {
+  return {
+    id: message.id,
+    content: message.deleted ? "Message deleted" : message.content,
+    sent_at: message.created_at,
+  };
+}
+
 /**
  * Every handler receives one of:
  *   { type: "new",     message }
@@ -161,6 +180,21 @@ async function handleFrame(frame) {
       break;
     case "message.deleted":
       dispatch(data.room_id, { type: "deleted", id: data.id });
+      break;
+    case "room.added":
+    case "room.removed":
+    case "room.updated":
+      // "room.added" -> "added": the list only needs to know what to refetch.
+      emitRoomEvent({ type: event.slice("room.".length), roomId: data.room_id });
+      break;
+    case "room.activity":
+      if (!data.message) break;
+      emitRoomEvent({
+        type: "activity",
+        roomId: data.room_id,
+        change: data.change,
+        preview: toPreview(data.message),
+      });
       break;
     case "error":
       // e.g. NOT_A_MEMBER after being removed from a room; the socket stays
@@ -197,6 +231,10 @@ function connect() {
     // A new socket starts with no subscriptions on the server.
     subscribers.forEach((_, key) => sendRoomFrame("subscribe", key));
     setStatus("open");
+    // Room events sent while the socket was down are lost for good, so lists
+    // refetch once. Not on the first open: they are loading already.
+    if (hasOpened) emitRoomEvent({ type: "resync" });
+    hasOpened = true;
   };
 
   current.onmessage = (event) => {
@@ -248,7 +286,9 @@ function disconnect() {
 
 window.addEventListener(LOGOUT_EVENT, () => {
   keepOpen = false;
+  hasOpened = false;
   subscribers.clear();
+  roomListeners.clear();
   disconnect();
 });
 
@@ -293,4 +333,26 @@ export function onConnectionStatus(listener) {
   statusListeners.add(listener);
   listener(status);
   return () => statusListeners.delete(listener);
+}
+
+/**
+ * User-level room events, wherever the user is in the app and whether or not a
+ * room is open. Returns an unsubscribe function.
+ *
+ * The listener receives one of:
+ *   { type: "added",    roomId }  you can now see this room: refetch the list
+ *   { type: "removed",  roomId }  you can no longer see it: refetch the list
+ *   { type: "updated",  roomId }  name, members or roles changed
+ *   { type: "activity", roomId, change: "new" | "edited" | "deleted",
+ *     preview: { id, content, sent_at } }
+ *                                 a message in one of your rooms; for every
+ *                                 room you are in, DMs and groups alike
+ *   { type: "resync" }            the socket reconnected and events may have
+ *                                 been missed: refetch whatever you show
+ *
+ * Does not open the socket: AppShell's connectChat keeps it open for the session.
+ */
+export function onRoomEvent(listener) {
+  roomListeners.add(listener);
+  return () => roomListeners.delete(listener);
 }

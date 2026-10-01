@@ -32,12 +32,10 @@ import jakarta.validation.Valid;
 @RequestMapping("/rooms/{roomId}/messages")
 public class MessageController {
 
-    private final AuthenticationFilter authenticationFilter;
     private final MessageService messageService;
 
-    public MessageController(MessageService messageService, AuthenticationFilter authenticationFilter) {
+    public MessageController(MessageService messageService) {
         this.messageService = messageService;
-        this.authenticationFilter = authenticationFilter;
     }
 
     @GetMapping

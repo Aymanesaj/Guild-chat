@@ -71,9 +71,28 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         presenceRegistry.connected(userId, session.getId());
     }
 
+    static final int MAX_FRAMES_PER_SECOND = 20 ;
+    static final String RATE_ATTRIBUTE = "chat.frameRate";
+    /** [0]  = window start (ms) , [1] = frames in window */
+    private boolean overRate(WebSocketSession session) {
+        long now = System.currentTimeMillis();
+        long[] rate = (long[]) session.getAttributes()
+        .computeIfAbsent(RATE_ATTRIBUTE, k -> new long[] {now , 0});
+        if ( now - rate[0] > 1_000) {
+            rate[0] = now;
+            rate[1] = 0;
+        }
+        return ++rate[1] > MAX_FRAMES_PER_SECOND;
+    }
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws IOException {
         JsonNode frame;
+        if(overRate(session)) {
+            frameSender.sendError(guarded(session), "RATE_LIMIT_EXCEEDED" , "Too many frames per second");
+            session.close(CloseStatus.POLICY_VIOLATION);
+
+            return ;
+        }
         try {
             frame = objectMapper.readTree(message.getPayload());
         } catch (JsonProcessingException e) {
@@ -133,7 +152,27 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         return userId == null ? null : userId.toString();
     }
 
-    /** For tests and, soon, the broadcaster. */
+    /**
+     * Sends one frame to every open socket of a user: each tab, each device.
+     *
+     * The user-level counterpart of RoomBroadcaster, which only reaches
+     * sockets subscribed to a room. Used for events about the user's room
+     * list, which matter precisely when no room is open.
+     *
+     * A user with no open socket is skipped silently: they will load fresh
+     * state over REST the next time the app opens. Never throws, because
+     * FrameSender never does.
+     *
+     * The set holds the write-serialising decorators, so this is safe to call
+     * from any thread, concurrently with RoomBroadcaster.
+     */
+    public void sendToUser(String userId, String event, Object data) {
+        Set<WebSocketSession> sessions = sessionsByUser.getOrDefault(userId, Set.of());
+        sessions.forEach(session -> frameSender.send(session, event, data));
+        log.debug("{} user={} sockets={}", event, userId, sessions.size());
+    }
+
+    /** For tests. */
     int connectionCount(String userId) {
         Set<WebSocketSession> sessions = sessionsByUser.get(userId);
         return sessions == null ? 0 : sessions.size();

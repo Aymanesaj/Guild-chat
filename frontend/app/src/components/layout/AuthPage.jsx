@@ -10,7 +10,7 @@ import {
   Input as UIInput,
 } from "../ui";
 
-export const Container = styled.div`
+const Container = styled.div`
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -26,13 +26,13 @@ export const Container = styled.div`
   padding: var(--space-5);
 `;
 
-export const Card = styled(UICard)`
+const Card = styled(UICard)`
   width: 100%;
   max-width: 420px;
   padding: var(--space-6);
 `;
 
-export const Logo = styled.div`
+const Logo = styled.div`
   text-align: center;
   font-size: var(--text-sm);
   font-weight: 700;
@@ -41,7 +41,7 @@ export const Logo = styled.div`
   margin-bottom: var(--space-4);
 `;
 
-export const Title = styled.h1`
+const Title = styled.h1`
   text-align: center;
   font-size: 24px;
   font-weight: 700;
@@ -50,7 +50,7 @@ export const Title = styled.h1`
   margin: 0 0 6px;
 `;
 
-export const Subtitle = styled.p`
+const Subtitle = styled.p`
   text-align: center;
   font-size: var(--text-sm);
   color: var(--text-secondary);
@@ -58,13 +58,13 @@ export const Subtitle = styled.p`
   line-height: 1.5;
 `;
 
-export const Form = styled.form`
+const Form = styled.form`
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
 `;
 
-export const Input = UIInput;
+const Input = UIInput;
 
 const PasswordWrap = styled.div`
   position: relative;
@@ -82,11 +82,11 @@ const PasswordWrap = styled.div`
   }
 `;
 
-export const PrimaryButton = styled(Button)`
+const PrimaryButton = styled(Button)`
   margin-top: 6px;
 `;
 
-export const Footer = styled.div`
+const Footer = styled.div`
   margin-top: 18px;
   text-align: center;
   font-size: var(--text-sm);
@@ -106,14 +106,30 @@ const LegalNote = styled.p`
   }
 `;
 
-export const ErrorText = styled.p`
+/* Consent line under the sign-up button: small and plain so it informs
+   without competing with the form. */
+const SignupConsent = styled.p`
+  margin: 0;
+  text-align: center;
+  font-size: var(--text-xs);
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+
+  a {
+    color: var(--text-secondary);
+    text-decoration: underline;
+  }
+`;
+
+const ErrorText = styled.p`
   margin: -2px 0 0;
   min-height: 18px;
   font-size: var(--text-sm);
   color: var(--danger);
 `;
 
-export const Accent = styled.span`
+const Accent = styled.span`
   margin-left: 6px;
   color: var(--accent-400);
   cursor: pointer;
@@ -252,6 +268,12 @@ function SignupView({ setView, onSignup, values, onChange, error, loading }) {
         <PrimaryButton type="submit" $full disabled={loading}>
           {loading ? "Creating..." : "Create Account"}
         </PrimaryButton>
+
+        <SignupConsent>
+          By creating an account, you agree to the{" "}
+          <Link to="/terms">Terms of Service</Link> and acknowledge the{" "}
+          <Link to="/privacy">Privacy Policy</Link>.
+        </SignupConsent>
       </Form>
 
       <Footer>
@@ -362,10 +384,13 @@ function AuthPage( { onLogin } ) {
         {renderView()}
       </Card>
 
-      <LegalNote>
-        By continuing you agree to our <Link to="/terms">Terms of Service</Link>{" "}
-        and <Link to="/privacy">Privacy Policy</Link>.
-      </LegalNote>
+      {/* Sign-up carries its own consent line under the button. */}
+      {view === "login" && (
+        <LegalNote>
+          By continuing you agree to our <Link to="/terms">Terms of Service</Link>{" "}
+          and <Link to="/privacy">Privacy Policy</Link>.
+        </LegalNote>
+      )}
     </Container>
   );
 }

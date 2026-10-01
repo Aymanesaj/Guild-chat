@@ -10,18 +10,9 @@ import ProfilePreviewPopover from "../profile/ProfilePreviewPopover";
 import { SlidePanel } from "../ui";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
-import { usePolling } from "../../hooks/usePolling";
 import { PHONE_QUERY } from "../../constants/breakpoints";
-import { connectChat } from "../../api/messages";
+import { connectChat, onRoomEvent } from "../../api/messages";
 import { getRooms } from "../../api/rooms";
-
-/**
- * org-service has no way to push membership changes (no websocket dependency,
- * no path into chat-service), so being added to or removed from a room is only
- * observable by asking again. Polled from the shell rather than the sidebar so
- * it keeps running whichever view is open.
- */
-const ROOMS_POLL_MS = 10_000;
 
 const AppShellRoot = styled.div`
   display: flex;
@@ -83,19 +74,37 @@ function AppShellContent({ onLogout }) {
     }
   }, []);
 
+  // No polling: the list loads once, then refetches only when something says it
+  // changed — the context tick (a local leave) or a socket event below. Lives
+  // in the shell rather than the sidebar so it keeps listening whichever view
+  // is open.
+  //
   // Leaving a room reports itself through the context tick rather than through
-  // addRoom, so invalidate here too: without this, a poll issued just before the
-  // leave can land afterwards and list the room again until the next tick.
+  // addRoom, so bump the sequence first: a fetch issued just before the leave
+  // can land afterwards and would list the room again.
   useEffect(() => {
     mutationSeq.current += 1;
-  }, [roomsRefreshTick]);
+    loadRooms();
+  }, [loadRooms, roomsRefreshTick]);
 
-  // The tick also reruns the fetch immediately, so a room the user leaves goes
-  // away at once instead of staying listed for up to ROOMS_POLL_MS.
-  usePolling(loadRooms, ROOMS_POLL_MS, roomsRefreshTick);
+  // Added to a room, removed or kicked from one, a room renamed, or the socket
+  // reconnected after possibly missing some of those. The event says only
+  // which room, so refetch: GET /rooms applies org's own rules. Bumping the
+  // sequence first discards a poll already in flight, which may have been
+  // answered before the change and would otherwise land after this fetch.
+  // Removal from the open room is then handled by the effect further down.
+  useEffect(
+    () =>
+      onRoomEvent((event) => {
+        if (event.type === "activity") return; // previews: the group list shows none
+        mutationSeq.current += 1;
+        loadRooms();
+      }),
+    [loadRooms],
+  );
 
   const addRoom = useCallback((room) => {
-    // Bump before inserting, so a poll issued before the room existed is
+    // Bump before inserting, so a request issued before the room existed is
     // discarded rather than removing it again.
     mutationSeq.current += 1;
     setRooms((previous) => [room, ...previous]);

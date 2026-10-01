@@ -141,11 +141,4 @@ public class RoomController {
         roomService.removeMember(roomId, actorId, userId);
         return ResponseEntity.noContent().build();
     }
-
-    @DeleteMapping("/{roomId}")
-    public ResponseEntity<Void> deleteRoom(@PathVariable Long roomId, Principal principal) {
-        UUID userId = UUID.fromString(principal.getName());
-        roomService.deleteRoom(roomId, userId);
-        return ResponseEntity.noContent().build();
-    }
 }

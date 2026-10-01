@@ -14,6 +14,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import org.springframework.context.ApplicationEventPublisher;
+
 import com.ft_transcendence.orgservice.client.IdentityGrpcClient;
 import com.ft_transcendence.orgservice.model.MemberRole;
 import com.ft_transcendence.orgservice.model.Role;
@@ -44,7 +46,8 @@ class RoomServiceRoleTest {
                 mock(RoleRepository.class),
                 memberRoleRepository,
                 mock(IdentityGrpcClient.class),
-                mock(DirectMessageCreationService.class));
+                mock(DirectMessageCreationService.class),
+                mock(ApplicationEventPublisher.class));
     }
 
     @Test

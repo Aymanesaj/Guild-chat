@@ -46,36 +46,18 @@ const StyledTextArea = styled.textarea`
 
 /**
  * Falls back to a generated id so fields always satisfy the browser's
- * "form field should have an id or name" autofill hint.
+ * "form field should have an id or name" autofill hint. Autocomplete is off
+ * unless a field asks for it: past entries are noise in chat, search and
+ * profile fields, and the auth forms pass their own tokens to keep it.
  */
 const Input = forwardRef(function Input({ id, ...props }, ref) {
   const fallbackId = useId();
-  return <StyledInput ref={ref} id={id ?? fallbackId} {...props} />;
+  return <StyledInput ref={ref} id={id ?? fallbackId} autoComplete="off" {...props} />;
 });
 
 export const TextArea = forwardRef(function TextArea({ id, ...props }, ref) {
   const fallbackId = useId();
-  return <StyledTextArea ref={ref} id={id ?? fallbackId} {...props} />;
+  return <StyledTextArea ref={ref} id={id ?? fallbackId} autoComplete="off" {...props} />;
 });
-
-export const Label = styled.label`
-  display: block;
-  margin-bottom: var(--space-2);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: 500;
-`;
-
-export const Field = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-`;
-
-export const FieldError = styled.p`
-  margin: 0;
-  color: var(--danger);
-  font-size: var(--text-sm);
-`;
 
 export default Input;

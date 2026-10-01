@@ -10,7 +10,7 @@ services/chat-service/target/
 .idea/
 notes/*
 .env
-z/DEVOPS*.md
+infra/DEVOPS*.md
 # shared with the frontend dev — must be tracked despite the *.md rule above
 # shared documentation — must be tracked despite the *.md rule above
 !services/chat-service/API_CONTRACT.md
@@ -29,7 +29,8 @@ certs/*
 !gateway/script.sh
 !scripts/*.sh
 !infra/backup/*.sh
-!infra/**/*.md
+.idea/
+
 !deploy/*.md
 !infra/docker-exporter/*.sh
 !infra/prometheus/*.sh

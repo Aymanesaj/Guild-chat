@@ -3,6 +3,7 @@ import { TbMessageOff, TbPlugConnectedX } from "react-icons/tb";
 import DmItem from "./DmItem";
 import DmItemSkeleton from "./DmItemSkeleton";
 import { EmptyState } from "../ui";
+import FriendRequestForm from "../profile/FriendRequestForm";
 
 const DmListRoot = styled.ul`
   display: flex;
@@ -13,6 +14,11 @@ const DmListRoot = styled.ul`
   padding: 0;
   overflow-y: auto;
   list-style: none;
+`;
+
+/* Centered under the hint instead of pushed right like it is in a toolbar. */
+const StartForm = styled(FriendRequestForm)`
+  margin: var(--space-3) auto 0;
 `;
 
 function DmList({ conversations, state }) {
@@ -47,8 +53,10 @@ function DmList({ conversations, state }) {
           <EmptyState
             icon={TbMessageOff}
             title="No conversations yet"
-            hint="Open someone's profile to start a direct message."
-          />
+            hint="Start by adding friends — send a request. or start a conversation with a friend :)"
+          >
+            <StartForm />
+          </EmptyState>
         </li>
       </DmListRoot>
     );
