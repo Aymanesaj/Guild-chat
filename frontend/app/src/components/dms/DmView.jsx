@@ -1,19 +1,40 @@
 import DmList from "./DmList";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styled from "styled-components";
 import { TbMessageCircle } from "react-icons/tb";
 import { sortDmRooms, syncDmRooms, toConversation } from "../../api/rooms";
+import { onRoomEvent } from "../../api/messages";
 import { usePolling } from "../../hooks/usePolling";
 import { usePresence } from "../../hooks/usePresence";
 import { NavToggleButton } from "../layout/NavDrawerContext";
 
 /**
- * A DM someone else starts arrives with no notification of any kind: org-service
- * owns rooms and cannot push, so the only way to find out is to ask again. Tied
- * to this component's lifetime on purpose — MainPanel unmounts the DM view when
- * a room is opened, which stops the polling with it.
+ * Live updates come over the chat socket (onRoomEvent): a DM someone else
+ * starts arrives as room.added, a message in any DM as room.activity. Polling
+ * is only the safety net for a socket that is down without noticing. Tied to
+ * this component's lifetime on purpose — MainPanel unmounts the DM view when a
+ * room is opened, which stops the polling with it.
  */
-const DMS_POLL_MS = 10_000;
+const DMS_POLL_MS = 60_000;
+
+/**
+ * `rooms` with one room.activity event applied to its preview, or `rooms`
+ * itself when the event changes nothing: a room not in the list (a group room,
+ * or a DM not loaded yet), or an edit/delete of a message that is no longer
+ * the one being previewed.
+ *
+ * Only the preview changes; DmView re-sorts by it, so a new message moves its
+ * conversation to the top. An edit keeps the original sent_at, so it doesn't.
+ */
+function applyActivity(rooms, { roomId, change, preview }) {
+  const index = rooms.findIndex((room) => Number(room.id) === Number(roomId));
+  if (index === -1) return rooms;
+  if (change !== "new" && rooms[index].last_message?.id !== preview.id) return rooms;
+
+  const next = [...rooms];
+  next[index] = { ...rooms[index], last_message: preview };
+  return next;
+}
 
 const DmViewShell = styled.section`
   display: flex;
@@ -49,9 +70,24 @@ function DmView() {
   // interval on every tick.
   const knownRooms = useRef([]);
 
+  // Loads can overlap now that socket events trigger them too, not just the
+  // poll. Only the newest one's result is kept: an older one could still list
+  // a conversation that has gone away.
+  const loadSeq = useRef(0);
+  const loadsInFlight = useRef(0);
+  // room.activity received while a load is in flight. The load started from
+  // the previews as they were before, so its result would undo them; they are
+  // replayed on top of it. Also catches the first message of a DM whose
+  // room.added load is still running, which applyActivity would skip.
+  const pendingActivity = useRef([]);
+
   const loadRooms = useCallback(async () => {
+    const seq = ++loadSeq.current;
+    loadsInFlight.current += 1;
     try {
-      const next = await syncDmRooms(knownRooms.current);
+      const synced = await syncDmRooms(knownRooms.current);
+      if (seq !== loadSeq.current) return;
+      const next = pendingActivity.current.reduce(applyActivity, synced);
       knownRooms.current = next;
       setRooms(next);
       setLoading("success");
@@ -59,10 +95,35 @@ function DmView() {
       // A failed tick leaves the conversations already on screen; only a first
       // load with nothing to show is an error worth rendering.
       setLoading((state) => (state === "loading" ? "error" : state));
+    } finally {
+      loadsInFlight.current -= 1;
+      if (loadsInFlight.current === 0) pendingActivity.current = [];
     }
   }, []);
 
   usePolling(loadRooms, DMS_POLL_MS);
+
+  useEffect(
+    () =>
+      onRoomEvent((event) => {
+        if (event.type === "activity") {
+          if (loadsInFlight.current > 0) pendingActivity.current.push(event);
+          const next = applyActivity(knownRooms.current, event);
+          if (next !== knownRooms.current) {
+            knownRooms.current = next;
+            setRooms(next);
+          }
+          return;
+        }
+        // "added"/"removed" may concern a group room rather than a DM; the
+        // event doesn't say, and one extra GET is cheaper than guessing wrong.
+        // "updated" is ignored: nothing it can change is shown here.
+        if (event.type === "added" || event.type === "removed" || event.type === "resync") {
+          loadRooms();
+        }
+      }),
+    [loadRooms],
+  );
 
   const conversations = useMemo(
     () => sortDmRooms(rooms).map(toConversation),
