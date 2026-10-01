@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import LegalPage, { Title, Updated, Heading, Text, List } from "./LegalPage";
 
-const LAST_UPDATED = "25 September 2026";
+const LAST_UPDATED = "29 September 2026";
 
 function Privacy() {
   return (
@@ -25,11 +25,6 @@ function Privacy() {
         <li>
           <strong>Profile data</strong> — the bio and avatar image you choose to
           add. Both are optional.
-        </li>
-        <li>
-          <strong>GitHub sign-in</strong> — if you sign in with GitHub, we store
-          your GitHub account id and the username, email and avatar GitHub
-          returns to us. We never post anything on your behalf.
         </li>
         <li>
           <strong>Content you create</strong> — the rooms you create or join,
