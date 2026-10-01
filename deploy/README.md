@@ -76,7 +76,14 @@ from the `nginx_tls` volume; browsers still need to trust it explicitly.
 
 ## 4. GitHub Actions CI/CD Integration
 
-To enable automated testing and continuous deployment on push to `main`:
+CI runs on pushes and pull requests. The deployment job in
+`.github/workflows/ci-cd.yml` is commented out; uncomment it when ready to enable
+VM deployment after all CI jobs pass. It passes `${{ github.sha }}` to the VM,
+fetches that exact commit, and checks it out detached before running the deployment
+script. Deployments are serialized, and local checkout changes cause a failure
+instead of being discarded.
+
+To configure the deployment job:
 
 1. In your GitHub repository, navigate to **Settings** → **Secrets and variables** → **Actions**.
 2. Add the following repository secrets:
@@ -88,10 +95,28 @@ To enable automated testing and continuous deployment on push to `main`:
 | `OCI_SSH_KEY` | Private SSH key (matching `~/.ssh/authorized_keys`) | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
 | `OCI_SSH_PORT` | *(Optional, defaults to 22)* | `22` |
 
+For a manual deployment, copy the full commit SHA from a successful CI run:
+
+```bash
+DEPLOY_SHA='<full-40-character-tested-commit-sha>'
+git fetch --no-tags origin "$DEPLOY_SHA"
+git checkout --detach "$DEPLOY_SHA"
+bash deploy/deploy.sh "$DEPLOY_SHA"
+```
+
+`deploy.sh` requires that exact commit to be checked out with no local changes;
+it never pulls `main`. Keep `.env`, certificates, and backups in their ignored
+runtime locations. This pins the source revision. Images are still built on the
+VM from the repository's existing base-image tags, so builds are not guaranteed
+to be byte-for-byte identical; immutable image releases would be a separate step.
+
+The frontend uses Node 22 in both CI and its Docker build. The root and frontend
+Docker contexts exclude environment files, certificates, private keys, and backups.
+
 ---
 
 ## 5. Scripts Overview
 
-- [`setup-vm.sh`](file:///home/seraph/dev/ft_transcendence/deploy/setup-vm.sh): Installs Docker, Compose, configures Docker log rotation, and opens local OS-level firewall ports.
-- [`deploy.sh`](file:///home/seraph/dev/ft_transcendence/deploy/deploy.sh): Pulls the latest code from `main`, rebuilds containers via `docker compose up -d --build`, prunes stale images, and checks status. Executed automatically by GitHub Actions over SSH.
+- [`setup-vm.sh`](setup-vm.sh): Installs Docker, Compose, configures Docker log rotation, and opens local OS-level firewall ports.
+- [`deploy.sh`](deploy.sh): Verifies the supplied tested SHA and clean checkout, rebuilds containers, prunes dangling images, and checks status. Called over SSH when the deployment job is enabled.
 
