@@ -1,5 +1,6 @@
 package com.fttranscendence.chatservice.grpc;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
@@ -12,6 +13,9 @@ import org.springframework.stereotype.Component;
 import com.fttranscendence.chatservice.exception.ApiException;
 import com.fttranscendence.org.grpc.CheckMembershipRequest;
 import com.fttranscendence.org.grpc.CheckMembershipResponse;
+import com.fttranscendence.org.grpc.ListRoomMembersRequest;
+import com.fttranscendence.org.grpc.ListRoomMembersResponse;
+import com.fttranscendence.org.grpc.MemberResponse;
 import com.fttranscendence.org.grpc.OrgServiceGrpc;
 
 import io.grpc.Channel;
@@ -93,6 +97,34 @@ import jakarta.annotation.PreDestroy;
     }
     public boolean isMember(String userId , Long roomId){
         return membership(userId ,roomId).member();
+    }
+
+    /**
+     * Ids of every member of a room.
+     *
+     * org only answers a member, so askingUserId must be one: the sender of a
+     * message that was just accepted is the natural choice.
+     *
+     * @throws ApiException 503 on any failure. org reports "room not found"
+     *         and "not a member" as an unhandled exception (UNKNOWN), so they
+     *         cannot be told apart from an outage here; callers treat every
+     *         failure as "audience unknown".
+     */
+    public List<String> memberIds(Long roomId, String askingUserId) {
+        try {
+            ListRoomMembersResponse response = stub
+            .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
+            .listRoomMembers(ListRoomMembersRequest.newBuilder()
+            .setRoomId(String.valueOf(roomId))
+            .setUserId(askingUserId)
+            .build());
+            return response.getMembersList().stream()
+            .map(MemberResponse::getUserId)
+            .toList();
+        } catch (StatusRuntimeException e) {
+            log.warn("org-service ListRoomMembers failed: {}", e.getStatus().getCode(), e);
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "ORG_UNAVAILABLE", "org-service is unavailable");
+        }
     }
   @PreDestroy
   void shutdown() {

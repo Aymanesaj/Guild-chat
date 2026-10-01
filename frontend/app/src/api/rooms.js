@@ -241,6 +241,8 @@ async function fetchLastMessages(roomIds) {
           Number(id),
           last
             ? {
+                // id: lets a room.activity edit or delete find the preview it changes.
+                id: last.id,
                 content: last.deleted ? "Message deleted" : last.content,
                 sent_at: last.created_at,
               }
@@ -273,9 +275,10 @@ export function sortDmRooms(rooms) {
  * a steady-state poll is a single request, and the extra ones happen only on
  * the tick where a new conversation first appears.
  *
- * The flip side is that an existing conversation's preview and position don't
- * refresh: this call discovers conversations, it doesn't track their contents.
- * Rooms that have disappeared are simply absent from the result.
+ * Keeping previews fresh is the socket's job: DmView applies each
+ * `room.activity` event (see onRoomEvent in messages.js) to `known`, so this
+ * call only has to discover conversations. Rooms that have disappeared are
+ * simply absent from the result.
  */
 export async function syncDmRooms(known = []) {
   const previews = new Map(known.map((room) => [room.id, room.last_message]));

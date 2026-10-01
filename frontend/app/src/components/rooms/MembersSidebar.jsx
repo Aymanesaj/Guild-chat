@@ -5,6 +5,7 @@ import { TbArrowLeft, TbUserPlus, TbUsersGroup, TbX } from "react-icons/tb";
 import MemberList from "./MemberList";
 import { addMember, assignRole, getRoomMembers, removeMember } from "../../api/rooms";
 import { getFriendsList } from "../../api/friends";
+import { onRoomEvent } from "../../api/messages";
 import { usePresence } from "../../hooks/usePresence";
 import { useProfileOverlay } from "../layout/ProfileOverlayContext";
 import { useNavDrawer } from "../layout/NavDrawerContext";
@@ -124,6 +125,29 @@ function MembersSidebar({ roomId, onClose }) {
     };
 
     fetchMembers();
+  }, [roomId]);
+
+  // Someone joined, left, was kicked or changed role while this panel is open
+  // (room.updated, pushed by org through chat). Refetched quietly: no loading
+  // state, and a failure keeps the list already shown.
+  useEffect(() => {
+    // A refetch still in flight when the room changes must not land in the next one.
+    let active = true;
+    const unsubscribe = onRoomEvent((event) => {
+      if (event.type !== "updated" && event.type !== "resync") return;
+      if (event.type === "updated" && Number(event.roomId) !== Number(roomId)) return;
+      getRoomMembers(roomId)
+        .then((roomMembers) => {
+          if (!active) return;
+          setMembers(roomMembers);
+          setLoading("success");
+        })
+        .catch(() => {});
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [roomId]);
 
   useEffect(() => {
