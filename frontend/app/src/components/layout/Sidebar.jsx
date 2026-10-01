@@ -173,7 +173,7 @@ export const ProfileName = styled.button`
 `;
 
 /**
- * The rooms list belongs to AppShell: it is polled for the whole session, and
+ * The rooms list belongs to AppShell: it is kept current for the whole session, and
  * the shell is the only place that knows both the list and the open room, which
  * is what it takes to notice we were removed from the room being viewed.
  */
@@ -195,11 +195,11 @@ function Sidebar({
 
     try {
       const newRoom = await createRoom(name);
-      // Shown straight away rather than on the next poll, which also stops the
+      // Shown straight away rather than waiting for a refetch, which also stops the
       // navigation below from landing on a room the list doesn't have yet.
       onRoomCreated(newRoom);
       setCreateOpen(false);
-      if (onRoomChange) onRoomChange(newRoom);
+      onRoomChange(newRoom);
     } catch (err) {
       setCreateError(err?.message || "Failed to create room");
     }
@@ -349,10 +349,8 @@ function ProfilePreview({ onLogout }) {
   const { avatarUrl } = useAvatarUrl(currentUser?.avatar);
   const name = currentUser?.display_name || currentUser?.username;
 
-  function openPrfl() {
-    openProfile().catch(() => {
-		// Ignore exception for console errors
-	});
+  function handleOpenProfile() {
+    openProfile().catch(() => {});
   }
 
   return (
@@ -360,7 +358,7 @@ function ProfilePreview({ onLogout }) {
       <Avatar src={avatarUrl} name={name} $size={36} />
 
       <ProfileIdentity>
-        <ProfileName onClick={openPrfl}>{name}</ProfileName>
+        <ProfileName onClick={handleOpenProfile}>{name}</ProfileName>
         <span>@{currentUser?.username}</span>
       </ProfileIdentity>
 

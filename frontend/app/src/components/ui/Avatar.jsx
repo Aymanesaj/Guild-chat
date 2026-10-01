@@ -1,6 +1,6 @@
 import styled from "styled-components";
 
-export const AvatarRoot = styled.div`
+const AvatarRoot = styled.div`
   display: grid;
   place-items: center;
   flex-shrink: 0;

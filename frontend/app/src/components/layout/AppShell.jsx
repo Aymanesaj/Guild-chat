@@ -104,7 +104,7 @@ function AppShellContent({ onLogout }) {
   );
 
   const addRoom = useCallback((room) => {
-    // Bump before inserting, so a poll issued before the room existed is
+    // Bump before inserting, so a request issued before the room existed is
     // discarded rather than removing it again.
     mutationSeq.current += 1;
     setRooms((previous) => [room, ...previous]);

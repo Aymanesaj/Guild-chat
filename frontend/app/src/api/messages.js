@@ -71,12 +71,6 @@ export async function sendMessage(roomId, content, replyToId) {
   return message;
 }
 
-export async function getMessage(messageId) {
-  const message = await request(`${CHAT}/messages/${messageId}`, {}, "Failed to load message");
-  const [normalized] = await withUsernames([message]);
-  return normalized;
-}
-
 /** Sender only, within 15 minutes of sending. */
 export async function editMessage(messageId, content) {
   const message = await request(
