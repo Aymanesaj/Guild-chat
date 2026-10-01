@@ -69,3 +69,13 @@ export function findUserByUsername(
         }
     });
 }
+
+export function findUserById(
+    id: string
+) {
+    return prisma.user.findUnique({
+        where: {
+            id
+        }
+    });
+}

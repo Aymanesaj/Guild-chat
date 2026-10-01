@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import { authRoutes } from "./routes/auth.routes.js";
+import { userRoutes } from "./routes/user.routes.js";
 
 
 export function buildApp() {
@@ -15,7 +16,7 @@ export function buildApp() {
     });
 
     app.register(authRoutes);
-
+    app.register(userRoutes);
 
     return app;
 }
