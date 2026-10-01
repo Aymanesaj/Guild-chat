@@ -350,7 +350,9 @@ function ProfilePreview({ onLogout }) {
   const name = currentUser?.display_name || currentUser?.username;
 
   function openPrfl() {
-    openProfile();
+    openProfile().catch(() => {
+		// Ignore exception for console errors
+	});
   }
 
   return (

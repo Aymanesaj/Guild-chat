@@ -34,7 +34,7 @@ async function parseBody(response) {
   try {
     return JSON.parse(text);
   } catch {
-    return text;
+    return null;
   }
 }
 

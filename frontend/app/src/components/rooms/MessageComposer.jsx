@@ -77,10 +77,14 @@ function MessageComposer({ roomName, isDm, onSend, disabled, replyingTo, onCance
     const trimmed = text.trim();
     if (!trimmed || disabled) return;
 
-    await onSend?.(trimmed, replyingTo?.id);
-    setText("");
-    onCancelReply?.();
-  }
+    try {
+	  await onSend(trimmed, replyingTo?.id);
+	  setText("");
+	  onCancelReply?.();
+	  } catch {
+	  return;
+	  }
+	}
 
   return (
     <MessageComposerRoot>
