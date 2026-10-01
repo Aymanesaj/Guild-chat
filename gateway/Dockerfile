@@ -17,7 +17,7 @@ RUN rm -rf /etc/nginx/templates/nginx.conf.template \
 
 COPY ./gateway/modsec/modsecurity-override.conf /etc/nginx/templates/modsecurity.d/modsecurity-override.conf.template
 
-COPY ./gateway/nginx.conf /etc/nginx/nginx.conf
+COPY ./gateway/nginx.conf /etc/nginx/nginx.conf.template
 COPY ./gateway/script.sh .
 
 RUN chmod +x ./script.sh \

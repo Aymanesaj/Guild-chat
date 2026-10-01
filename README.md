@@ -325,7 +325,7 @@ Watch progress with `make logs`, and confirm with `make ps`.
 | Application | `https://localhost:8443` | App login |
 | Application (HTTP, redirects) | `http://localhost:8000` | — |
 | Grafana dashboards | `https://localhost:8443/grafana/` | `GF_SECURITY_ADMIN_USER` / `..._PASSWORD` |
-| Status page (Gatus) | `https://localhost:8443/status/` | `STATUS_PAGE_USER` / `..._PASSWORD` |
+| Status page (Gatus) | `https://status.localhost:8443/` | `STATUS_PAGE_USER` / `..._PASSWORD` |
 | Prometheus | `https://localhost:8443/prometheus/` | Restricted to private IP ranges |
 
 ### Environment configuration
@@ -627,7 +627,7 @@ delegates every token check to `identity-service`.
 
 - **Health checks** on every Compose service, with `depends_on: condition: service_healthy`
   gating startup order so the gateway never fronts a service that is not ready.
-- **Status page** — a Gatus instance monitoring 9 endpoints, published at `/status/` behind
+- **Status page** — a Gatus instance monitoring 9 endpoints, published at `https://status.${DOMAIN}/` behind
   Basic Auth.
 - **Automated backups** — a `backup-service` container snapshots PostgreSQL and MongoDB on a
   schedule ([`infra/backup/`](infra/backup/)).

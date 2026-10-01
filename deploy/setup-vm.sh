@@ -69,7 +69,7 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)"
 if [ -d "$REPO_DIR" ]; then
     echo "🔒 Preparing certs directory in ${REPO_DIR}/certs..."
     mkdir -p "${REPO_DIR}/certs"
-    chown -R "${ACTUAL_USER}:${ACTUAL_USER}" "${REPO_DIR}/certs"
+    chown "${ACTUAL_USER}:${ACTUAL_USER}" "${REPO_DIR}/certs"
 fi
 
 echo "======================================================"
@@ -83,11 +83,9 @@ echo "3. Clone the repo if you haven't already:"
 echo "   git clone <REPO_URL> ~/ft_transcendence"
 echo "4. Create your production .env file in ~/ft_transcendence/.env"
 echo "5. SSL Certificate (Optional - Nginx generates self-signed certs automatically):"
-echo "   To issue a free Let's Encrypt certificate for guild-chat.tech:"
-echo "     sudo certbot certonly --standalone -d guild-chat.tech"
-echo "     sudo cp /etc/letsencrypt/live/guild-chat.tech/fullchain.pem ~/ft_transcendence/certs/"
-echo "     sudo cp /etc/letsencrypt/live/guild-chat.tech/privkey.pem ~/ft_transcendence/certs/"
-echo "     sudo chmod 644 ~/ft_transcendence/certs/*"
+echo '   Set DOMAIN in .env (for example, example.com), then follow deploy/README.md.'
+echo '   Point DOMAIN, www.DOMAIN and status.DOMAIN DNS records at this VM.'
+echo '   The deployment guide shows Certbot commands and safe private-key permissions.'
 echo "6. Add your VM SSH private key and details to GitHub Repository Secrets:"
 echo "   - OCI_HOST     : $(curl -s https://ifconfig.me || echo '<VM_PUBLIC_IP>')"
 echo "   - OCI_USERNAME : ${ACTUAL_USER}"

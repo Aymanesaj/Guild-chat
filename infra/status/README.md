@@ -29,5 +29,11 @@ The status service continuously monitors internal endpoints across core ingress,
 ## Access & Security
 
 The status dashboard is served behind HTTP Basic Authentication:
-- **URL:** `https://guild-chat.tech/status/`
+- **URL:** `https://status.${DOMAIN}/`
 - **Authentication:** Evaluated against bcrypt hash in environment variable `STATUS_PAGE_PASSWORD_BCRYPT_BASE64`.
+
+For local development, use `https://status.localhost:8443/` (resolves to loopback
+in modern browsers). `make status` sets the local hostname explicitly for curl.
+Production requires a DNS record for `status.${DOMAIN}` and a certificate
+covering that name. Gatus owns routes only on this hostname, so its asset and API
+paths do not interfere with application routes.

@@ -1,32 +1,47 @@
 #!/bin/sh
-set -e
+set -eu
+umask 077
 
+export DOMAIN="${DOMAIN:-localhost}"
+case "$DOMAIN" in
+    *[!A-Za-z0-9.-]* | .* | *.)
+        echo 'DOMAIN must be a hostname, without a scheme, port, or path.' >&2
+        exit 1
+        ;;
+esac
+# Substitute only our placeholder, preserving Nginx variables such as $host and $1.
+envsubst '${DOMAIN}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+
+# This directory is backed by the nginx_tls volume in Compose.
 mkdir -p /etc/nginx/conf
-if [ -f /certs/fullchain.pem ] && [ -f /certs/privkey.pem ]; then
-    if [ -r /certs/fullchain.pem ] && [ -r /certs/privkey.pem ]; then
-        echo "Applying mounted Let's Encrypt certificates..."
-        cp -f /certs/fullchain.pem /etc/nginx/conf/server.crt
-        cp -f /certs/privkey.pem /etc/nginx/conf/server.key
-    else
-        echo "WARNING: /certs/privkey.pem exists but is not readable. Run 'sudo chmod 644 certs/*' on host."
-    fi
-elif [ -f /certs/server.crt ] && [ -f /certs/server.key ]; then
-    if [ -r /certs/server.crt ] && [ -r /certs/server.key ]; then
-        echo "Applying mounted custom SSL certificates..."
-        cp -f /certs/server.crt /etc/nginx/conf/server.crt
-        cp -f /certs/server.key /etc/nginx/conf/server.key
-    else
-        echo "WARNING: /certs/server.key exists but is not readable. Run 'sudo chmod 644 certs/*' on host."
-    fi
+if [ -e /certs/fullchain.pem ] || [ -e /certs/privkey.pem ]; then
+    cert=/certs/fullchain.pem
+    key=/certs/privkey.pem
+elif [ -e /certs/server.crt ] || [ -e /certs/server.key ]; then
+    cert=/certs/server.crt
+    key=/certs/server.key
+else
+    cert=
+    key=
 fi
 
-if [ ! -f /etc/nginx/conf/server.crt ]; then
-    echo "Generating self-signed SSL certificates for guild-chat.tech..."
+if [ -n "$cert" ]; then
+    if [ ! -r "$cert" ] || [ ! -r "$key" ]; then
+        echo 'Mounted TLS certificate/key is missing or unreadable. See deploy/README.md for ownership and permissions.' >&2
+        exit 1
+    fi
+    echo 'Applying mounted TLS certificates...'
+    cp -f "$cert" /etc/nginx/conf/server.crt
+    cp -f "$key" /etc/nginx/conf/server.key
+elif [ ! -s /etc/nginx/conf/server.crt ] || [ ! -s /etc/nginx/conf/server.key ]; then
+    echo 'Generating persistent self-signed TLS certificates...'
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
         -keyout /etc/nginx/conf/server.key \
         -out /etc/nginx/conf/server.crt \
-        -subj "/C=MA/ST=Marrakesh-Safi/L=Ben Guerir/O=ft_transcendence/CN=guild-chat.tech" \
-        -addext "subjectAltName=DNS:guild-chat.tech,DNS:www.guild-chat.tech,DNS:localhost,IP:127.0.0.1"
+        -subj "/CN=${DOMAIN}" \
+        -addext "subjectAltName=DNS:${DOMAIN},DNS:www.${DOMAIN},DNS:status.${DOMAIN},DNS:status.localhost,DNS:localhost,IP:127.0.0.1"
 fi
 
+chmod 600 /etc/nginx/conf/server.key
+chmod 644 /etc/nginx/conf/server.crt
 exec /docker-entrypoint.sh "$@"

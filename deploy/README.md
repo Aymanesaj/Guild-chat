@@ -46,13 +46,31 @@ newgrp docker
 cp .env.example .env
 nano .env
 
-# 5. (Optional) Setup SSL Certificates for guild-chat.tech
-# If skipped, Nginx will automatically generate self-signed certificates.
-sudo certbot certonly --standalone -d guild-chat.tech
-sudo cp /etc/letsencrypt/live/guild-chat.tech/fullchain.pem ~/ft_transcendence/certs/
-sudo cp /etc/letsencrypt/live/guild-chat.tech/privkey.pem ~/ft_transcendence/certs/
-sudo chmod 644 ~/ft_transcendence/certs/*
+# 5. (Optional) Set up trusted TLS certificates (rootful Docker on this VM).
+# Set DOMAIN in .env (bare hostname, e.g. example.com).
+# Read the resolved value without sourcing the whole .env as shell code.
+DOMAIN=$(docker compose config --format json | jq -r '.services.nginx.environment.DOMAIN')
+# Point DOMAIN, www.DOMAIN and status.DOMAIN DNS records at the VM first.
+# Port 80 must be available for Certbot's standalone challenge.
+sudo certbot certonly --standalone --cert-name "$DOMAIN" -d "$DOMAIN" -d "www.$DOMAIN" -d "status.$DOMAIN"
+docker compose build nginx
+NGINX_GID=$(docker compose run --rm --no-deps --entrypoint id nginx -g)
+sudo install -m 644 "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" certs/fullchain.pem
+sudo install -m 640 -o root -g "$NGINX_GID" "/etc/letsencrypt/live/$DOMAIN/privkey.pem" certs/privkey.pem
 ```
+
+`DOMAIN` also supplies the default GitHub callback and Grafana URLs in `.env.example`.
+Update the registered GitHub OAuth callback when changing domains. Nginx renders
+its config from the template at startup; recreate it after changing `.env`.
+Existing certificates must also cover the new domain. For development, regenerate
+only the self-signed certificate files if you change `DOMAIN`; do not remove all
+Compose volumes, which also contain your databases.
+
+The private key is owned by root and readable by the gateway's existing group,
+not by all local users. Repeat the install commands after certificate renewal,
+then restart Nginx. The same permissions apply to a custom `server.key`.
+If you skip trusted certificates, the gateway reuses a self-signed certificate
+from the `nginx_tls` volume; browsers still need to trust it explicitly.
 
 ---
 
