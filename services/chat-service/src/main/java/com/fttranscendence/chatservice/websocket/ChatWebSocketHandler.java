@@ -152,7 +152,27 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         return userId == null ? null : userId.toString();
     }
 
-    /** For tests and, soon, the broadcaster. */
+    /**
+     * Sends one frame to every open socket of a user: each tab, each device.
+     *
+     * The user-level counterpart of RoomBroadcaster, which only reaches
+     * sockets subscribed to a room. Used for events about the user's room
+     * list, which matter precisely when no room is open.
+     *
+     * A user with no open socket is skipped silently: they will load fresh
+     * state over REST the next time the app opens. Never throws, because
+     * FrameSender never does.
+     *
+     * The set holds the write-serialising decorators, so this is safe to call
+     * from any thread, concurrently with RoomBroadcaster.
+     */
+    public void sendToUser(String userId, String event, Object data) {
+        Set<WebSocketSession> sessions = sessionsByUser.getOrDefault(userId, Set.of());
+        sessions.forEach(session -> frameSender.send(session, event, data));
+        log.debug("{} user={} sockets={}", event, userId, sessions.size());
+    }
+
+    /** For tests. */
     int connectionCount(String userId) {
         Set<WebSocketSession> sessions = sessionsByUser.get(userId);
         return sessions == null ? 0 : sessions.size();

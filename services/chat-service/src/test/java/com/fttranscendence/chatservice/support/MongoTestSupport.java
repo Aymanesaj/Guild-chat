@@ -52,5 +52,9 @@ public abstract class MongoTestSupport {
         registry.add("CHAT_MONGO_USER", () -> USERNAME);
         registry.add("CHAT_MONGO_PASSWORD", () -> PASSWORD);
         registry.add("CHAT_MONGO_AUTH_DB", () -> "admin");
+
+        // Any free port: cached Spring contexts stay alive side by side in one
+        // JVM, and they cannot all bind 9090.
+        registry.add("chat.grpc.server.port", () -> 0);
     }
 }

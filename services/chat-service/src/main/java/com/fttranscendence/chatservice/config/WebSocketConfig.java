@@ -27,7 +27,6 @@ public class WebSocketConfig implements WebSocketConfigurer {
         this.tokenHandshakeInterceptor = tokenHandshakeInterceptor;
     }
 
-
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(chatWebSocketHandler, "/ws/chat")

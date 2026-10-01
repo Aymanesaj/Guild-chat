@@ -231,6 +231,30 @@ Subscriptions live on the socket: after every reconnect, subscribe again.
 
 Clients should ignore events they don't know, so new ones can be added.
 
+#### User events (no subscription needed)
+
+Sent to **every open socket of the affected user**, whatever room is open (or
+none). They keep room lists and DM previews live without polling.
+
+| Event | Data | When |
+|---|---|---|
+| `room.added` | `{ "room_id": 5 }` | You can now see this room: you created it, were added to it, or someone opened a DM with you |
+| `room.removed` | `{ "room_id": 5 }` | You can no longer see it: you left, were kicked, or it was deleted |
+| `room.updated` | `{ "room_id": 5 }` | A room you are in changed: renamed, a member joined or left, or a role changed |
+| `room.activity` | `{ "room_id": 5, "change": "new" \| "edited" \| "deleted", "message": <message object> }` | A message was sent, edited or deleted in any room you are in, the sender included |
+
+The `room.added` / `room.removed` / `room.updated` frames carry only the id:
+refetch the list over REST (org-service), which applies its own permission
+rules. org-service sends them through chat's internal gRPC
+`ChatNotifyService.RoomChanged` after its transaction commits.
+
+`room.activity` is sent alongside `message.*`, not instead of it: a client with
+the room open and subscribed receives both. It can arrive slightly before or
+after the matching `message.*`.
+
+All of these are best effort. Events sent while a socket is down are lost, so
+**refetch after every reconnect**.
+
 ### `error` frame codes
 
 | Code | When |
@@ -255,6 +279,10 @@ Clients should ignore events they don't know, so new ones can be added.
   their socket reconnects. REST refuses them immediately.
 - A socket is not closed when its token expires.
 - Subscriptions and presence are in memory: one chat-service instance only.
+- `room.activity` uses a member list cached in memory per room. It is
+  refreshed when org reports a change to that room. If that report is lost
+  (chat restarting at that moment), a removed member may keep receiving that
+  room's previews until the room changes again or chat restarts.
 
 ## Internal
 
@@ -262,3 +290,4 @@ Clients should ignore events they don't know, so new ones can be added.
 |---|---|---|
 | GET | `/actuator/health` | Docker healthcheck. Not routed by the gateway. |
 | GET | `/actuator/prometheus` | Metrics scrape. Not routed by the gateway. |
+| gRPC | `:9090` `chat.ChatNotifyService/RoomChanged` | Called by org-service when a room changes. Not routed by the gateway, no auth (private network). See `src/main/proto/chat.proto`. |
