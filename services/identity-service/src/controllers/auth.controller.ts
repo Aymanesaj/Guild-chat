@@ -3,8 +3,8 @@ import type {
   FastifyRequest,
 } from "fastify";
 
-import { registerSchema } from "../schemas/auth.schema.js";
-import { registerUser } from "../services/auth.service.js";
+import { registerSchema , loginSchema } from "../schemas/auth.schema.js";
+import { registerUser , loginUser } from "../services/auth.service.js";
 
 export async function registerController(
   request: FastifyRequest,
@@ -38,4 +38,30 @@ export async function registerController(
 
     throw error;
   }
+}
+
+export async function loginController(
+    request: FastifyRequest,
+    reply: FastifyReply
+) {
+    const result = loginSchema.safeParse(request.body);
+
+    if (!result.success) {
+        return reply.status(400).send({
+        error: "Invalid request",
+        details: result.error.issues,
+        });
+    }
+
+    try {
+        const response = await loginUser(result.data);
+        return reply.status(200).send(response);
+    } catch (error) {
+        if ( error instanceof Error && error.message === "Invalid credentials") {
+            return reply.status(401).send({
+                error: "Invalid credentials",
+            });
+        }
+        throw error;
+    }
 }

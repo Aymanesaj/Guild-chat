@@ -49,3 +49,23 @@ export function createLocalUser(
     },
   });
 }
+
+export function findUserByEmail(
+    email: string
+){
+    return prisma.user.findUnique({
+        where: {
+            email
+        }
+    });
+}
+
+export function findUserByUsername(
+    username: string
+){
+    return prisma.user.findUnique({
+        where: {
+            username
+        }
+    });
+}

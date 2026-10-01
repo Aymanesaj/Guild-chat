@@ -1,6 +1,6 @@
 import bcrypt from "bcrypt";
 
-import type { RegisterInput } from "../schemas/auth.schema.js";
+import type { RegisterInput , LoginInput } from "../schemas/auth.schema.js";
 import type {
   AuthResponse,
   PublicUser,
@@ -10,10 +10,14 @@ import {
   createLocalUser,
   emailExists,
   usernameExists,
+  findUserByEmail,
+  findUserByUsername
 } from "../repositories/user.repository.js";
 
 import { issueAccessToken } from "./jwt.service.js";
 import { issueRefreshToken } from "./refresh-token.service.js";
+import { waitForDebugger } from "node:inspector";
+import { log } from "node:console";
 
 function toPublicUser(user: {
   id: string;
@@ -77,4 +81,33 @@ export async function registerUser(
     refreshToken,
     user: toPublicUser(user),
   };
+}
+
+export async function loginUser(
+    loginInput: LoginInput
+): Promise<AuthResponse>{
+    const identifier = loginInput.identifier.toLowerCase();
+
+    const user = identifier.includes('@') ? await findUserByEmail(identifier) : await findUserByUsername(identifier);
+
+    if (!user || !user.passwordHash)
+        throw new Error("Invalid credentials");
+
+    const passwordMatchs = await bcrypt.compare(
+        loginInput.password,
+        user.passwordHash
+    );
+
+    if (!passwordMatchs)
+        throw new Error("Invalid credentials");
+
+    const accessToken = issueAccessToken(user);
+
+    const refreshToken = await issueRefreshToken(user.id);
+    return {
+        tokenType: "Bearer",
+        accessToken,
+        refreshToken,
+        user: toPublicUser(user)
+    };
 }
