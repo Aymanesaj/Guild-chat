@@ -3,8 +3,10 @@ import type {
   FastifyRequest,
 } from "fastify";
 
-import { registerSchema , loginSchema , refreshSchema} from "../schemas/auth.schema.js";
-import { registerUser , loginUser , refreshSession } from "../services/auth.service.js";
+import { registerSchema , loginSchema , refreshSchema , logoutSchema } from "../schemas/auth.schema.js";
+import { registerUser , loginUser , refreshSession , logoutSession } from "../services/auth.service.js";
+import { error } from "node:console";
+import { deepPartial } from "zod";
 
 export async function registerController(
   request: FastifyRequest,
@@ -96,4 +98,20 @@ export async function refreshController(
 
     throw error;
   }
+}
+
+export async function logoutController(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const result = logoutSchema.safeParse(request.body);
+
+  if (!result.success)
+    return reply.code(400).send({
+      error: "Invalid request",
+      details: result.error.issues
+    })
+
+  await logoutSession(result.data);
+  return reply.code(204).send();
 }

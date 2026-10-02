@@ -1,12 +1,12 @@
 import bcrypt from "bcrypt";
 
-import type { RegisterInput , LoginInput , RefreshInput } from "../schemas/auth.schema.js";
+import type { RegisterInput , LoginInput , RefreshInput , LogoutInput} from "../schemas/auth.schema.js";
 import type { AuthResponse, PublicUser } from "../types/auth.types.js";
 
 import { createLocalUser , emailExists , usernameExists , findUserByEmail , findUserByUsername, findUserById } from "../repositories/user.repository.js";
 
 import { issueAccessToken } from "./jwt.service.js";
-import { issueRefreshToken , rotateRefreshToken } from "./refresh-token.service.js";
+import { issueRefreshToken , rotateRefreshToken , revokeRefreshSession } from "./refresh-token.service.js";
 
 function toPublicUser(user: {
   id: string;
@@ -113,4 +113,11 @@ export async function refreshSession(
     refreshToken: rotated.refreshToken,
     user: toPublicUser(user)
   }
+}
+
+
+export async function logoutSession(
+  logoutInput: LogoutInput
+): Promise<void> {
+  await revokeRefreshSession(logoutInput.refreshToken);
 }

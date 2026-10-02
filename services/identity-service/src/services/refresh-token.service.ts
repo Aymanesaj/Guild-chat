@@ -103,3 +103,27 @@ export async function revokeAllSessions(
 ) {
   await revokeAllRefreshTokens(userId);
 }
+
+export async function revokeRefreshSession(
+  presentedToken: string
+): Promise<void> {
+  if (!presentedToken.trim()) {
+    return;
+  }
+
+  const hash =
+    hashRefreshToken(presentedToken);
+
+  const existing =
+    await findRefreshTokenByHash(hash);
+
+  if (!existing) {
+    return;
+  }
+
+  if (existing.revoked) {
+    return;
+  }
+
+  await revokeRefreshToken(existing.id);
+}
