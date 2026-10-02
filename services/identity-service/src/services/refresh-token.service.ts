@@ -3,6 +3,10 @@ import {
   randomBytes,
 } from "node:crypto";
 
+import { UnauthorizedError } from "../errors/unauthorized.error.js";
+
+import { BadRequestError } from "../errors/bad-request.error.js";
+
 import {
   createRefreshToken,
   findRefreshTokenByHash,
@@ -47,7 +51,7 @@ export async function rotateRefreshToken(
   presentedToken: string
 ) {
   if (!presentedToken.trim()) {
-    throw new Error("Refresh token is required");
+    throw new BadRequestError("Refresh token is required");
   }
 
   const hash = hashRefreshToken(presentedToken);
@@ -56,13 +60,13 @@ export async function rotateRefreshToken(
     await findRefreshTokenByHash(hash);
 
   if (!existing) {
-    throw new Error("Invalid refresh token");
+    throw new UnauthorizedError("Invalid refresh token");
   }
 
   if (existing.revoked) {
     await revokeAllRefreshTokens(existing.userId);
 
-    throw new Error(
+    throw new UnauthorizedError(
       "Refresh token reuse detected; sessions revoked"
     );
   }
@@ -70,7 +74,7 @@ export async function rotateRefreshToken(
   if (existing.expiresAt <= new Date()) {
     await revokeRefreshToken(existing.id);
 
-    throw new Error("Refresh token expired");
+    throw new UnauthorizedError("Refresh token expired");
   }
 
   await revokeRefreshToken(existing.id);

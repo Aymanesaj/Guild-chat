@@ -1,12 +1,16 @@
 import { findUserById } from "../repositories/user.repository.js";
 
+import {
+  NotFoundError,
+} from "../errors/not-found.error.js";
+
 export async function getCurrentUser(
     userId: string
 ) {
     const user = await findUserById(userId);
 
     if (!user)
-        return new Error("User not found");
+        return new NotFoundError("User not found");
 
     return {
         id: user.id,

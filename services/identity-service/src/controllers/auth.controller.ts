@@ -20,26 +20,9 @@ export async function registerController(
       details: result.error.issues,
     });
   }
+  const response = await registerUser(result.data);
 
-  try {
-    const response = await registerUser(result.data);
-
-    return reply.status(201).send(response);
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      (
-        error.message === "Username is already taken" ||
-        error.message === "Email is already registered"
-      )
-    ) {
-      return reply.status(409).send({
-        error: error.message,
-      });
-    }
-
-    throw error;
-  }
+  return reply.status(201).send(response);
 }
 
 export async function loginController(
@@ -55,17 +38,8 @@ export async function loginController(
         });
     }
 
-    try {
-        const response = await loginUser(result.data);
-        return reply.status(200).send(response);
-    } catch (error) {
-        if ( error instanceof Error && error.message === "Invalid credentials") {
-            return reply.status(401).send({
-                error: "Invalid credentials",
-            });
-        }
-        throw error;
-    }
+    const response = await loginUser(result.data);
+    return reply.status(200).send(response);
 }
 
 export async function refreshController(
@@ -80,24 +54,9 @@ export async function refreshController(
       details: input.error.issues,
     });
 
-  try {
-    const response = await refreshSession(input.data);
+  const response = await refreshSession(input.data);
 
-    return reply.code(200).send(response);
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message === "Invalid refresh token" ||
-        error.message === "Refresh token expired" ||
-        error.message === "Refresh token reuse detected; sessions revoked")
-    ) {
-      return reply.status(401).send({
-        error: "Invalid refresh token",
-      });
-    }
-
-    throw error;
-  }
+  return reply.code(200).send(response);
 }
 
 export async function logoutController(

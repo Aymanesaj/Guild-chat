@@ -10,14 +10,6 @@ export async function meController(
             error: "Unauthorized",
         });
 
-    try {
-        const user = await getCurrentUser(request.userId);
-        return reply.code(200).send(user);
-    } catch(error) {
-        if (error instanceof Error && error.message === "User not found")
-            return reply.code(404).send({
-                error: "User not found"
-            });
-        throw error;
-    }
+    const user = await getCurrentUser(request.userId);
+    return reply.code(200).send(user);
 }

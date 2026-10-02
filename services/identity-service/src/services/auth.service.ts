@@ -1,5 +1,9 @@
 import bcrypt from "bcrypt";
 
+import { ConflictError } from "../errors/conflict.error.js";
+
+import { UnauthorizedError } from "../errors/unauthorized.error.js";
+
 import type { RegisterInput , LoginInput , RefreshInput , LogoutInput} from "../schemas/auth.schema.js";
 import type { AuthResponse, PublicUser } from "../types/auth.types.js";
 
@@ -36,11 +40,11 @@ export async function registerUser(
   input: RegisterInput,
 ): Promise<AuthResponse> {
   if (await usernameExists(input.username)) {
-    throw new Error("Username is already taken");
+    throw new ConflictError("Username is already taken");
   }
 
   if (await emailExists(input.email)) {
-    throw new Error("Email is already registered");
+    throw new ConflictError("Email is already registered");
   }
 
   const passwordHash = await bcrypt.hash(input.password, 12);
@@ -75,14 +79,14 @@ export async function loginUser(
     ? await findUserByEmail(identifier)
     : await findUserByUsername(identifier);
 
-  if (!user || !user.passwordHash) throw new Error("Invalid credentials");
+  if (!user || !user.passwordHash) throw new UnauthorizedError("Invalid credentials");
 
   const passwordMatchs = await bcrypt.compare(
     loginInput.password,
     user.passwordHash,
   );
 
-  if (!passwordMatchs) throw new Error("Invalid credentials");
+  if (!passwordMatchs) throw new UnauthorizedError("Invalid credentials");
 
   const accessToken = issueAccessToken(user);
 
