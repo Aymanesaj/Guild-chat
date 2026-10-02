@@ -42,3 +42,5 @@ certs/*
 .test/
 # track the root readme
 !README.md
+
+contracts/*.md
