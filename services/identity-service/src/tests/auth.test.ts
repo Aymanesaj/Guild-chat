@@ -10,11 +10,13 @@ import {
 const {
   mockRegisterUser,
   mockLoginUser,
+  mockRefreshSession,
   mockValidateAccessToken,
   mockGetCurrentUser,
 } = vi.hoisted(() => ({
   mockRegisterUser: vi.fn(),
   mockLoginUser: vi.fn(),
+  mockRefreshSession: vi.fn(),
   mockValidateAccessToken: vi.fn(),
   mockGetCurrentUser: vi.fn(),
 }));
@@ -22,6 +24,7 @@ const {
 vi.mock("../services/auth.service.js", () => ({
   registerUser: mockRegisterUser,
   loginUser: mockLoginUser,
+  refreshSession: mockRefreshSession,
 }));
 
 vi.mock("../services/jwt.service.js", () => ({
@@ -39,6 +42,7 @@ const app = buildApp();
 beforeEach(() => {
   mockRegisterUser.mockReset();
   mockLoginUser.mockReset();
+  mockRefreshSession.mockReset();
   mockValidateAccessToken.mockReset();
   mockGetCurrentUser.mockReset();
 });
@@ -669,5 +673,216 @@ describe("GET /me", () => {
     expect(
       body.password
     ).toBeUndefined();
+  });
+
+  describe("POST /auth/refresh", () => {
+    const userId =
+      "123e4567-e89b-12d3-a456-426614174000";
+
+    it("should refresh the session successfully", async () => {
+      mockRefreshSession.mockResolvedValue({
+        tokenType: "Bearer",
+        accessToken: "new-access-token",
+        refreshToken: "new-refresh-token",
+
+        user: {
+          id: userId,
+          username: "obendaou",
+          email: "oumaima@example.com",
+          displayName: "Oumaima",
+          bio: null,
+          avatarUrl: null,
+          authProvider: "LOCAL",
+          createdAt: new Date(
+            "2026-10-02T10:00:00.000Z"
+          ),
+          updatedAt: new Date(
+            "2026-10-02T10:00:00.000Z"
+          ),
+        },
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/auth/refresh",
+
+        payload: {
+          refreshToken: "old-refresh-token",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+
+      expect(body.tokenType).toBe("Bearer");
+
+      expect(body.accessToken).toBe(
+        "new-access-token"
+      );
+
+      expect(body.refreshToken).toBe(
+        "new-refresh-token"
+      );
+
+      expect(body.user.id).toBe(userId);
+
+      expect(
+        mockRefreshSession
+      ).toHaveBeenCalledOnce();
+
+      expect(
+        mockRefreshSession
+      ).toHaveBeenCalledWith({
+        refreshToken: "old-refresh-token",
+      });
+    });
+
+    it("should return 400 when refresh token is missing", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/auth/refresh",
+
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      expect(
+        mockRefreshSession
+      ).not.toHaveBeenCalled();
+    });
+
+    it("should return 400 when refresh token is empty", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/auth/refresh",
+
+        payload: {
+          refreshToken: "   ",
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      expect(
+        mockRefreshSession
+      ).not.toHaveBeenCalled();
+    });
+
+    it("should return 401 when refresh token is invalid", async () => {
+      mockRefreshSession.mockRejectedValue(
+        new Error("Invalid refresh token")
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/auth/refresh",
+
+        payload: {
+          refreshToken: "invalid-token",
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+
+      const body = response.json();
+
+      expect(body.error).toBe(
+        "Invalid refresh token"
+      );
+    });
+
+    it("should return 401 when refresh token is expired", async () => {
+      mockRefreshSession.mockRejectedValue(
+        new Error("Refresh token expired")
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/auth/refresh",
+
+        payload: {
+          refreshToken: "expired-token",
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+
+      const body = response.json();
+
+      expect(body.error).toBe(
+        "Invalid refresh token"
+      );
+    });
+
+    it("should return 401 when refresh token reuse is detected", async () => {
+      mockRefreshSession.mockRejectedValue(
+        new Error(
+          "Refresh token reuse detected; sessions revoked"
+        )
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/auth/refresh",
+
+        payload: {
+          refreshToken: "already-used-token",
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+
+      const body = response.json();
+
+      expect(body.error).toBe(
+        "Invalid refresh token"
+      );
+    });
+
+    it("should return a different refresh token after rotation", async () => {
+      const oldRefreshToken =
+        "old-refresh-token";
+
+      mockRefreshSession.mockResolvedValue({
+        tokenType: "Bearer",
+        accessToken: "new-access-token",
+        refreshToken: "rotated-refresh-token",
+
+        user: {
+          id: userId,
+          username: "obendaou",
+          email: "oumaima@example.com",
+          displayName: "Oumaima",
+          bio: null,
+          avatarUrl: null,
+          authProvider: "LOCAL",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/auth/refresh",
+
+        payload: {
+          refreshToken: oldRefreshToken,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+
+      expect(body.refreshToken).not.toBe(
+        oldRefreshToken
+      );
+
+      expect(body.refreshToken).toBe(
+        "rotated-refresh-token"
+      );
+    });
   });
 });
