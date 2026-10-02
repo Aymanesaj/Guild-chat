@@ -1,23 +1,12 @@
 import bcrypt from "bcrypt";
 
-import type { RegisterInput , LoginInput } from "../schemas/auth.schema.js";
-import type {
-  AuthResponse,
-  PublicUser,
-} from "../types/auth.types.js";
+import type { RegisterInput , LoginInput , RefreshInput } from "../schemas/auth.schema.js";
+import type { AuthResponse, PublicUser } from "../types/auth.types.js";
 
-import {
-  createLocalUser,
-  emailExists,
-  usernameExists,
-  findUserByEmail,
-  findUserByUsername
-} from "../repositories/user.repository.js";
+import { createLocalUser , emailExists , usernameExists , findUserByEmail , findUserByUsername, findUserById } from "../repositories/user.repository.js";
 
 import { issueAccessToken } from "./jwt.service.js";
-import { issueRefreshToken } from "./refresh-token.service.js";
-import { waitForDebugger } from "node:inspector";
-import { log } from "node:console";
+import { issueRefreshToken , rotateRefreshToken } from "./refresh-token.service.js";
 
 function toPublicUser(user: {
   id: string;
@@ -44,9 +33,8 @@ function toPublicUser(user: {
 }
 
 export async function registerUser(
-  input: RegisterInput
+  input: RegisterInput,
 ): Promise<AuthResponse> {
-
   if (await usernameExists(input.username)) {
     throw new Error("Username is already taken");
   }
@@ -55,13 +43,9 @@ export async function registerUser(
     throw new Error("Email is already registered");
   }
 
-  const passwordHash = await bcrypt.hash(
-    input.password,
-    12
-  );
+  const passwordHash = await bcrypt.hash(input.password, 12);
 
-  const displayName =
-    input.displayName?.trim() || input.username;
+  const displayName = input.displayName?.trim() || input.username;
 
   const user = await createLocalUser({
     username: input.username,
@@ -72,8 +56,7 @@ export async function registerUser(
 
   const accessToken = issueAccessToken(user);
 
-  const refreshToken =
-    await issueRefreshToken(user.id);
+  const refreshToken = await issueRefreshToken(user.id);
 
   return {
     tokenType: "Bearer",
@@ -84,30 +67,50 @@ export async function registerUser(
 }
 
 export async function loginUser(
-    loginInput: LoginInput
-): Promise<AuthResponse>{
-    const identifier = loginInput.identifier.toLowerCase();
+  loginInput: LoginInput
+): Promise<AuthResponse> {
+  const identifier = loginInput.identifier.toLowerCase();
 
-    const user = identifier.includes('@') ? await findUserByEmail(identifier) : await findUserByUsername(identifier);
+  const user = identifier.includes("@")
+    ? await findUserByEmail(identifier)
+    : await findUserByUsername(identifier);
 
-    if (!user || !user.passwordHash)
-        throw new Error("Invalid credentials");
+  if (!user || !user.passwordHash) throw new Error("Invalid credentials");
 
-    const passwordMatchs = await bcrypt.compare(
-        loginInput.password,
-        user.passwordHash
-    );
+  const passwordMatchs = await bcrypt.compare(
+    loginInput.password,
+    user.passwordHash,
+  );
 
-    if (!passwordMatchs)
-        throw new Error("Invalid credentials");
+  if (!passwordMatchs) throw new Error("Invalid credentials");
 
-    const accessToken = issueAccessToken(user);
+  const accessToken = issueAccessToken(user);
 
-    const refreshToken = await issueRefreshToken(user.id);
-    return {
-        tokenType: "Bearer",
-        accessToken,
-        refreshToken,
-        user: toPublicUser(user)
-    };
+  const refreshToken = await issueRefreshToken(user.id);
+  return {
+    tokenType: "Bearer",
+    accessToken,
+    refreshToken,
+    user: toPublicUser(user),
+  };
+}
+
+export async function refreshSession(
+  refreshInput: RefreshInput,
+): Promise<AuthResponse> {
+  const rotated = await rotateRefreshToken(refreshInput.refreshToken);
+
+  const user = await findUserById(rotated.userId);
+
+  if (!user)
+    throw new Error("Invalid refresh token");
+
+  const accessToken = issueAccessToken(user);
+
+  return {
+    tokenType: 'Bearer',
+    accessToken,
+    refreshToken: rotated.refreshToken,
+    user: toPublicUser(user)
+  }
 }

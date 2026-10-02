@@ -2,7 +2,8 @@ import type { FastifyPluginAsync } from "fastify";
 
 import {
   registerController,
-  loginController
+  loginController,
+  refreshController
 } from "../controllers/auth.controller.js";
 
 export const authRoutes: FastifyPluginAsync =
@@ -15,4 +16,8 @@ export const authRoutes: FastifyPluginAsync =
         "/login",
         loginController
     )
+    app.post(
+      "/auth/refresh",
+      refreshController
+    );
   };

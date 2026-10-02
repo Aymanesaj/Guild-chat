@@ -3,8 +3,8 @@ import type {
   FastifyRequest,
 } from "fastify";
 
-import { registerSchema , loginSchema } from "../schemas/auth.schema.js";
-import { registerUser , loginUser } from "../services/auth.service.js";
+import { registerSchema , loginSchema , refreshSchema} from "../schemas/auth.schema.js";
+import { registerUser , loginUser , refreshSession } from "../services/auth.service.js";
 
 export async function registerController(
   request: FastifyRequest,
@@ -64,4 +64,36 @@ export async function loginController(
         }
         throw error;
     }
+}
+
+export async function refreshController(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const input = refreshSchema.safeParse(request.body);
+
+  if (!input.success)
+    return reply.code(400).send({
+      error: "Invalid request",
+      details: input.error.issues,
+    });
+
+  try {
+    const response = await refreshSession(input.data);
+
+    return reply.code(200).send(response);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message === "Invalid refresh token" ||
+        error.message === "Refresh token expired" ||
+        error.message === "Refresh token reuse detected; sessions revoked")
+    ) {
+      return reply.status(401).send({
+        error: "Invalid refresh token",
+      });
+    }
+
+    throw error;
+  }
 }
