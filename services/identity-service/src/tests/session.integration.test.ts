@@ -6,60 +6,120 @@ import {
   it,
 } from "vitest";
 
-import { createHash, randomBytes } from "node:crypto";
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+} from "node:crypto";
 
-import { buildApp } from "../app.js";
-import { prisma } from "../database/prisma.js";
+import {
+  buildApp,
+} from "../app.js";
+
+import {
+  prisma,
+} from "../database/prisma.js";
+
 
 const app = buildApp();
 
-const suffix = Date.now().toString();
+
+/* =========================================================
+   UNIQUE TEST USER
+   ========================================================= */
+
+const suffix = randomUUID()
+  .replaceAll("-", "")
+  .slice(0, 12);
+
 
 const testUser = {
-  username: `session_test_${suffix}`,
-  email: `session_test_${suffix}@example.com`,
-  password: "strongpassword123",
-  displayName: "Session Test",
+  username:
+    `session_test_${suffix}`,
+
+  email:
+    `session_test_${suffix}@example.com`,
+
+  password:
+    "strongpassword123",
+
+  displayName:
+    "Session Test",
 };
+
 
 let userId: string;
 
-function hashRefreshToken(token: string): string {
+
+/* =========================================================
+   HELPERS
+   ========================================================= */
+
+function hashRefreshToken(
+  token: string
+): string {
   return createHash("sha256")
     .update(token)
     .digest("hex");
 }
 
+
 async function login() {
-  const response = await app.inject({
-    method: "POST",
-    url: "/login",
+  const response =
+    await app.inject({
+      method: "POST",
+      url: "/login",
 
-    payload: {
-      identifier: testUser.username,
-      password: testUser.password,
-    },
-  });
+      payload: {
+        identifier:
+          testUser.username,
 
-  expect(response.statusCode).toBe(200);
+        password:
+          testUser.password,
+      },
+    });
+
+
+  expect(
+    response.statusCode
+  ).toBe(200);
+
 
   return response.json();
 }
 
+
+/* =========================================================
+   SETUP
+   ========================================================= */
+
 beforeAll(async () => {
-  const response = await app.inject({
-    method: "POST",
-    url: "/register",
+  const response =
+    await app.inject({
+      method: "POST",
+      url: "/register",
 
-    payload: testUser,
-  });
+      payload: testUser,
+    });
 
-  expect(response.statusCode).toBe(201);
 
-  const body = response.json();
+  expect(
+    response.statusCode
+  ).toBe(201);
 
-  userId = body.user.id;
+
+  const body =
+    response.json();
+
+
+  userId =
+    body.user.id;
 });
+
+
+/* =========================================================
+   CLEANUP
+   ========================================================= */
 
 afterAll(async () => {
   if (userId) {
@@ -69,293 +129,561 @@ afterAll(async () => {
       },
     });
 
+
     await prisma.friendship.deleteMany({
       where: {
         OR: [
-          { requesterId: userId },
-          { addresseeId: userId },
+          {
+            requesterId:
+              userId,
+          },
+          {
+            addresseeId:
+              userId,
+          },
         ],
       },
     });
 
-    await prisma.user.delete({
+
+    await prisma.user.deleteMany({
       where: {
         id: userId,
       },
     });
   }
 
+
   await app.close();
+
   await prisma.$disconnect();
 });
 
 
+/* =========================================================
+   REFRESH TOKEN LIFECYCLE
+   ========================================================= */
+
 describe(
   "Refresh token lifecycle",
-  { concurrent: false },
+  {
+    concurrent: false,
+  },
   () => {
 
-    it("login creates a refresh token", async () => {
-      const body = await login();
+    /* -----------------------------------------------------
+       LOGIN CREATES REFRESH TOKEN
+       ----------------------------------------------------- */
 
-      expect(body.refreshToken).toBeDefined();
-      expect(typeof body.refreshToken).toBe(
-        "string"
-      );
-
-      const tokenHash = hashRefreshToken(
-        body.refreshToken
-      );
-
-      const storedToken =
-        await prisma.refreshToken.findUnique({
-          where: {
-            tokenHash,
-          },
-        });
-
-      expect(storedToken).not.toBeNull();
-      expect(storedToken?.userId).toBe(
-        userId
-      );
-      expect(storedToken?.revoked).toBe(
-        false
-      );
-    });
+    it(
+      "login creates a refresh token",
+      async () => {
+        const body =
+          await login();
 
 
-    it("refresh works", async () => {
-      const loginBody = await login();
-
-      const oldRefreshToken =
-        loginBody.refreshToken;
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/auth/refresh",
-
-        payload: {
-          refreshToken: oldRefreshToken,
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-
-      const body = response.json();
-
-      expect(body.accessToken).toBeDefined();
-      expect(body.refreshToken).toBeDefined();
-
-      expect(body.refreshToken).not.toBe(
-        oldRefreshToken
-      );
-    });
+        expect(
+          body.refreshToken
+        ).toBeDefined();
 
 
-    it("old token becomes revoked after refresh", async () => {
-      const loginBody = await login();
+        expect(
+          typeof body.refreshToken
+        ).toBe("string");
 
-      const oldRefreshToken =
-        loginBody.refreshToken;
 
-      const oldTokenHash =
-        hashRefreshToken(
+        expect(
+          body.refreshToken.length
+        ).toBeGreaterThan(0);
+
+
+        const tokenHash =
+          hashRefreshToken(
+            body.refreshToken
+          );
+
+
+        const storedToken =
+          await prisma
+            .refreshToken
+            .findUnique({
+              where: {
+                tokenHash,
+              },
+            });
+
+
+        expect(
+          storedToken
+        ).not.toBeNull();
+
+
+        expect(
+          storedToken?.userId
+        ).toBe(userId);
+
+
+        expect(
+          storedToken?.revoked
+        ).toBe(false);
+      }
+    );
+
+
+    /* -----------------------------------------------------
+       REFRESH WORKS
+       ----------------------------------------------------- */
+
+    it(
+      "refresh works",
+      async () => {
+        const loginBody =
+          await login();
+
+
+        const oldRefreshToken =
+          loginBody.refreshToken;
+
+
+        const response =
+          await app.inject({
+            method: "POST",
+            url: "/auth/refresh",
+
+            payload: {
+              refreshToken:
+                oldRefreshToken,
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(200);
+
+
+        const body =
+          response.json();
+
+
+        expect(
+          body.tokenType
+        ).toBe("Bearer");
+
+
+        expect(
+          body.accessToken
+        ).toBeDefined();
+
+
+        expect(
+          body.refreshToken
+        ).toBeDefined();
+
+
+        expect(
+          body.refreshToken
+        ).not.toBe(
           oldRefreshToken
         );
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/auth/refresh",
-
-        payload: {
-          refreshToken: oldRefreshToken,
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-
-      const storedOldToken =
-        await prisma.refreshToken.findUnique({
-          where: {
-            tokenHash: oldTokenHash,
-          },
-        });
-
-      expect(storedOldToken).not.toBeNull();
-
-      expect(
-        storedOldToken?.revoked
-      ).toBe(true);
-
-      expect(
-        storedOldToken?.replacedBy
-      ).not.toBeNull();
-    });
+      }
+    );
 
 
-    it("old refresh token cannot be reused", async () => {
-      const loginBody = await login();
+    /* -----------------------------------------------------
+       OLD TOKEN BECOMES REVOKED
+       ----------------------------------------------------- */
 
-      const oldRefreshToken =
-        loginBody.refreshToken;
-
-      const firstRefresh =
-        await app.inject({
-          method: "POST",
-          url: "/auth/refresh",
-
-          payload: {
-            refreshToken:
-              oldRefreshToken,
-          },
-        });
-
-      expect(
-        firstRefresh.statusCode
-      ).toBe(200);
-
-      const secondRefresh =
-        await app.inject({
-          method: "POST",
-          url: "/auth/refresh",
-
-          payload: {
-            refreshToken:
-              oldRefreshToken,
-          },
-        });
-
-      expect(
-        secondRefresh.statusCode
-      ).toBe(401);
-
-      const body =
-        secondRefresh.json();
-
-      expect(body.error).toBe(
-        "Invalid refresh token"
-      );
-    });
+    it(
+      "old token becomes revoked after refresh",
+      async () => {
+        const loginBody =
+          await login();
 
 
-    it("logout revokes the refresh token", async () => {
-      const loginBody = await login();
+        const oldRefreshToken =
+          loginBody.refreshToken;
 
-      const refreshToken =
-        loginBody.refreshToken;
 
-      const tokenHash =
-        hashRefreshToken(
-          refreshToken
+        const oldTokenHash =
+          hashRefreshToken(
+            oldRefreshToken
+          );
+
+
+        const response =
+          await app.inject({
+            method: "POST",
+            url: "/auth/refresh",
+
+            payload: {
+              refreshToken:
+                oldRefreshToken,
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(200);
+
+
+        const body =
+          response.json();
+
+
+        const storedOldToken =
+          await prisma
+            .refreshToken
+            .findUnique({
+              where: {
+                tokenHash:
+                  oldTokenHash,
+              },
+            });
+
+
+        expect(
+          storedOldToken
+        ).not.toBeNull();
+
+
+        expect(
+          storedOldToken?.revoked
+        ).toBe(true);
+
+
+        expect(
+          storedOldToken?.replacedBy
+        ).not.toBeNull();
+
+
+        const newTokenHash =
+          hashRefreshToken(
+            body.refreshToken
+          );
+
+
+        const replacement =
+          await prisma
+            .refreshToken
+            .findUnique({
+              where: {
+                tokenHash:
+                  newTokenHash,
+              },
+            });
+
+
+        expect(
+          replacement
+        ).not.toBeNull();
+
+
+        expect(
+          replacement?.revoked
+        ).toBe(false);
+
+
+        expect(
+          storedOldToken?.replacedBy
+        ).toBe(
+          replacement?.id
+        );
+      }
+    );
+
+
+    /* -----------------------------------------------------
+       OLD TOKEN CANNOT BE REUSED
+       ----------------------------------------------------- */
+
+    it(
+      "old refresh token cannot be reused",
+      async () => {
+        const loginBody =
+          await login();
+
+
+        const oldRefreshToken =
+          loginBody.refreshToken;
+
+
+        const firstRefresh =
+          await app.inject({
+            method: "POST",
+            url: "/auth/refresh",
+
+            payload: {
+              refreshToken:
+                oldRefreshToken,
+            },
+          });
+
+
+        expect(
+          firstRefresh.statusCode
+        ).toBe(200);
+
+
+        const secondRefresh =
+          await app.inject({
+            method: "POST",
+            url: "/auth/refresh",
+
+            payload: {
+              refreshToken:
+                oldRefreshToken,
+            },
+          });
+
+
+        expect(
+          secondRefresh.statusCode
+        ).toBe(401);
+
+
+        const body =
+          secondRefresh.json();
+
+
+        expect(
+          body.error
+        ).toBe(
+          "Refresh token reuse detected; sessions revoked"
+        );
+      }
+    );
+
+
+    /* -----------------------------------------------------
+       LOGOUT REVOKES TOKEN
+       ----------------------------------------------------- */
+
+    it(
+      "logout revokes the refresh token",
+      async () => {
+        const loginBody =
+          await login();
+
+
+        const refreshToken =
+          loginBody.refreshToken;
+
+
+        const tokenHash =
+          hashRefreshToken(
+            refreshToken
+          );
+
+
+        const beforeLogout =
+          await prisma
+            .refreshToken
+            .findUnique({
+              where: {
+                tokenHash,
+              },
+            });
+
+
+        expect(
+          beforeLogout
+        ).not.toBeNull();
+
+
+        expect(
+          beforeLogout?.revoked
+        ).toBe(false);
+
+
+        const response =
+          await app.inject({
+            method: "POST",
+            url: "/auth/logout",
+
+            payload: {
+              refreshToken,
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(204);
+
+
+        const afterLogout =
+          await prisma
+            .refreshToken
+            .findUnique({
+              where: {
+                tokenHash,
+              },
+            });
+
+
+        expect(
+          afterLogout
+        ).not.toBeNull();
+
+
+        expect(
+          afterLogout?.revoked
+        ).toBe(true);
+      }
+    );
+
+
+    /* -----------------------------------------------------
+       EXPIRED TOKEN
+       ----------------------------------------------------- */
+
+    it(
+      "expired refresh token is rejected",
+      async () => {
+        const loginBody =
+          await login();
+
+
+        const refreshToken =
+          loginBody.refreshToken;
+
+
+        const tokenHash =
+          hashRefreshToken(
+            refreshToken
+          );
+
+
+        await prisma
+          .refreshToken
+          .update({
+            where: {
+              tokenHash,
+            },
+
+            data: {
+              expiresAt:
+                new Date(
+                  Date.now()
+                    - 60_000
+                ),
+            },
+          });
+
+
+        const response =
+          await app.inject({
+            method: "POST",
+            url: "/auth/refresh",
+
+            payload: {
+              refreshToken,
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(401);
+
+
+        const body =
+          response.json();
+
+
+        expect(
+          body.error
+        ).toBe(
+          "Refresh token expired"
         );
 
-      const response = await app.inject({
-        method: "POST",
-        url: "/auth/logout",
 
-        payload: {
-          refreshToken,
-        },
-      });
-
-      expect(response.statusCode).toBe(
-        204
-      );
-
-      const storedToken =
-        await prisma.refreshToken.findUnique({
-          where: {
-            tokenHash,
-          },
-        });
-
-      expect(storedToken).not.toBeNull();
-
-      expect(
-        storedToken?.revoked
-      ).toBe(true);
-    });
+        const storedToken =
+          await prisma
+            .refreshToken
+            .findUnique({
+              where: {
+                tokenHash,
+              },
+            });
 
 
-    it("expired refresh token is rejected", async () => {
-      const loginBody = await login();
+        expect(
+          storedToken
+        ).not.toBeNull();
 
-      const refreshToken =
-        loginBody.refreshToken;
 
-      const tokenHash =
-        hashRefreshToken(
-          refreshToken
+        expect(
+          storedToken?.revoked
+        ).toBe(true);
+      }
+    );
+
+
+    /* -----------------------------------------------------
+       RANDOM TOKEN
+       ----------------------------------------------------- */
+
+    it(
+      "random refresh token is rejected",
+      async () => {
+        const randomToken =
+          randomBytes(32)
+            .toString(
+              "base64url"
+            );
+
+
+        const response =
+          await app.inject({
+            method: "POST",
+            url: "/auth/refresh",
+
+            payload: {
+              refreshToken:
+                randomToken,
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(401);
+
+
+        const body =
+          response.json();
+
+
+        expect(
+          body.error
+        ).toBe(
+          "Invalid refresh token"
         );
 
-      await prisma.refreshToken.update({
-        where: {
-          tokenHash,
-        },
 
-        data: {
-          expiresAt: new Date(
-            Date.now() - 60_000
-          ),
-        },
-      });
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/auth/refresh",
-
-        payload: {
-          refreshToken,
-        },
-      });
-
-      expect(response.statusCode).toBe(
-        401
-      );
-
-      const body = response.json();
-
-      expect(body.error).toBe(
-        "Invalid refresh token"
-      );
-
-      const storedToken =
-        await prisma.refreshToken.findUnique({
-          where: {
-            tokenHash,
-          },
-        });
-
-      expect(
-        storedToken?.revoked
-      ).toBe(true);
-    });
+        const tokenHash =
+          hashRefreshToken(
+            randomToken
+          );
 
 
-    it("random refresh token is rejected", async () => {
-      const randomToken =
-        randomBytes(32).toString(
-          "base64url"
-        );
+        const storedToken =
+          await prisma
+            .refreshToken
+            .findUnique({
+              where: {
+                tokenHash,
+              },
+            });
 
-      const response = await app.inject({
-        method: "POST",
-        url: "/auth/refresh",
 
-        payload: {
-          refreshToken: randomToken,
-        },
-      });
-
-      expect(response.statusCode).toBe(
-        401
-      );
-
-      const body = response.json();
-
-      expect(body.error).toBe(
-        "Invalid refresh token"
-      );
-    });
+        expect(
+          storedToken
+        ).toBeNull();
+      }
+    );
   }
 );
