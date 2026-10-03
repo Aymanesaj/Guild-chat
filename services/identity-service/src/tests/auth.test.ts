@@ -31,6 +31,7 @@ const {
   mockLogoutSession,
   mockValidateAccessToken,
   mockGetCurrentUser,
+  mockUpdateCurrentUser,
 } = vi.hoisted(() => ({
   mockRegisterUser: vi.fn(),
   mockLoginUser: vi.fn(),
@@ -38,6 +39,7 @@ const {
   mockLogoutSession: vi.fn(),
   mockValidateAccessToken: vi.fn(),
   mockGetCurrentUser: vi.fn(),
+  mockUpdateCurrentUser: vi.fn(),
 }));
 
 
@@ -56,8 +58,8 @@ vi.mock("../services/jwt.service.js", () => ({
 
 
 vi.mock("../services/user.service.js", () => ({
-  getCurrentUser:
-    mockGetCurrentUser,
+  getCurrentUser: mockGetCurrentUser,
+  updateCurrentUser: mockUpdateCurrentUser,
 }));
 
 
@@ -114,6 +116,7 @@ beforeEach(() => {
   mockLogoutSession.mockReset();
   mockValidateAccessToken.mockReset();
   mockGetCurrentUser.mockReset();
+  mockUpdateCurrentUser.mockReset();
 });
 
 
@@ -675,6 +678,445 @@ describe("GET /me", () => {
 
     expect(
       body.password
+    ).toBeUndefined();
+  });
+});
+
+describe("PUT /me", () => {
+  const updatedUser = {
+    id: userId,
+    username: "obendaou",
+    email: "oumaima@example.com",
+    displayName: "Oumaima B",
+    bio: "Software engineering student",
+    avatarUrl: null,
+    authProvider: "LOCAL",
+    createdAt: new Date(
+      "2026-10-01T10:00:00.000Z"
+    ),
+    updatedAt: new Date(
+      "2026-10-03T10:00:00.000Z"
+    ),
+  };
+
+
+  it("should update the authenticated user's profile", async () => {
+    mockValidateAccessToken.mockReturnValue(
+      userId
+    );
+
+    mockUpdateCurrentUser.mockResolvedValue(
+      updatedUser
+    );
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/me",
+
+      headers: {
+        authorization:
+          "Bearer fake-access-token",
+      },
+
+      payload: {
+        displayName: "Oumaima B",
+        bio: "Software engineering student",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json();
+
+    expect(body.displayName).toBe(
+      "Oumaima B"
+    );
+
+    expect(body.bio).toBe(
+      "Software engineering student"
+    );
+
+    expect(
+      mockUpdateCurrentUser
+    ).toHaveBeenCalledWith(
+      userId,
+      {
+        displayName: "Oumaima B",
+        bio: "Software engineering student",
+      }
+    );
+  });
+
+
+  it("should update the username", async () => {
+    mockValidateAccessToken.mockReturnValue(
+      userId
+    );
+
+    mockUpdateCurrentUser.mockResolvedValue({
+      ...updatedUser,
+      username: "oumaima_dev",
+    });
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/me",
+
+      headers: {
+        authorization:
+          "Bearer fake-access-token",
+      },
+
+      payload: {
+        username: "oumaima_dev",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json();
+
+    expect(body.username).toBe(
+      "oumaima_dev"
+    );
+
+    expect(
+      mockUpdateCurrentUser
+    ).toHaveBeenCalledWith(
+      userId,
+      {
+        username: "oumaima_dev",
+      }
+    );
+  });
+
+
+  it("should allow bio to be cleared with null", async () => {
+    mockValidateAccessToken.mockReturnValue(
+      userId
+    );
+
+    mockUpdateCurrentUser.mockResolvedValue({
+      ...updatedUser,
+      bio: null,
+    });
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/me",
+
+      headers: {
+        authorization:
+          "Bearer fake-access-token",
+      },
+
+      payload: {
+        bio: null,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json();
+
+    expect(body.bio).toBeNull();
+
+    expect(
+      mockUpdateCurrentUser
+    ).toHaveBeenCalledWith(
+      userId,
+      {
+        bio: null,
+      }
+    );
+  });
+
+
+  it("should return 401 when authorization header is missing", async () => {
+    const response = await app.inject({
+      method: "PUT",
+      url: "/me",
+
+      payload: {
+        displayName: "Oumaima B",
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+
+    expect(
+      mockUpdateCurrentUser
+    ).not.toHaveBeenCalled();
+  });
+
+
+  it("should return 401 when access token is invalid", async () => {
+    mockValidateAccessToken.mockReturnValue(
+      null
+    );
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/me",
+
+      headers: {
+        authorization:
+          "Bearer invalid-token",
+      },
+
+      payload: {
+        displayName: "Oumaima B",
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+
+    expect(
+      mockUpdateCurrentUser
+    ).not.toHaveBeenCalled();
+  });
+
+
+  it("should return 400 when body is empty", async () => {
+    mockValidateAccessToken.mockReturnValue(
+      userId
+    );
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/me",
+
+      headers: {
+        authorization:
+          "Bearer fake-access-token",
+      },
+
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(400);
+
+    expect(
+      mockUpdateCurrentUser
+    ).not.toHaveBeenCalled();
+  });
+
+
+  it("should return 400 when username is too short", async () => {
+    mockValidateAccessToken.mockReturnValue(
+      userId
+    );
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/me",
+
+      headers: {
+        authorization:
+          "Bearer fake-access-token",
+      },
+
+      payload: {
+        username: "ab",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+
+    expect(
+      mockUpdateCurrentUser
+    ).not.toHaveBeenCalled();
+  });
+
+
+  it("should return 400 when username contains invalid characters", async () => {
+    mockValidateAccessToken.mockReturnValue(
+      userId
+    );
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/me",
+
+      headers: {
+        authorization:
+          "Bearer fake-access-token",
+      },
+
+      payload: {
+        username: "oumaima@dev",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+
+    expect(
+      mockUpdateCurrentUser
+    ).not.toHaveBeenCalled();
+  });
+
+
+  it("should return 400 when display name is too long", async () => {
+    mockValidateAccessToken.mockReturnValue(
+      userId
+    );
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/me",
+
+      headers: {
+        authorization:
+          "Bearer fake-access-token",
+      },
+
+      payload: {
+        displayName: "a".repeat(81),
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+
+    expect(
+      mockUpdateCurrentUser
+    ).not.toHaveBeenCalled();
+  });
+
+
+  it("should return 400 when bio is too long", async () => {
+    mockValidateAccessToken.mockReturnValue(
+      userId
+    );
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/me",
+
+      headers: {
+        authorization:
+          "Bearer fake-access-token",
+      },
+
+      payload: {
+        bio: "a".repeat(281),
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+
+    expect(
+      mockUpdateCurrentUser
+    ).not.toHaveBeenCalled();
+  });
+
+
+  it("should return 409 when username is already taken", async () => {
+    mockValidateAccessToken.mockReturnValue(
+      userId
+    );
+
+    mockUpdateCurrentUser.mockRejectedValue(
+      new ConflictError(
+        "Username is already taken"
+      )
+    );
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/me",
+
+      headers: {
+        authorization:
+          "Bearer fake-access-token",
+      },
+
+      payload: {
+        username: "existing_user",
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+
+    const body = response.json();
+
+    expect(body.error).toBe(
+      "Username is already taken"
+    );
+  });
+
+
+  it("should return 404 when user no longer exists", async () => {
+    mockValidateAccessToken.mockReturnValue(
+      userId
+    );
+
+    mockUpdateCurrentUser.mockRejectedValue(
+      new NotFoundError(
+        "User not found"
+      )
+    );
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/me",
+
+      headers: {
+        authorization:
+          "Bearer fake-access-token",
+      },
+
+      payload: {
+        displayName: "New Name",
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+
+    const body = response.json();
+
+    expect(body.error).toBe(
+      "User not found"
+    );
+  });
+
+
+  it("should not expose sensitive fields", async () => {
+    mockValidateAccessToken.mockReturnValue(
+      userId
+    );
+
+    mockUpdateCurrentUser.mockResolvedValue(
+      updatedUser
+    );
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/me",
+
+      headers: {
+        authorization:
+          "Bearer fake-access-token",
+      },
+
+      payload: {
+        displayName: "Oumaima B",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json();
+
+    expect(
+      body.passwordHash
+    ).toBeUndefined();
+
+    expect(
+      body.password
+    ).toBeUndefined();
+
+    expect(
+      body.oauthProviderId
     ).toBeUndefined();
   });
 });
