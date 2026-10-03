@@ -1,4 +1,6 @@
+import { da } from "zod/locales";
 import { prisma } from "../database/prisma.js";
+import { UpdateUserData } from "../types/user.types.js";
 
 export async function usernameExists(
   username: string
@@ -78,4 +80,16 @@ export function findUserById(
             id
         }
     });
+}
+
+export function updateUserData(
+  userId: string,
+  data: UpdateUserData
+) {
+  return prisma.user.update({
+    where: {
+      id: userId
+    },
+    data
+  })
 }
