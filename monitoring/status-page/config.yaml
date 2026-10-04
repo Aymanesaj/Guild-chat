@@ -50,9 +50,16 @@ endpoints:
     conditions:
       - "[STATUS] == 200"
 
-  - name: PostgreSQL Database
+  - name: Identity PostgreSQL
     group: Databases
-    url: "tcp://postgres:5432"
+    url: "tcp://identity-service_postgres:5432"
+    interval: 10s
+    conditions:
+      - "[CONNECTED] == true"
+
+  - name: Organization PostgreSQL
+    group: Databases
+    url: "tcp://org-service_postgres:5432"
     interval: 10s
     conditions:
       - "[CONNECTED] == true"

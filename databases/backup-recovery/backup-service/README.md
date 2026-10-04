@@ -15,10 +15,10 @@ This directory provides the automated, continuous background backup daemon conta
 
 ## How the Daemon Operates (`backup.sh`)
 
-1. **Liveness Polling**: Checks `pg_isready` against PostgreSQL host and port before attempting dumps.
-2. **PostgreSQL Dump**: Streams a clean compressed SQL dump via `pg_dump` with `--clean --if-exists` into `/backups/postgres_<TIMESTAMP>.sql.gz`.
+1. **Liveness Polling**: Checks `pg_isready` against both PostgreSQL hosts and ports before attempting dumps.
+2. **PostgreSQL Dump**: Streams a clean compressed SQL dump via `pg_dump` with `--clean --if-exists` into `/backups/postgres_<TIMESTAMP>.sql.gz` for identity and `/backups/org_<TIMESTAMP>.sql.gz` for organization, using each container's credentials.
 3. **MongoDB Dump**: Dumps the `chatdb` collections via `mongodump --archive --gzip` into `/backups/mongo_<TIMESTAMP>.archive.gz`.
-4. **Latest Pointer**: Updates `postgres_latest.sql.gz` and `mongo_latest.archive.gz`.
+4. **Latest Pointer**: Updates `postgres_latest.sql.gz`, `org_latest.sql.gz`, and `mongo_latest.archive.gz`.
 5. **Retention Cleanup**: Automatically removes snapshot files older than `RETENTION_DAYS` (default: 7 days) while preserving `_latest` files.
 6. **Sleep Cycle**: Sleeps for `BACKUP_INTERVAL` seconds (default: 43200s / 12h) before triggering the next snapshot.
 
@@ -31,5 +31,8 @@ This directory provides the automated, continuous background backup daemon conta
 | `BACKUP_INTERVAL` | `43200` (12h) | Frequency between automatic backup runs (seconds) |
 | `RETENTION_DAYS` | `7` | Retention window before automatic file deletion |
 | `BACKUP_DIR` | `/backups` | Volume mount path storing backup archives |
-| `PGHOST` / `PGPORT` | `postgres` / `5432` | PostgreSQL network connection |
+| `IDENTITY_POSTGRES_HOST` / `IDENTITY_POSTGRES_PORT` | `identity-service_postgres` / `5432` | Identity PostgreSQL connection |
+| `ORG_POSTGRES_HOST` / `ORG_POSTGRES_PORT` | `org-service_postgres` / `5432` | Organization PostgreSQL connection |
+| `IDENTITY_POSTGRES_USER` / `IDENTITY_POSTGRES_PASSWORD` / `IDENTITY_POSTGRES_DB` | `admin` / `admin` / `transdb` | Identity credentials and database |
+| `ORG_POSTGRES_USER` / `ORG_POSTGRES_PASSWORD` / `ORG_POSTGRES_DB` | `admin` / `admin` / `org_service_db` | Organization credentials and database |
 | `MONGO_HOST` / `MONGO_PORT` | `mongodb` / `27017` | MongoDB network connection |

@@ -19,8 +19,8 @@ This directory houses the operational scripts for database backup snapshots, poi
 ### How It Works
 1. **Dynamic Configuration Discovery**: Automatically loads database credentials from `.env` in the project root if environment variables are not already exported.
 2. **PostgreSQL Dump**:
-   - Executes `pg_dump` inside the `postgres` container using Unix domain socket (`-h /var/run/postgresql`) to bypass network authentication issues.
-   - Generates full SQL dumps for both databases: `${POSTGRES_DB}` (`transdb`) and `${ORG_POSTGRES_DB}` (`org_service_db`), including `--clean` and `--if-exists` flags.
+   - Executes `pg_dump` inside the corresponding `identity-service_postgres` or `org-service_postgres` container using Unix domain socket (`-h /var/run/postgresql`) to bypass network authentication issues.
+   - Generates full SQL dumps for both databases: `${IDENTITY_POSTGRES_DB}` (`transdb`) and `${ORG_POSTGRES_DB}` (`org_service_db`), including `--clean` and `--if-exists` flags.
    - Compresses the output on the fly with `gzip -9` into `backups/postgres_<TIMESTAMP>.sql.gz` and `backups/org_<TIMESTAMP>.sql.gz`.
    - Creates/overwrites `backups/postgres_latest.sql.gz` and `backups/org_latest.sql.gz` atomically once all dumps succeed.
 3. **MongoDB Dump**:

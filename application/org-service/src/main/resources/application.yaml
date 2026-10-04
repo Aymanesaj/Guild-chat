@@ -12,9 +12,9 @@ spring:
       fail-on-unknown-properties: true
 
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/org_service_db}
-    username: ${SPRING_DATASOURCE_USERNAME:admin}
-    password: ${SPRING_DATASOURCE_PASSWORD:admin}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://org-service_postgres:5432/${ORG_POSTGRES_DB:org_service_db}}
+    username: ${SPRING_DATASOURCE_USERNAME:${ORG_POSTGRES_USER:admin}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${ORG_POSTGRES_PASSWORD:admin}}
 
 server:
   port: ${PORT:8082}

@@ -5,12 +5,16 @@ BACKUP_DIR="/backups"
 BACKUP_INTERVAL="${BACKUP_INTERVAL:-43200}"
 RETENTION_DAYS="${RETENTION_DAYS:-7}"
 
-POSTGRES_HOST="${PGHOST:-postgres}"
-POSTGRES_PORT="${PGPORT:-5432}"
-POSTGRES_USER="${POSTGRES_USER:-admin}"
-POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-admin}"
-POSTGRES_DB="${POSTGRES_DB:-transdb}"
+IDENTITY_POSTGRES_HOST="${IDENTITY_POSTGRES_HOST:-identity-service_postgres}"
+IDENTITY_POSTGRES_PORT="${IDENTITY_POSTGRES_PORT:-5432}"
+IDENTITY_POSTGRES_USER="${IDENTITY_POSTGRES_USER:-admin}"
+IDENTITY_POSTGRES_PASSWORD="${IDENTITY_POSTGRES_PASSWORD:-admin}"
+IDENTITY_POSTGRES_DB="${IDENTITY_POSTGRES_DB:-transdb}"
 ORG_POSTGRES_DB="${ORG_POSTGRES_DB:-org_service_db}"
+ORG_POSTGRES_HOST="${ORG_POSTGRES_HOST:-org-service_postgres}"
+ORG_POSTGRES_PORT="${ORG_POSTGRES_PORT:-5432}"
+ORG_POSTGRES_USER="${ORG_POSTGRES_USER:-admin}"
+ORG_POSTGRES_PASSWORD="${ORG_POSTGRES_PASSWORD:-admin}"
 
 MONGO_HOST="${MONGO_HOST:-mongodb}"
 MONGO_PORT="${MONGO_PORT:-27017}"
@@ -21,19 +25,22 @@ chmod 755 "$BACKUP_DIR" 2>/dev/null || true
 echo "=========================================="
 echo " Starting Automated Backup Service"
 echo " Interval: ${BACKUP_INTERVAL}s | Retention: ${RETENTION_DAYS} days"
-echo " Target DBs: PostgreSQL (${POSTGRES_DB}, ${ORG_POSTGRES_DB}), MongoDB (${MONGO_HOST})"
+echo " Target DBs: PostgreSQL (${IDENTITY_POSTGRES_DB}, ${ORG_POSTGRES_DB}), MongoDB (${MONGO_HOST})"
 echo "=========================================="
 
 perform_backup() {
     TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
     echo "[$(date)] >>> Starting backup snapshot: ${TIMESTAMP}..."
 
-    until pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" > /dev/null 2>&1; do
-        echo "Waiting for PostgreSQL at ${POSTGRES_HOST}:${POSTGRES_PORT}..."
+    until pg_isready -h "$IDENTITY_POSTGRES_HOST" -p "$IDENTITY_POSTGRES_PORT" -U "$IDENTITY_POSTGRES_USER" > /dev/null 2>&1; do
+        echo "Waiting for PostgreSQL at ${IDENTITY_POSTGRES_HOST}:${IDENTITY_POSTGRES_PORT}..."
         sleep 2
     done
 
-    export PGPASSWORD="$POSTGRES_PASSWORD"
+    until pg_isready -h "$ORG_POSTGRES_HOST" -p "$ORG_POSTGRES_PORT" -U "$ORG_POSTGRES_USER" > /dev/null 2>&1; do
+        echo "Waiting for PostgreSQL at ${ORG_POSTGRES_HOST}:${ORG_POSTGRES_PORT}..."
+        sleep 2
+    done
 
     PG_FILE="${BACKUP_DIR}/postgres_${TIMESTAMP}.sql.gz"
     PG_LATEST="${BACKUP_DIR}/postgres_latest.sql.gz"
@@ -41,13 +48,13 @@ perform_backup() {
     ORG_FILE="${BACKUP_DIR}/org_${TIMESTAMP}.sql.gz"
     ORG_LATEST="${BACKUP_DIR}/org_latest.sql.gz"
 
-    echo "Dumping PostgreSQL database '${POSTGRES_DB}'..."
-    pg_dump -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" \
-        --clean --if-exists --format=p "$POSTGRES_DB" | gzip -9 > "$PG_FILE"
-    echo "PostgreSQL '${POSTGRES_DB}' backup completed: ${PG_FILE} ($(du -h "$PG_FILE" | cut -f1))"
+    echo "Dumping PostgreSQL database '${IDENTITY_POSTGRES_DB}'..."
+    PGPASSWORD="$IDENTITY_POSTGRES_PASSWORD" pg_dump -h "$IDENTITY_POSTGRES_HOST" -p "$IDENTITY_POSTGRES_PORT" -U "$IDENTITY_POSTGRES_USER" \
+        --clean --if-exists --format=p "$IDENTITY_POSTGRES_DB" | gzip -9 > "$PG_FILE"
+    echo "PostgreSQL '${IDENTITY_POSTGRES_DB}' backup completed: ${PG_FILE} ($(du -h "$PG_FILE" | cut -f1))"
 
     echo "Dumping PostgreSQL database '${ORG_POSTGRES_DB}'..."
-    pg_dump -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" \
+    PGPASSWORD="$ORG_POSTGRES_PASSWORD" pg_dump -h "$ORG_POSTGRES_HOST" -p "$ORG_POSTGRES_PORT" -U "$ORG_POSTGRES_USER" \
         --clean --if-exists --format=p "$ORG_POSTGRES_DB" | gzip -9 > "$ORG_FILE"
     echo "PostgreSQL '${ORG_POSTGRES_DB}' backup completed: ${ORG_FILE} ($(du -h "$ORG_FILE" | cut -f1))"
 

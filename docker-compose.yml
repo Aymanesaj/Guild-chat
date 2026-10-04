@@ -78,8 +78,8 @@ services:
     container_name: org-service
     environment:
       SPRING_DATASOURCE_URL: ${ORG_DATASOURCE_URL}
-      SPRING_DATASOURCE_USERNAME: ${ORG_DATASOURCE_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${ORG_DATASOURCE_PASSWORD}
+      SPRING_DATASOURCE_USERNAME: ${ORG_POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${ORG_POSTGRES_PASSWORD}
       PORT: 8082
     env_file:
       - ./.env
@@ -94,7 +94,7 @@ services:
       retries: 5
       start_period: 10s
     depends_on:
-      postgres:
+      org-service_postgres:
         condition: service_healthy
     restart: always
 
@@ -137,7 +137,7 @@ services:
   #   volumes:
   #     - identity_avatars:/tmp/identity-avatars
   #   depends_on:
-  #     postgres:
+  #     identity-service_postgres:
   #       condition: service_healthy
   #   restart: always
 
@@ -146,15 +146,37 @@ services:
   # DATABASES
   # ============================================================
 
-  postgres:
+  identity-service_postgres:
     mem_limit: 512m
     image: postgres:16-alpine
-    container_name: postgres
+    container_name: identity-service_postgres
+    environment:
+      POSTGRES_USER: ${IDENTITY_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${IDENTITY_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${IDENTITY_POSTGRES_DB}
     volumes:
       - database:/var/lib/postgresql/data
-      - ./databases/postgres/init:/docker-entrypoint-initdb.d:ro
-    env_file:
-      - ./.env
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    restart: always
+    networks:
+      - private
+
+  org-service_postgres:
+    mem_limit: 512m
+    image: postgres:16-alpine
+    container_name: org-service_postgres
+    environment:
+      POSTGRES_USER: ${ORG_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${ORG_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${ORG_POSTGRES_DB}
+    volumes:
+      - org-service_postgres_data:/var/lib/postgresql/data
     expose:
       - "5432"
     healthcheck:
@@ -330,7 +352,9 @@ services:
     networks:
       - private
     depends_on:
-      postgres:
+      identity-service_postgres:
+        condition: service_healthy
+      org-service_postgres:
         condition: service_healthy
       mongodb:
         condition: service_healthy
@@ -344,7 +368,10 @@ services:
 volumes:
   nginx_tls:
   database:
+    # Identity storage: keep the existing volume and its Compose label.
     name: "database"
+  org-service_postgres_data:
+    name: "org-service_postgres_data"
   prometheus_data:
     name: "prometheus_data"
   grafana_data:

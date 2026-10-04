@@ -111,8 +111,8 @@ The application is deployed at **https://guild-chat.tech** and runs locally with
                             │        AreFriends, IsMember)        │
                             ▼                  ▼                  ▼
                      ┌─────────────────────────────┐      ┌──────────────┐
-                     │   PostgreSQL 16             │      │  MongoDB 7   │
-                     │   transdb · org_service_db  │      │   chatdb     │
+                     │ PostgreSQL 16 (2 containers)│      │  MongoDB 7   │
+                     │   transdb │ org_service_db  │      │   chatdb     │
                      └─────────────────────────────┘      └──────────────┘
 
    Observability plane:  prometheus · alertmanager · grafana · gatus · backup-service
@@ -203,10 +203,10 @@ cross-service reads go through gRPC.
 | Technology | Role |
 |---|---|
 | Nginx + ModSecurity v3 + OWASP CRS v4 | TLS termination (TLS 1.2/1.3), reverse proxy, WAF, and rate limiting (20 r/s, burst 30 → HTTP 429) |
-| Docker + Docker Compose | 15-service topology on a single private network; only Nginx publishes ports |
+| Docker + Docker Compose | 16-service topology on a single private network; only Nginx publishes ports |
 | Prometheus + Alertmanager | Metrics collection across 6 scrape jobs, with alert rules routed to Discord |
 | Grafana | Dashboards for microservice health and container metrics |
-| Gatus | Public status page monitoring 9 endpoints, behind Basic Auth |
+| Gatus | Public status page monitoring 10 endpoints, behind Basic Auth |
 | GitHub Actions | CI (lint, build, test, Compose validation) and CD (SSH deploy to the production VM) |
 
 ---
@@ -215,6 +215,8 @@ cross-service reads go through gRPC.
 
 ### PostgreSQL — `transdb` (owned by identity-service)
 
+Runs in `identity-service_postgres`, using the existing `database` volume.
+
 | Table | Key fields | Notes |
 |---|---|---|
 | `users` | `id UUID PK`, `username VARCHAR UNIQUE`, `email VARCHAR UNIQUE`, `password_hash`, `display_name`, `bio VARCHAR(280)`, `avatar_url`, `auth_provider`, `oauth_provider_id`, `created_at`, `updated_at` | `auth_provider ∈ {LOCAL, GITHUB}`. Unique constraint on `(auth_provider, oauth_provider_id)`. Passwords are BCrypt-hashed (salted per record); OAuth users have no `password_hash`. |
@@ -222,6 +224,10 @@ cross-service reads go through gRPC.
 | `friendships` | `id`, `requester_id`, `addressee_id`, `status`, `created_at` | `status ∈ {PENDING, ACCEPTED}`. Unique on `(requester_id, addressee_id)`, indexed on both columns. |
 
 ### PostgreSQL — `org_service_db` (owned by org-service)
+
+Runs in `org-service_postgres`, using its own `org-service_postgres_data` volume.
+Existing installations must [copy organization data](databases/postgres/README.md)
+before switching the application to the new container.
 
 | Table | Key fields | Notes |
 |---|---|---|
@@ -369,9 +375,9 @@ change the defaults before any deployment.
 | Group | Keys | Notes |
 |---|---|---|
 | Gateway / WAF | `MODSEC_RULE_ENGINE`, `PARANOIA`, `BLOCKING_PARANOIA` | `DetectionOnly` logs, `On` blocks. Paranoia 1 is standard; 2–4 tighten the OWASP CRS. |
-| PostgreSQL | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` | The container init pair plus libpq variables used by the exporter. |
-| Identity runtime | `IDENTITY_HTTP_PORT`, `IDENTITY_GRPC_PORT`, `AVATAR_DIR`, `DATABASE_URL` | Loaded from `.env`; use internal ports 8083/9090 and avatar storage `/tmp/identity-avatars`. Prisma connects to `postgres:5432`. No shared `PORT` is needed. |
-| Org datasource | `ORG_DATASOURCE_URL/USERNAME/PASSWORD` | Mapped to org's Spring datasource variables by Compose. |
+| PostgreSQL | `IDENTITY_POSTGRES_*`, `ORG_POSTGRES_*` | Separate host, port, user, password, and database settings for each service; see [database setup and migration](databases/postgres/README.md). |
+| Identity runtime | `IDENTITY_HTTP_PORT`, `IDENTITY_GRPC_PORT`, `AVATAR_DIR`, `DATABASE_URL` | Loaded from `.env`; use internal ports 8083/9090 and avatar storage `/tmp/identity-avatars`. Prisma connects to `identity-service_postgres:5432`. No shared `PORT` is needed. |
+| Org datasource | `ORG_DATASOURCE_URL`, `ORG_POSTGRES_USER`, `ORG_POSTGRES_PASSWORD` | Mapped to org's Spring datasource variables by Compose; connects to `org-service_postgres:5432`. |
 | JWT | `JWT_SECRET`, `JWT_ISSUER` | **Change `JWT_SECRET`.** The template ships a placeholder; it signs every access token. |
 | GitHub OAuth | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_REDIRECT_URI` | Create an OAuth app on GitHub and point the callback at `<your-host>/api/users/oauth/github/callback`. Leave blank to disable OAuth; email/password still works. |
 | MongoDB | `MONGO_INITDB_ROOT_USERNAME/PASSWORD`, `CHAT_MONGO_DB/USER/PASSWORD/AUTH_DB` | The root pair is applied on first container start only; changing it later requires `docker volume rm mongo_data`. |
@@ -471,7 +477,7 @@ sizing, firewall rules, VM bootstrap and the GitHub Actions secrets
 | Metrics | Six Prometheus scrape jobs covering the three services, the gateway, the container exporter and Prometheus itself. |
 | Dashboards | Grafana dashboards for microservice health and container resource usage. |
 | Alerting | Rules for service/container downtime, OOM kills, high CPU and memory, and elevated 5xx rates, routed to Discord via Alertmanager. |
-| Status page | Gatus monitoring 9 endpoints, published behind Basic Auth. |
+| Status page | Gatus monitoring 10 endpoints, published behind Basic Auth. |
 | Backups | A backup daemon snapshots both databases on a schedule, with restore and an automated recovery test. |
 | CI/CD | Lint, build, three-service test matrix and Compose validation on every PR; automatic deploy on merge to `main`. |
 
@@ -660,7 +666,7 @@ delegates every token check to `identity-service`.
 
 - **Health checks** on every Compose service, with `depends_on: condition: service_healthy`
   gating startup order so the gateway never fronts a service that is not ready.
-- **Status page** — a Gatus instance monitoring 9 endpoints, published at `https://status.${DOMAIN}/` behind
+- **Status page** — a Gatus instance monitoring 10 endpoints, published at `https://status.${DOMAIN}/` behind
   Basic Auth.
 - **Automated backups** — a `backup-service` container snapshots PostgreSQL and MongoDB on a
   schedule ([`databases/backup-recovery/backup-service/`](databases/backup-recovery/backup-service/)).
@@ -681,7 +687,7 @@ rooms are accepted as organizations, this module applies and the total becomes 2
 ### asoudani — Technical Lead / Architect · Developer
 
 Chose the microservice split and the gRPC-between-services model, and built every layer
-below the application: the [`gateway-frontend/gateway/`](gateway-frontend/gateway/) Nginx + ModSecurity image, the 15-service
+below the application: the [`gateway-frontend/gateway/`](gateway-frontend/gateway/) Nginx + ModSecurity image, the 16-service
 [`docker-compose.yml`](docker-compose.yml) topology with health-gated startup, the
 [`Makefile`](Makefile), the full [`monitoring/`](monitoring/) observability stack (Prometheus,
 Alertmanager, Grafana dashboards, Gatus, a hand-written bash container exporter), the backup

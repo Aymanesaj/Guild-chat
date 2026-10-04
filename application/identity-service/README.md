@@ -16,7 +16,7 @@ template. Identity has no inline `environment` block in Compose.
   the identity gRPC server, which is not implemented yet.
 - Avoid a shared `PORT` variable. Chat and org retain their own Compose
   overrides, and identity reads only `IDENTITY_HTTP_PORT`.
-- `DATABASE_URL` points to PostgreSQL at `postgres:5432`. JWT and GitHub
+- `DATABASE_URL` points to PostgreSQL at `identity-service_postgres:5432`. JWT and GitHub
   credentials also come from `.env`, which must not be committed.
 - `identity_avatars` persists files at `/tmp/identity-avatars`; keep
   `AVATAR_DIR` set to that path. The image runs as the `node` user.

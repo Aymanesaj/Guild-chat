@@ -10,24 +10,28 @@ if [ -f "$ENV_FILE" ]; then
     get_env_val() {
         (grep -E "^${1}=" "$ENV_FILE" || true) | head -n 1 | cut -d '=' -f 2- | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"
     }
-    [ -z "$POSTGRES_USER" ] && POSTGRES_USER=$(get_env_val "POSTGRES_USER")
-    [ -z "$POSTGRES_PASSWORD" ] && POSTGRES_PASSWORD=$(get_env_val "POSTGRES_PASSWORD")
-    [ -z "$POSTGRES_DB" ] && POSTGRES_DB=$(get_env_val "POSTGRES_DB")
+    [ -z "$IDENTITY_POSTGRES_USER" ] && IDENTITY_POSTGRES_USER=$(get_env_val "IDENTITY_POSTGRES_USER")
+    [ -z "$IDENTITY_POSTGRES_PASSWORD" ] && IDENTITY_POSTGRES_PASSWORD=$(get_env_val "IDENTITY_POSTGRES_PASSWORD")
+    [ -z "$IDENTITY_POSTGRES_DB" ] && IDENTITY_POSTGRES_DB=$(get_env_val "IDENTITY_POSTGRES_DB")
     [ -z "$ORG_POSTGRES_DB" ] && ORG_POSTGRES_DB=$(get_env_val "ORG_POSTGRES_DB")
+    [ -z "$ORG_POSTGRES_USER" ] && ORG_POSTGRES_USER=$(get_env_val "ORG_POSTGRES_USER")
+    [ -z "$ORG_POSTGRES_PASSWORD" ] && ORG_POSTGRES_PASSWORD=$(get_env_val "ORG_POSTGRES_PASSWORD")
     [ -z "$MONGO_INITDB_ROOT_USERNAME" ] && MONGO_INITDB_ROOT_USERNAME=$(get_env_val "MONGO_INITDB_ROOT_USERNAME")
     [ -z "$MONGO_INITDB_ROOT_PASSWORD" ] && MONGO_INITDB_ROOT_PASSWORD=$(get_env_val "MONGO_INITDB_ROOT_PASSWORD")
     [ -z "$CHAT_MONGO_USER" ] && CHAT_MONGO_USER=$(get_env_val "CHAT_MONGO_USER")
     [ -z "$CHAT_MONGO_PASSWORD" ] && CHAT_MONGO_PASSWORD=$(get_env_val "CHAT_MONGO_PASSWORD")
 fi
 
-POSTGRES_USER="${POSTGRES_USER:-admin}"
-POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-admin}"
-POSTGRES_DB="${POSTGRES_DB:-transdb}"
+IDENTITY_POSTGRES_USER="${IDENTITY_POSTGRES_USER:-admin}"
+IDENTITY_POSTGRES_PASSWORD="${IDENTITY_POSTGRES_PASSWORD:-admin}"
+IDENTITY_POSTGRES_DB="${IDENTITY_POSTGRES_DB:-transdb}"
 ORG_POSTGRES_DB="${ORG_POSTGRES_DB:-org_service_db}"
+ORG_POSTGRES_USER="${ORG_POSTGRES_USER:-admin}"
+ORG_POSTGRES_PASSWORD="${ORG_POSTGRES_PASSWORD:-admin}"
 
 echo "=========================================="
 echo " Disaster Recovery: Database Restore Tool"
-echo " Target DBs: PostgreSQL (${POSTGRES_DB}, ${ORG_POSTGRES_DB}), MongoDB"
+echo " Target DBs: PostgreSQL (${IDENTITY_POSTGRES_DB}, ${ORG_POSTGRES_DB}), MongoDB"
 echo "=========================================="
 
 if [ ! -d "$BACKUP_DIR" ]; then
@@ -53,33 +57,33 @@ if [ ! -f "$PG_FILE" ]; then
 fi
 
 echo "Using snapshot files:"
-echo " - PostgreSQL (${POSTGRES_DB}):     $(basename "$PG_FILE")"
+echo " - PostgreSQL (${IDENTITY_POSTGRES_DB}):     $(basename "$PG_FILE")"
 [ -f "$ORG_FILE" ] && echo " - PostgreSQL (${ORG_POSTGRES_DB}): $(basename "$ORG_FILE")"
 echo " - MongoDB:                      $(basename "$MONGO_FILE")"
 echo ""
 
-echo ">>> Restoring PostgreSQL database '${POSTGRES_DB}'..."
-docker exec -i -e PGPASSWORD="${POSTGRES_PASSWORD}" postgres psql -h /var/run/postgresql -U "$POSTGRES_USER" -d postgres -c "
+echo ">>> Restoring PostgreSQL database '${IDENTITY_POSTGRES_DB}'..."
+docker exec -i -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" identity-service_postgres psql -h /var/run/postgresql -U "$IDENTITY_POSTGRES_USER" -d postgres -c "
 SELECT pg_terminate_backend(pid) FROM pg_stat_activity 
-WHERE datname = '${POSTGRES_DB}' AND pid <> pg_backend_pid();
+WHERE datname = '${IDENTITY_POSTGRES_DB}' AND pid <> pg_backend_pid();
 " > /dev/null 2>&1 || true
 
-gunzip -c "$PG_FILE" | docker exec -i -e PGPASSWORD="${POSTGRES_PASSWORD}" postgres psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 > /dev/null
-echo ">>> PostgreSQL '${POSTGRES_DB}' restored successfully!"
+gunzip -c "$PG_FILE" | docker exec -i -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" identity-service_postgres psql -h /var/run/postgresql -U "$IDENTITY_POSTGRES_USER" -d "$IDENTITY_POSTGRES_DB" -v ON_ERROR_STOP=1 > /dev/null
+echo ">>> PostgreSQL '${IDENTITY_POSTGRES_DB}' restored successfully!"
 
 if [ -f "$ORG_FILE" ]; then
     echo ">>> Restoring PostgreSQL database '${ORG_POSTGRES_DB}'..."
-    docker exec -i -e PGPASSWORD="${POSTGRES_PASSWORD}" postgres psql -h /var/run/postgresql -U "$POSTGRES_USER" -d postgres -c "
+    docker exec -i -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" org-service_postgres psql -h /var/run/postgresql -U "$ORG_POSTGRES_USER" -d postgres -c "
     SELECT pg_terminate_backend(pid) FROM pg_stat_activity 
     WHERE datname = '${ORG_POSTGRES_DB}' AND pid <> pg_backend_pid();
     " > /dev/null 2>&1 || true
 
     # Ensure database exists before restoring into it
-    docker exec -i -e PGPASSWORD="${POSTGRES_PASSWORD}" postgres psql -h /var/run/postgresql -U "$POSTGRES_USER" -d postgres -c "
+    docker exec -i -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" org-service_postgres psql -h /var/run/postgresql -U "$ORG_POSTGRES_USER" -d postgres -c "
     SELECT 'CREATE DATABASE ${ORG_POSTGRES_DB}' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${ORG_POSTGRES_DB}')\gexec
     " > /dev/null 2>&1 || true
 
-    gunzip -c "$ORG_FILE" | docker exec -i -e PGPASSWORD="${POSTGRES_PASSWORD}" postgres psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "$ORG_POSTGRES_DB" -v ON_ERROR_STOP=1 > /dev/null
+    gunzip -c "$ORG_FILE" | docker exec -i -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" org-service_postgres psql -h /var/run/postgresql -U "$ORG_POSTGRES_USER" -d "$ORG_POSTGRES_DB" -v ON_ERROR_STOP=1 > /dev/null
     echo ">>> PostgreSQL '${ORG_POSTGRES_DB}' restored successfully!"
 else
     echo "Notice: Organization database backup '$ORG_FILE' not found, skipped."
@@ -103,12 +107,12 @@ echo ""
 echo "=========================================="
 echo " Disaster Recovery Complete! Verifying..."
 echo "=========================================="
-echo "PostgreSQL Tables in '${POSTGRES_DB}':"
-docker exec -i -e PGPASSWORD="${POSTGRES_PASSWORD}" postgres psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\dt" || true
+echo "PostgreSQL Tables in '${IDENTITY_POSTGRES_DB}':"
+docker exec -i -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" identity-service_postgres psql -h /var/run/postgresql -U "$IDENTITY_POSTGRES_USER" -d "$IDENTITY_POSTGRES_DB" -c "\dt" || true
 
 echo ""
 echo "PostgreSQL Tables in '${ORG_POSTGRES_DB}':"
-docker exec -i -e PGPASSWORD="${POSTGRES_PASSWORD}" postgres psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "$ORG_POSTGRES_DB" -c "\dt" || true
+docker exec -i -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" org-service_postgres psql -h /var/run/postgresql -U "$ORG_POSTGRES_USER" -d "$ORG_POSTGRES_DB" -c "\dt" || true
 
 echo ""
 echo "MongoDB Collections in 'chatdb':"
