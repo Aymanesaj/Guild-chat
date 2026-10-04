@@ -4,11 +4,11 @@ This directory provides the automated, continuous background backup daemon conta
 
 ---
 
-## Difference Between `infra/backup/` and `scripts/backup.sh`
+## Difference Between `databases/backup-recovery/backup-service/` and `databases/backup-recovery/scripts/backup.sh`
 
-- **`infra/backup/` (Background Daemon Container)**:
+- **`databases/backup-recovery/backup-service/` (Background Daemon Container)**:
   Runs as an autonomous Alpine-based container inside Docker compose (`backup` service). It executes continuously on a periodic loop (default every 12 hours) and performs automated retention pruning of snapshots older than 7 days.
-- **`scripts/backup.sh` (Operator CLI Tool)**:
+- **`databases/backup-recovery/scripts/backup.sh` (Operator CLI Tool)**:
   Executed manually on the host machine by developers/operators (or via `make backup`) for immediate on-demand database snapshots before deployments or maintenance.
 
 ---

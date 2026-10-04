@@ -2,7 +2,7 @@
 set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$PROJECT_DIR"
 
 GREEN='\033[0;32m'
@@ -36,7 +36,7 @@ docker exec -i mongodb sh -c 'mongosh -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONG
 echo -e "${GREEN}✓ Test data created in all three databases.${NC}"
 
 echo -e "\n${YELLOW}[STEP 2/5] Triggering on-demand backup snapshot (make backup)...${NC}"
-./scripts/backup.sh
+./databases/backup-recovery/scripts/backup.sh
 echo -e "${GREEN}✓ Backup snapshot successfully created.${NC}"
 
 echo -e "\n${RED}[STEP 3/5] Simulating catastrophic disaster (destroying data)...${NC}"
@@ -75,7 +75,7 @@ if [ "$MONGO_CHECK" = "0" ]; then
 fi
 
 echo -e "\n${YELLOW}[STEP 4/5] Executing Disaster Recovery Restore (make restore)...${NC}"
-./scripts/restore.sh
+./databases/backup-recovery/scripts/restore.sh
 
 echo -e "\n${YELLOW}[STEP 5/5] Verifying restored data...${NC}"
 PG_RESULT=$(docker exec -i postgres sh -c 'psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "'"${POSTGRES_DB}"'" -t -c "

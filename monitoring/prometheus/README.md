@@ -96,7 +96,7 @@ HTTP error alerts currently cover the Spring services, not Fastify identity.
 ## Validation and rollout
 
 ```bash
-bash scripts/test-monitoring.sh
+bash monitoring/scripts/test-monitoring.sh
 # After configuring the replacement webhook and reviewing the memory budgets:
 docker compose up -d --build
 ```

@@ -2,7 +2,7 @@
 set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 ENV_FILE="${PROJECT_DIR}/.env"
 BACKUP_DIR="${PROJECT_DIR}/backups"
 

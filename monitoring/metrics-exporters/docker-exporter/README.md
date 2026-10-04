@@ -58,7 +58,7 @@ availability; the collection-health metrics indicate whether Docker data is usab
 ```bash
 docker compose logs docker-exporter docker-socket-proxy
 docker compose exec docker-exporter curl -fsS http://localhost:8090/metrics.prom
-bash scripts/test-monitoring.sh
+bash monitoring/scripts/test-monitoring.sh
 ```
 
 Tests exercise successful collection, the four-worker bound, Docker discovery and

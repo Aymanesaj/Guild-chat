@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run with: bash infra/docker-exporter/test.sh
+# Run with: bash monitoring/metrics-exporters/docker-exporter/test.sh
 set -eu
 source "$(dirname "$0")/script.sh"
 TEST_DIR=$(mktemp -d)

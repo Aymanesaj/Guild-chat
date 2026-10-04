@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: frontend/app
+        working-directory: gateway-frontend/frontend
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,7 +25,7 @@ jobs:
         with:
           node-version: 22
           cache: 'npm'
-          cache-dependency-path: frontend/app/package-lock.json
+          cache-dependency-path: gateway-frontend/frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -47,9 +47,9 @@ jobs:
       matrix:
         service:
           - name: Chat Service
-            dir: services/chat-service
+            dir: application/chat-service
           - name: Org Service
-            dir: services/org-service
+            dir: application/org-service
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -79,7 +79,7 @@ jobs:
         run: cp .env.example .env
 
       - name: Check Compose and monitoring
-        run: bash scripts/test-monitoring.sh
+        run: bash monitoring/scripts/test-monitoring.sh
 
   # -------------------------------------------------------------
   # 4. DEPLOY: Continuous Deployment to OCI Free Tier VM via SSH

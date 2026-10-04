@@ -15,10 +15,10 @@ RUN rm -rf /etc/nginx/templates/nginx.conf.template \
              /docker-entrypoint.d/93-update-proxy-ssl-config.sh \
              /docker-entrypoint.d/96-update-http3-config.sh
 
-COPY ./gateway/modsec/modsecurity-override.conf /etc/nginx/templates/modsecurity.d/modsecurity-override.conf.template
+COPY ./gateway-frontend/gateway/modsec/modsecurity-override.conf /etc/nginx/templates/modsecurity.d/modsecurity-override.conf.template
 
-COPY ./gateway/nginx.conf /etc/nginx/nginx.conf.template
-COPY ./gateway/script.sh .
+COPY ./gateway-frontend/gateway/nginx.conf /etc/nginx/nginx.conf.template
+COPY ./gateway-frontend/gateway/script.sh .
 
 RUN chmod +x ./script.sh \
     && mkdir -p /etc/nginx/conf /var/cache/nginx /var/log/nginx /var/run /tmp \

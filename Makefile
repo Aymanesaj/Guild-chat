@@ -52,13 +52,13 @@ proxy: run
 	DOCKER_SOCK=$(DOCKER_SOCK) docker compose up --build -d nginx
 
 backup:
-	@./scripts/backup.sh
+	@./databases/backup-recovery/scripts/backup.sh
 
 restore:
-	@./scripts/restore.sh $(SNAPSHOT)
+	@./databases/backup-recovery/scripts/restore.sh $(SNAPSHOT)
 
 test-recovery:
-	@./scripts/test-disaster-recovery.sh
+	@./databases/backup-recovery/scripts/test-disaster-recovery.sh
 
 status:
 	@STATUS_USER=$$(grep -E '^STATUS_PAGE_USER=' .env 2>/dev/null | cut -d= -f2-); \

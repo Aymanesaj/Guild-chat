@@ -6,6 +6,39 @@ A real-time chat platform built as a distributed web application.
 
 ---
 
+## Project layout
+
+Folders follow the service categories in `docker-compose.yml`:
+
+```text
+gateway-frontend/
+  gateway/
+  frontend/
+application/
+  org-service/
+  chat-service/
+  identity-service/
+  health.sh
+databases/
+  postgres/
+  backup-recovery/
+    backup-service/
+    scripts/
+monitoring/
+  prometheus/       # Prometheus and Alertmanager configuration
+  grafana/
+  status-page/
+  scripts/
+  metrics-exporters/
+    docker-exporter/
+deploy/
+certs/              # Local certificates
+backups/            # Local backup data
+```
+
+Services that use upstream images without local files remain configured in Compose.
+The root Compose file, Makefile, and `.env` remain the stack entry points.
+
 ## Table of Contents
 
 - [Description](#description)
@@ -111,7 +144,7 @@ infrastructure. Cross-service contracts (REST shapes and `.proto` definitions) w
 in writing before implementation so that two people could work either side of a boundary
 without blocking each other. Where the frontend needed an endpoint that did not exist yet,
 we shipped the UI anyway behind a feature flag in
-[`frontend/app/src/api/features.js`](frontend/app/src/api/features.js), which surfaces a
+[`gateway-frontend/frontend/src/api/features.js`](gateway-frontend/frontend/src/api/features.js), which surfaces a
 message naming the missing endpoint instead of silently breaking.
 
 **Tools.**
@@ -121,7 +154,7 @@ message naming the missing endpoint instead of silently breaking.
 | Code review | GitHub Pull Requests — one branch per feature (`feat/*`), reviewed before merge to `main` |
 | CI/CD | GitHub Actions — [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) |
 | Communication | Discord (daily async updates, voice for pairing) |
-| Cross-team docs | [`docs/frontend-backend-gaps.md`](docs/frontend-backend-gaps.md), [`services/identity-service/README.md`](services/identity-service/README.md), [`gateway/README.md`](gateway/README.md) |
+| Cross-team docs | [`docs/frontend-backend-gaps.md`](docs/frontend-backend-gaps.md), [`application/identity-service/README.md`](application/identity-service/README.md), [`gateway-frontend/gateway/README.md`](gateway-frontend/gateway/README.md) |
 
 ---
 
@@ -134,17 +167,17 @@ message naming the missing endpoint instead of silently breaking.
 | React | Component model and ecosystem; the natural fit for a stateful, live-updating SPA. |
 | Vite | Near-instant dev server and a fast production build with no config overhead. |
 | styled-components | Styles co-located with components and scoped by construction. Chosen over Tailwind because we wanted to author our own design system rather than adopt a vendor's utility vocabulary — see [Modules](#modules). |
-| react-router-dom | Client-side routing with the guarded-route pattern used in [`App.jsx`](frontend/app/src/App.jsx). |
+| react-router-dom | Client-side routing with the guarded-route pattern used in [`App.jsx`](gateway-frontend/frontend/src/App.jsx). |
 | react-icons, @fontsource/inter | Icon set and self-hosted typeface (no external font CDN at runtime). |
 
 Design tokens — colour palette, spacing scale, radii, shadows and semantic aliases — are CSS
-custom properties defined once in [`frontend/app/src/index.css`](frontend/app/src/index.css)
+custom properties defined once in [`gateway-frontend/frontend/src/index.css`](gateway-frontend/frontend/src/index.css)
 and consumed by every component.
 
 ### Backend
 
 Identity is migrating to Node.js, TypeScript, Fastify, and Prisma; see its
-[runtime contract](services/identity-service/README.md). The Java/Spring stack
+[runtime contract](application/identity-service/README.md). The Java/Spring stack
 below continues to apply to chat and org.
 
 | Technology | Version | Why |
@@ -309,7 +342,7 @@ make                     # builds and starts the full stack
 `make` is the single command required by the subject. It resolves the Docker socket, checks
 that `.env` exists, and runs `docker compose up -d`.
 
-On the very first start, [`gateway/script.sh`](gateway/script.sh) generates a self-signed
+On the very first start, [`gateway-frontend/gateway/script.sh`](gateway-frontend/gateway/script.sh) generates a self-signed
 RSA-2048 certificate into `certs/` if none is present. Your browser will warn about it —
 that is expected in local development. In production, real certificates are issued with
 Certbot (see [`deploy/README.md`](deploy/README.md)).
@@ -470,7 +503,7 @@ sizing, firewall rules, VM bootstrap and the GitHub Actions secrets
 
 *How:* the frontend is a **React 19** application built with Vite, using `react-router-dom`
 for routing and the guarded-route pattern in
-[`frontend/app/src/App.jsx`](frontend/app/src/App.jsx). All three backend services are
+[`gateway-frontend/frontend/src/App.jsx`](gateway-frontend/frontend/src/App.jsx). All three backend services are
 **Spring Boot** applications using `spring-boot-starter-web`, `-data-jpa` or
 `-data-mongodb`, `-security`, `-validation` and `-actuator`.
 
@@ -506,7 +539,7 @@ cancel, remove) backed by the `friendships` table, with live online status.
 largest source of drift in the project.
 
 *How:* **Spring Data JPA / Hibernate** in `identity-service` and `org-service`. Entities
-under `services/*/src/main/java/**/model/` are the single source of truth for the schema;
+under `application/*/src/main/java/**/model/` are the single source of truth for the schema;
 repositories are derived interfaces. `spring-data-mongodb` plays the equivalent role in
 `chat-service`.
 
@@ -515,10 +548,10 @@ repositories are derived interfaces. `spring-data-mongodb` plays the equivalent 
 *Why:* we deliberately did not adopt a component library, so that the interface would be
 ours and internally consistent.
 
-*How:* a token layer in [`frontend/app/src/index.css`](frontend/app/src/index.css) defines
+*How:* a token layer in [`gateway-frontend/frontend/src/index.css`](gateway-frontend/frontend/src/index.css) defines
 the colour palette (dark theme with a crimson accent), typography scale (Inter, self-hosted),
 spacing, radii, shadows and semantic aliases. Built on it are **11 reusable components** in
-[`frontend/app/src/components/ui/`](frontend/app/src/components/ui/) — exceeding the
+[`gateway-frontend/frontend/src/components/ui/`](gateway-frontend/frontend/src/components/ui/) — exceeding the
 10-component minimum:
 
 `Avatar` · `Button` · `Card` · `ConfirmDialog` · `Feedback` · `IconButton` · `Input` ·
@@ -569,7 +602,7 @@ be flawless. We claim it as a Module of choice because our implementation covers
 half of the Cybersecurity module thoroughly, without the HashiCorp Vault component — see
 [Known Limitations](#known-limitations).
 
-*How:* [`gateway/`](gateway/) builds on `owasp/modsecurity-crs:nginx`, running **ModSecurity
+*How:* [`gateway-frontend/gateway/`](gateway-frontend/gateway/) builds on `owasp/modsecurity-crs:nginx`, running **ModSecurity
 v3 with OWASP Core Rule Set v4** in blocking mode. Configuration:
 
 - Tunable paranoia levels (`PARANOIA`, `BLOCKING_PARANOIA`) and engine mode
@@ -583,7 +616,7 @@ v3 with OWASP Core Rule Set v4** in blocking mode. Configuration:
   `/metrics.prom`.
 - TLS 1.2/1.3 termination with an HTTP→HTTPS redirect.
 
-Full routing table and policy detail: [`gateway/README.md`](gateway/README.md).
+Full routing table and policy detail: [`gateway-frontend/gateway/README.md`](gateway-frontend/gateway/README.md).
 
 ### 10 · Monitoring with Prometheus and Grafana — Major (2 pts)
 
@@ -596,7 +629,7 @@ port 8090. **Grafana** serves two dashboards (`microservices-dashboard.json`,
 `docker-metrics.json`) under an authenticated subpath with anonymous access disabled.
 **Alertmanager** routes rules — `MicroserviceDown`, `ContainerDown`, `ContainerOOMKilled`,
 `HighContainerCpuUsage`, `HighContainerMemoryUsage`, `HighHttp5xxErrorRate` — to Discord.
-Details: [`infra/README.md`](infra/README.md).
+Details: [`monitoring/README.md`](monitoring/README.md).
 
 ### 11 · Backend as microservices — Major (2 pts)
 
@@ -613,7 +646,7 @@ responsibility and its own datastore:
 | `chat-service` | Messages, WebSocket delivery, presence | 8081 (HTTP + WS) | MongoDB `chatdb` |
 
 Communication is by **gRPC** with Protocol Buffers contracts
-(`services/*/src/main/proto/*.proto`) and a 500 ms deadline on every call.
+(`application/*/src/main/proto/*.proto`) and a 500 ms deadline on every call.
 `identity-service` exposes `ValidateToken`, `GetUser` and `AreFriends`; `org-service`
 exposes membership lookups to `chat-service`. No service reaches into another's database.
 Authentication has exactly one owner: `chat-service` performs no local JWT parsing and
@@ -630,10 +663,10 @@ delegates every token check to `identity-service`.
 - **Status page** — a Gatus instance monitoring 9 endpoints, published at `https://status.${DOMAIN}/` behind
   Basic Auth.
 - **Automated backups** — a `backup-service` container snapshots PostgreSQL and MongoDB on a
-  schedule ([`infra/backup/`](infra/backup/)).
-- **Disaster recovery** — [`scripts/restore.sh`](scripts/) restores from a snapshot, and
-  `scripts/test-disaster-recovery.sh` runs an automated five-step verification that the
-  procedure actually works. Documented in [`scripts/README.md`](scripts/README.md).
+  schedule ([`databases/backup-recovery/backup-service/`](databases/backup-recovery/backup-service/)).
+- **Disaster recovery** — [`databases/backup-recovery/scripts/restore.sh`](databases/backup-recovery/scripts/) restores from a snapshot, and
+  `databases/backup-recovery/scripts/test-disaster-recovery.sh` runs an automated five-step verification that the
+  procedure actually works. Documented in [`databases/backup-recovery/scripts/README.md`](databases/backup-recovery/scripts/README.md).
 
 ### Bonus candidate (not counted in the 19)
 
@@ -648,11 +681,11 @@ rooms are accepted as organizations, this module applies and the total becomes 2
 ### asoudani — Technical Lead / Architect · Developer
 
 Chose the microservice split and the gRPC-between-services model, and built every layer
-below the application: the [`gateway/`](gateway/) Nginx + ModSecurity image, the 15-service
+below the application: the [`gateway-frontend/gateway/`](gateway-frontend/gateway/) Nginx + ModSecurity image, the 15-service
 [`docker-compose.yml`](docker-compose.yml) topology with health-gated startup, the
-[`Makefile`](Makefile), the full [`infra/`](infra/) observability stack (Prometheus,
+[`Makefile`](Makefile), the full [`monitoring/`](monitoring/) observability stack (Prometheus,
 Alertmanager, Grafana dashboards, Gatus, a hand-written bash container exporter), the backup
-and disaster-recovery [`scripts/`](scripts/), and the
+and disaster-recovery [`databases/backup-recovery/scripts/`](databases/backup-recovery/scripts/), and the
 [CI/CD pipeline](.github/workflows/ci-cd.yml) with its OCI deployment.
 
 *Challenges.* Tuning ModSecurity was the hardest part: CRS v4 at default paranoia flagged
@@ -666,15 +699,15 @@ meant the Makefile had to detect the socket path rather than assume it.
 ### rahmoham — Frontend Developer
 
 Built the entire React application: routing and session restoration in
-[`App.jsx`](frontend/app/src/App.jsx), the API client layer
-([`src/api/`](frontend/app/src/api/)) with bearer-token handling, silent refresh and
+[`App.jsx`](gateway-frontend/frontend/src/App.jsx), the API client layer
+([`src/api/`](gateway-frontend/frontend/src/api/)) with bearer-token handling, silent refresh and
 per-service error envelopes, the design-system layer, and every feature surface — landing,
 auth, app shell, rooms, DMs, profiles and member lists — plus the responsive/mobile layout
 and the Privacy Policy and Terms of Service pages.
 
 *Challenges.* The frontend consistently ran ahead of the backend, which meant either
 blocking or building against endpoints that did not exist. The solution was the feature-flag
-layer in [`features.js`](frontend/app/src/api/features.js): unfinished UI stays visible and
+layer in [`features.js`](gateway-frontend/frontend/src/api/features.js): unfinished UI stays visible and
 reports the specific endpoint it needs, so integration became a one-line change per endpoint
 as each landed. Silent token refresh was the other difficult piece — concurrent requests
 hitting an expired token must trigger exactly one refresh and then replay, not a stampede.

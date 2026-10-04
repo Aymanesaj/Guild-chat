@@ -110,7 +110,7 @@ CREATE INDEX idx_friendships_addressee ON friendships(addressee_id);
 
 ### Local development
 
-From `services/identity-service`:
+From `application/identity-service`:
 
 ```sh
 npm ci

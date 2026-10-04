@@ -8,9 +8,9 @@ This directory houses the operational scripts for database backup snapshots, poi
 
 | Script | Purpose | Execution Command |
 | :--- | :--- | :--- |
-| `backup.sh` | Creates gzipped snapshots of PostgreSQL and MongoDB databases | `./scripts/backup.sh` or `make backup` |
-| `restore.sh` | Restores databases from the latest or a timestamped snapshot | `./scripts/restore.sh [TIMESTAMP]` or `make restore` |
-| `test-disaster-recovery.sh` | End-to-end automated 5-step disaster recovery verification test | `./scripts/test-disaster-recovery.sh` or `make test-recovery` |
+| `backup.sh` | Creates gzipped snapshots of PostgreSQL and MongoDB databases | `./databases/backup-recovery/scripts/backup.sh` or `make backup` |
+| `restore.sh` | Restores databases from the latest or a timestamped snapshot | `./databases/backup-recovery/scripts/restore.sh [TIMESTAMP]` or `make restore` |
+| `test-disaster-recovery.sh` | End-to-end automated 5-step disaster recovery verification test | `./databases/backup-recovery/scripts/test-disaster-recovery.sh` or `make test-recovery` |
 
 ---
 
@@ -35,7 +35,7 @@ This directory houses the operational scripts for database backup snapshots, poi
 ### How It Works
 1. **Snapshot Selection**:
    - By default, restores from `postgres_latest.sql.gz`, `org_latest.sql.gz`, and `mongo_latest.archive.gz`.
-   - Alternatively, accepts a timestamp argument (e.g. `./scripts/restore.sh 20260925_035012`) to restore from a specific point-in-time snapshot.
+   - Alternatively, accepts a timestamp argument (e.g. `./databases/backup-recovery/scripts/restore.sh 20260925_035012`) to restore from a specific point-in-time snapshot.
 2. **Connection Eviction**:
    - Runs `pg_terminate_backend` on PostgreSQL to terminate any active client connections on both `transdb` and `org_service_db`, ensuring clean restore without table lock deadlocks.
 3. **PostgreSQL Restoration**:
