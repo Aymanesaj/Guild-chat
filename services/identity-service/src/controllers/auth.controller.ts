@@ -3,8 +3,10 @@ import type {
   FastifyRequest,
 } from "fastify";
 
-import { registerSchema } from "../schemas/auth.schema.js";
-import { registerUser } from "../services/auth.service.js";
+import { registerSchema , loginSchema , refreshSchema , logoutSchema } from "../schemas/auth.schema.js";
+import { registerUser , loginUser , refreshSession , logoutSession } from "../services/auth.service.js";
+import { error } from "node:console";
+import { deepPartial } from "zod";
 
 export async function registerController(
   request: FastifyRequest,
@@ -18,24 +20,57 @@ export async function registerController(
       details: result.error.issues,
     });
   }
+  const response = await registerUser(result.data);
 
-  try {
-    const response = await registerUser(result.data);
+  return reply.status(201).send(response);
+}
 
-    return reply.status(201).send(response);
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      (
-        error.message === "Username is already taken" ||
-        error.message === "Email is already registered"
-      )
-    ) {
-      return reply.status(409).send({
-        error: error.message,
-      });
+export async function loginController(
+    request: FastifyRequest,
+    reply: FastifyReply
+) {
+    const result = loginSchema.safeParse(request.body);
+
+    if (!result.success) {
+        return reply.status(400).send({
+        error: "Invalid request",
+        details: result.error.issues,
+        });
     }
 
-    throw error;
-  }
+    const response = await loginUser(result.data);
+    return reply.status(200).send(response);
+}
+
+export async function refreshController(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const input = refreshSchema.safeParse(request.body);
+
+  if (!input.success)
+    return reply.code(400).send({
+      error: "Invalid request",
+      details: input.error.issues,
+    });
+
+  const response = await refreshSession(input.data);
+
+  return reply.code(200).send(response);
+}
+
+export async function logoutController(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const result = logoutSchema.safeParse(request.body);
+
+  if (!result.success)
+    return reply.code(400).send({
+      error: "Invalid request",
+      details: result.error.issues
+    })
+
+  await logoutSession(result.data);
+  return reply.code(204).send();
 }

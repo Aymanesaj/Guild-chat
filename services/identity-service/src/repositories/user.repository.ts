@@ -1,4 +1,6 @@
+import { da } from "zod/locales";
 import { prisma } from "../database/prisma.js";
+import { UpdateUserData } from "../types/user.types.js";
 
 export async function usernameExists(
   username: string
@@ -48,4 +50,46 @@ export function createLocalUser(
       displayName: data.displayName,
     },
   });
+}
+
+export function findUserByEmail(
+    email: string
+){
+    return prisma.user.findUnique({
+        where: {
+            email
+        }
+    });
+}
+
+export function findUserByUsername(
+    username: string
+){
+    return prisma.user.findUnique({
+        where: {
+            username
+        }
+    });
+}
+
+export function findUserById(
+    id: string
+) {
+    return prisma.user.findUnique({
+        where: {
+            id
+        }
+    });
+}
+
+export function updateUserData(
+  userId: string,
+  data: UpdateUserData
+) {
+  return prisma.user.update({
+    where: {
+      id: userId
+    },
+    data
+  })
 }

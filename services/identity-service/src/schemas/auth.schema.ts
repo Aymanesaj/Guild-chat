@@ -31,3 +31,27 @@ export const registerSchema = z.object({
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;
+
+export const loginSchema = z.object({
+    identifier: z
+        .string()
+        .trim()
+        .min(1, "Username or email is required"),
+    password: z
+        .string()
+        .min(1, "Password is required")
+});
+
+export type LoginInput = z.infer<typeof loginSchema>;
+
+export const refreshSchema = z.object({
+  refreshToken: z.string().trim().min(1, "Refresh token is required")
+});
+
+export type RefreshInput = z.infer<typeof refreshSchema>;
+
+export const logoutSchema = z.object({
+  refreshToken: z.string().trim().min(1, "Refresh token is required")
+});
+
+export type LogoutInput = z.infer<typeof logoutSchema>;
