@@ -32,6 +32,7 @@ const {
   mockValidateAccessToken,
   mockGetCurrentUser,
   mockUpdateCurrentUser,
+  mockSaveAvatar,
 } = vi.hoisted(() => ({
   mockRegisterUser: vi.fn(),
   mockLoginUser: vi.fn(),
@@ -40,6 +41,7 @@ const {
   mockValidateAccessToken: vi.fn(),
   mockGetCurrentUser: vi.fn(),
   mockUpdateCurrentUser: vi.fn(),
+  mockSaveAvatar: vi.fn(),
 }));
 
 
@@ -62,6 +64,12 @@ vi.mock("../services/user.service.js", () => ({
   updateCurrentUser: mockUpdateCurrentUser,
 }));
 
+vi.mock(
+  "../services/avatar.service.js",
+  () => ({
+    saveAvatar: mockSaveAvatar,
+  })
+);
 
 import { buildApp } from "../app.js";
 
@@ -117,7 +125,40 @@ beforeEach(() => {
   mockValidateAccessToken.mockReset();
   mockGetCurrentUser.mockReset();
   mockUpdateCurrentUser.mockReset();
+  mockSaveAvatar.mockReset();
 });
+
+
+function createMultipartFile(
+  filename: string,
+  mimetype: string,
+  content: Buffer
+) {
+  const boundary =
+    "----avatar-test-boundary";
+
+  const start = Buffer.from(
+    `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="avatar"; filename="${filename}"\r\n` +
+      `Content-Type: ${mimetype}\r\n` +
+      `\r\n`
+  );
+
+  const end = Buffer.from(
+    `\r\n--${boundary}--\r\n`
+  );
+
+  return {
+    body: Buffer.concat([
+      start,
+      content,
+      end,
+    ]),
+
+    contentType:
+      `multipart/form-data; boundary=${boundary}`,
+  };
+}
 
 
 afterAll(async () => {
@@ -1374,6 +1415,230 @@ describe("POST /auth/logout", () => {
     ).not.toHaveBeenCalled();
   });
 });
+
+describe(
+  "POST /me/avatar",
+  () => {
+    it(
+      "should upload an avatar",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(userId);
+
+        mockSaveAvatar
+          .mockResolvedValue({
+            ...createPublicUser(),
+
+            avatarUrl:
+              "/avatars/avatar-test.png",
+          });
+
+        const multipart =
+          createMultipartFile(
+            "avatar.png",
+            "image/png",
+            Buffer.from([
+              0x89,
+              0x50,
+              0x4e,
+              0x47,
+            ])
+          );
+
+        const response =
+          await app.inject({
+            method: "POST",
+
+            url:
+              "/me/avatar",
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+
+              "content-type":
+                multipart.contentType,
+            },
+
+            payload:
+              multipart.body,
+          });
+
+        expect(
+          response.statusCode
+        ).toBe(200);
+
+        const body =
+          response.json();
+
+        expect(
+          body.avatarUrl
+        ).toBe(
+          "/avatars/avatar-test.png"
+        );
+
+        expect(
+          mockSaveAvatar
+        ).toHaveBeenCalledOnce();
+
+        const [
+          receivedUserId,
+          file,
+        ] =
+          mockSaveAvatar.mock
+            .calls[0];
+
+        expect(
+          receivedUserId
+        ).toBe(userId);
+
+        expect(
+          file.mimetype
+        ).toBe(
+          "image/png"
+        );
+
+        expect(
+          Buffer.isBuffer(
+            file.buffer
+          )
+        ).toBe(true);
+      }
+    );
+
+
+    it(
+      "should return 401 without authentication",
+      async () => {
+        const multipart =
+          createMultipartFile(
+            "avatar.png",
+            "image/png",
+            Buffer.from("image")
+          );
+
+        const response =
+          await app.inject({
+            method: "POST",
+
+            url:
+              "/me/avatar",
+
+            headers: {
+              "content-type":
+                multipart.contentType,
+            },
+
+            payload:
+              multipart.body,
+          });
+
+        expect(
+          response.statusCode
+        ).toBe(401);
+
+        expect(
+          mockSaveAvatar
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+
+    it(
+      "should reject unsupported avatar formats",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(userId);
+
+        const multipart =
+          createMultipartFile(
+            "avatar.txt",
+            "text/plain",
+            Buffer.from(
+              "not an image"
+            )
+          );
+
+        const response =
+          await app.inject({
+            method: "POST",
+
+            url:
+              "/me/avatar",
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+
+              "content-type":
+                multipart.contentType,
+            },
+
+            payload:
+              multipart.body,
+          });
+
+        expect(
+          response.statusCode
+        ).toBe(400);
+
+        const body =
+          response.json();
+
+        expect(
+          body.error
+        ).toBe(
+          "Unsupported avatar format"
+        );
+
+        expect(
+          mockSaveAvatar
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+
+    it(
+      "should return 400 when no avatar file is provided",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(userId);
+
+        const boundary =
+          "----empty-boundary";
+
+        const response =
+          await app.inject({
+            method: "POST",
+
+            url:
+              "/me/avatar",
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+
+              "content-type":
+                `multipart/form-data; boundary=${boundary}`,
+            },
+
+            payload:
+              Buffer.from(
+                `--${boundary}--\r\n`
+              ),
+          });
+
+        expect(
+          response.statusCode
+        ).toBe(400);
+
+        expect(
+          mockSaveAvatar
+        ).not.toHaveBeenCalled();
+      }
+    );
+  }
+);
 
 
 /* =========================================================
