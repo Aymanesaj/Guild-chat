@@ -93,3 +93,17 @@ export function updateUserData(
     data
   })
 }
+
+export function updateUserAvatar(
+  userId: string,
+  avatarUrl: string
+) {
+  return prisma.user.update({
+    where: {
+      id: userId
+    },
+    data: {
+      avatarUrl
+    }
+  });
+}

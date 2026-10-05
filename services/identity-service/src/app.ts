@@ -2,7 +2,8 @@ import Fastify from "fastify";
 import { authRoutes } from "./routes/auth.routes.js";
 import { userRoutes } from "./routes/user.routes.js";
 import { registerErrorHandler } from "./plugins/error-handler.plugin.js";
-import { AppError } from "./errors/app.error.js";
+import multipart from "@fastify/multipart";
+
 export function buildApp() {
     const app = Fastify({
         logger: true
@@ -15,6 +16,11 @@ export function buildApp() {
         };
     });
 
+    app.register(multipart, {
+        limits: {
+            fileSize: 5 * 1024 * 1024,
+        },
+    });
     registerErrorHandler(app);
     app.register(authRoutes);
     app.register(userRoutes);

@@ -2,6 +2,9 @@ import type { FastifyRequest , FastifyReply } from "fastify";
 import { getCurrentUser } from "../services/user.service.js";
 import { updateProfileSchema } from "../schemas/user.schema.js";
 import { updateCurrentUser } from "../services/user.service.js";
+import { saveAvatar } from "../services/avatar.service.js";
+import { ALLOWED_AVATAR_TYPES } from "../constants/avatar.constants.js";
+import { BadRequestError } from "../errors/bad-request.error.js";
 
 export async function meController(
     request: FastifyRequest,
@@ -35,6 +38,42 @@ export async function updateMeController(
     }
 
     const user = await updateCurrentUser(request.userId, result.data);
+
+    return reply.code(200).send(user);
+}
+
+export async function uploadAvatarController(
+    request: FastifyRequest,
+    reply: FastifyReply
+) {
+    if (!request.userId)
+        return reply.code(401).send({
+            error: "Unauthorized",
+        });
+    
+    const file = await request.file({
+        limits: {
+            files: 1,
+            fileSize: 5 * 1024 * 1024
+        }
+    });
+
+   if (!file)
+        return reply.code(400).send({
+            error: "No file uploaded"
+        });
+    
+    if (!ALLOWED_AVATAR_TYPES[file.mimetype])
+    {
+        file.file.resume();
+        throw new BadRequestError("Unsupported avatar format");
+    }
+
+    const buffer = await file.toBuffer();
+    const user = await saveAvatar(request.userId, {
+        mimetype: file.mimetype,
+        buffer: buffer
+    });
 
     return reply.code(200).send(user);
 }
