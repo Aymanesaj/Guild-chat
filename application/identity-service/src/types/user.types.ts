@@ -16,7 +16,7 @@ export interface User {
   displayName: string;
   bio: string | null;
   avatarUrl: string | null;
-  authProvider: AuthProvider;
+  authProvider: string;
   oauthProviderId: string | null;
   createdAt: Date;
   updatedAt: Date;

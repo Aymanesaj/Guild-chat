@@ -30,7 +30,7 @@ export const userRoutes:
       uploadAvatarController
     )
     app.get(
-      "/users/:id",
+      "/:id",
       {
         preHandler: authenticate,
       },
