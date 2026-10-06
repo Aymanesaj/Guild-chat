@@ -13,8 +13,8 @@ import com.fttranscendence.chatservice.websocket.PresenceRegistry;
 /**
  * GET /presence?ids=a,b,c → { "a": "online", "b": "offline", "c": "offline" }
  *
- * A snapshot for the status dots. The client asks for the users it is showing
- * (room members, DM peers) and refreshes it while they're on screen.
+ * A REST snapshot, also available independently of WebSocket subscriptions.
+ * The frontend's status dots use presence.snapshot and presence.changed frames.
  * Any authenticated user may ask about anyone: online/offline is not secret
  * in this app. Reachable through the gateway at /api/chat/presence.
  */

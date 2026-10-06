@@ -6,15 +6,20 @@ package com.fttranscendence.chatservice.websocket;
  *
  * Not implemented on purpose:
  *   - "typing"   — dropped for v1 by decision of the chat-service owner
- *   - "presence" — clients poll GET /presence instead (PresenceRegistry)
 */
 public final class WsEvents {
 
     // client → server
     public static final String SUBSCRIBE = "subscribe";
     public static final String UNSUBSCRIBE = "unsubscribe";
+    public static final String PRESENCE_SUBSCRIBE = "presence.subscribe";
+    public static final String PRESENCE_UNSUBSCRIBE = "presence.unsubscribe";
 
     // server → client
+    /** Initial statuses for subscribed user_ids. data: { statuses: { userId: status } } */
+    public static final String PRESENCE_SNAPSHOT = "presence.snapshot";
+    /** A watched user became online/offline. data: { user_id, status } */
+    public static final String PRESENCE_CHANGED = "presence.changed";
     public static final String MESSAGE_NEW = "message.new";
     public static final String MESSAGE_EDITED = "message.edited";
     public static final String MESSAGE_DELETED = "message.deleted";
