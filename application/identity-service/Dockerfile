@@ -8,7 +8,8 @@ RUN npm ci
 
 COPY . .
 
-RUN npm run build
+# Prisma generation needs a URL in its config but does not connect to a database.
+RUN DATABASE_URL=postgresql://build:build@localhost:5432/build npm run build
 RUN npm prune --omit=dev
 
 FROM node:lts-alpine AS runtime

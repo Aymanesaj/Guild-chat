@@ -2,7 +2,8 @@ import { findUserById, findUserByUsername } from "../repositories/user.repositor
 import { UpdateProfileInput } from "../schemas/user.schema.js";
 import { updateUserData } from "../repositories/user.repository.js";
 import { ConflictError } from "../errors/conflict.error.js";
-import { PublicUser } from "../types/auth.types.js";
+import { PublicUser , PublicProfile } from "../types/user.types.js";
+import { toPublicUser , toPublicProfile } from "../mappers/user.mapper.js";
 
 import {
   NotFoundError,
@@ -16,17 +17,7 @@ export async function getCurrentUser(
     if (!user)
         throw new NotFoundError("User not found");
 
-    return {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        displayName: user.displayName,
-        bio: user.bio,
-        avatarUrl: user.avatarUrl,
-        authProvider: user.authProvider,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-    };
+    return toPublicUser(user);
 }
 
 export async function updateCurrentUser(
@@ -47,15 +38,20 @@ export async function updateCurrentUser(
     }
 
     const updatedUser = await updateUserData(userId, input);
-    return {
-        id: updatedUser.id,
-        username: updatedUser.username,
-        email: updatedUser.email,
-        displayName: updatedUser.displayName,
-        bio: updatedUser.bio,
-        avatarUrl: updatedUser.avatarUrl,
-        authProvider: updatedUser.authProvider,
-        createdAt: updatedUser.createdAt,
-        updatedAt: updatedUser.updatedAt
-    };
+    return toPublicUser(updatedUser);
+}
+
+export async function getUserById(
+  userId: string
+): Promise<PublicProfile> {
+    const user =
+        await findUserById(userId);
+
+    if (!user) {
+        throw new NotFoundError(
+        "User not found"
+        );
+    }
+
+    return toPublicProfile(user);
 }

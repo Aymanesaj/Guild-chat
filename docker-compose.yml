@@ -122,22 +122,22 @@ services:
       - "9090" # gRPC: org-service pushes room changes here (ChatNotifyService)
     restart: always
 
-  # identity-service:
-  #   mem_limit: 512m
-  #   build: application/identity-service/.
-  #   container_name: identity-service
-  #   networks:
-  #     - private
-  #   expose:
-  #     - "8083"
-  #   env_file:
-  #     - ./.env
-  #   volumes:
-  #     - identity_avatars:/tmp/identity-avatars
-  #   depends_on:
-  #     identity-service_postgres:
-  #       condition: service_healthy
-  #   restart: always
+  identity-service:
+    mem_limit: 512m
+    build: application/identity-service/.
+    container_name: identity-service
+    networks:
+      - private
+    expose:
+      - "8083"
+    env_file:
+      - ./.env
+    volumes:
+      - identity_avatars:/tmp/identity-avatars
+    depends_on:
+      identity-service_postgres:
+        condition: service_healthy
+    restart: always
 
 
   # ============================================================

@@ -32,6 +32,9 @@ const {
   mockValidateAccessToken,
   mockGetCurrentUser,
   mockUpdateCurrentUser,
+  mockSaveAvatar,
+  mockGetUserById,
+  mockLogoutAllSessions,
 } = vi.hoisted(() => ({
   mockRegisterUser: vi.fn(),
   mockLoginUser: vi.fn(),
@@ -40,6 +43,9 @@ const {
   mockValidateAccessToken: vi.fn(),
   mockGetCurrentUser: vi.fn(),
   mockUpdateCurrentUser: vi.fn(),
+  mockSaveAvatar: vi.fn(),
+  mockGetUserById: vi.fn(),
+  mockLogoutAllSessions: vi.fn(),
 }));
 
 
@@ -48,6 +54,7 @@ vi.mock("../services/auth.service.js", () => ({
   loginUser: mockLoginUser,
   refreshSession: mockRefreshSession,
   logoutSession: mockLogoutSession,
+  logoutAllSessions: mockLogoutAllSessions,
 }));
 
 
@@ -60,8 +67,15 @@ vi.mock("../services/jwt.service.js", () => ({
 vi.mock("../services/user.service.js", () => ({
   getCurrentUser: mockGetCurrentUser,
   updateCurrentUser: mockUpdateCurrentUser,
+  getUserById: mockGetUserById,
 }));
 
+vi.mock(
+  "../services/avatar.service.js",
+  () => ({
+    saveAvatar: mockSaveAvatar,
+  })
+);
 
 import { buildApp } from "../app.js";
 
@@ -117,18 +131,718 @@ beforeEach(() => {
   mockValidateAccessToken.mockReset();
   mockGetCurrentUser.mockReset();
   mockUpdateCurrentUser.mockReset();
+  mockSaveAvatar.mockReset();
+  mockGetUserById.mockReset();
+  mockLogoutAllSessions.mockReset();
 });
+
+
+function createMultipartFile(
+  filename: string,
+  mimetype: string,
+  content: Buffer
+) {
+  const boundary =
+    "----avatar-test-boundary";
+
+  const start = Buffer.from(
+    `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="avatar"; filename="${filename}"\r\n` +
+      `Content-Type: ${mimetype}\r\n` +
+      `\r\n`
+  );
+
+  const end = Buffer.from(
+    `\r\n--${boundary}--\r\n`
+  );
+
+  return {
+    body: Buffer.concat([
+      start,
+      content,
+      end,
+    ]),
+
+    contentType:
+      `multipart/form-data; boundary=${boundary}`,
+  };
+}
 
 
 afterAll(async () => {
   await app.close();
 });
 
+describe(
+  "GET /users/:id",
+  () => {
+    const authenticatedUserId =
+      "123e4567-e89b-12d3-a456-426614174000";
+
+    const targetUserId =
+      "223e4567-e89b-12d3-a456-426614174000";
+
+    const publicUser = {
+      id: targetUserId,
+      username: "sara",
+      email: "sara@example.com",
+      displayName: "Sara",
+      bio: "Hello there",
+      avatarUrl:
+        "/avatars/sara.png",
+      authProvider: "LOCAL",
+
+      createdAt: new Date(
+        "2026-10-01T10:00:00.000Z"
+      ),
+
+      updatedAt: new Date(
+        "2026-10-02T10:00:00.000Z"
+      ),
+    };
+
+
+    it(
+      "should return another user by id",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(
+            authenticatedUserId
+          );
+
+        mockGetUserById
+          .mockResolvedValue(
+            publicUser
+          );
+
+
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              `/users/${targetUserId}`,
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(200);
+
+
+        const body =
+          response.json();
+
+
+        expect(body.id).toBe(
+          targetUserId
+        );
+
+        expect(body.username).toBe(
+          "sara"
+        );
+
+        expect(body.email).toBe(
+          "sara@example.com"
+        );
+
+        expect(
+          body.displayName
+        ).toBe("Sara");
+
+        expect(body.bio).toBe(
+          "Hello there"
+        );
+
+        expect(
+          body.avatarUrl
+        ).toBe(
+          "/avatars/sara.png"
+        );
+
+
+        expect(
+          mockGetUserById
+        ).toHaveBeenCalledWith(
+          targetUserId
+        );
+
+        expect(
+          mockGetUserById
+        ).toHaveBeenCalledOnce();
+      }
+    );
+
+
+    it(
+      "should use the requested user id, not the authenticated user's id",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(
+            authenticatedUserId
+          );
+
+        mockGetUserById
+          .mockResolvedValue(
+            publicUser
+          );
+
+
+        await app.inject({
+          method: "GET",
+
+          url:
+            `/users/${targetUserId}`,
+
+          headers: {
+            authorization:
+              "Bearer fake-access-token",
+          },
+        });
+
+
+        expect(
+          mockGetUserById
+        ).toHaveBeenCalledWith(
+          targetUserId
+        );
+
+        expect(
+          mockGetUserById
+        ).not.toHaveBeenCalledWith(
+          authenticatedUserId
+        );
+      }
+    );
+
+
+    it(
+      "should allow a user to request their own profile",
+      async () => {
+        const ownUser = {
+          ...publicUser,
+
+          id:
+            authenticatedUserId,
+        };
+
+
+        mockValidateAccessToken
+          .mockReturnValue(
+            authenticatedUserId
+          );
+
+        mockGetUserById
+          .mockResolvedValue(
+            ownUser
+          );
+
+
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              `/users/${authenticatedUserId}`,
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(200);
+
+        expect(
+          response.json().id
+        ).toBe(
+          authenticatedUserId
+        );
+      }
+    );
+
+
+    it(
+      "should preserve nullable public profile fields",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(
+            authenticatedUserId
+          );
+
+        mockGetUserById
+          .mockResolvedValue({
+            ...publicUser,
+
+            displayName: null,
+            bio: null,
+            avatarUrl: null,
+          });
+
+
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              `/users/${targetUserId}`,
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(200);
+
+
+        const body =
+          response.json();
+
+
+        expect(
+          body.displayName
+        ).toBeNull();
+
+        expect(
+          body.bio
+        ).toBeNull();
+
+        expect(
+          body.avatarUrl
+        ).toBeNull();
+      }
+    );
+
+
+    it(
+      "should never expose sensitive user fields",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(
+            authenticatedUserId
+          );
+
+        mockGetUserById
+          .mockResolvedValue(
+            publicUser
+          );
+
+
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              `/users/${targetUserId}`,
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(200);
+
+
+        const body =
+          response.json();
+
+
+        expect(
+          body.passwordHash
+        ).toBeUndefined();
+
+        expect(
+          body.password
+        ).toBeUndefined();
+
+        expect(
+          body.oauthProviderId
+        ).toBeUndefined();
+      }
+    );
+
+
+    it(
+      "should return 401 without an access token",
+      async () => {
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              `/users/${targetUserId}`,
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(401);
+
+        expect(
+          mockGetUserById
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+
+    it(
+      "should return 401 for an invalid access token",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(null);
+
+
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              `/users/${targetUserId}`,
+
+            headers: {
+              authorization:
+                "Bearer invalid-token",
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(401);
+
+        expect(
+          mockGetUserById
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+
+    it(
+      "should return 400 for an invalid user id",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(
+            authenticatedUserId
+          );
+
+
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              "/users/not-a-uuid",
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(400);
+
+
+        expect(
+          response.json().error
+        ).toBe(
+          "Invalid user id"
+        );
+
+
+        expect(
+          mockGetUserById
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+
+    it(
+      "should authenticate before processing the user id",
+      async () => {
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              "/users/not-a-uuid",
+          });
+
+
+        /*
+         * Authentication runs as
+         * preHandler before the
+         * controller validates :id.
+         */
+        expect(
+          response.statusCode
+        ).toBe(401);
+
+
+        expect(
+          mockGetUserById
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+
+    it(
+      "should return 404 when the user does not exist",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(
+            authenticatedUserId
+          );
+
+
+        mockGetUserById
+          .mockRejectedValue(
+            new NotFoundError(
+              "User not found"
+            )
+          );
+
+
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              `/users/${targetUserId}`,
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(404);
+
+
+        expect(
+          response.json().error
+        ).toBe(
+          "User not found"
+        );
+      }
+    );
+
+
+    it(
+      "should hide unexpected internal errors",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(
+            authenticatedUserId
+          );
+
+
+        mockGetUserById
+          .mockRejectedValue(
+            new Error(
+              "Database connection exploded"
+            )
+          );
+
+
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              `/users/${targetUserId}`,
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(500);
+
+
+        expect(
+          response.json().error
+        ).toBe(
+          "Internal Server Error"
+        );
+
+
+        expect(
+          response.body
+        ).not.toContain(
+          "Database connection exploded"
+        );
+      }
+    );
+  }
+);
+
+describe("POST /auth/logout-all", () => {
+  const userId =
+    "123e4567-e89b-12d3-a456-426614174000";
+
+  it("should logout all sessions successfully", async () => {
+    mockValidateAccessToken.mockReturnValue(
+      userId
+    );
+
+    mockLogoutAllSessions.mockResolvedValue(
+      undefined
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/logout-all",
+
+      headers: {
+        authorization:
+          "Bearer fake-access-token",
+      },
+    });
+
+    expect(response.statusCode).toBe(204);
+
+    expect(
+      mockValidateAccessToken
+    ).toHaveBeenCalledWith(
+      "fake-access-token"
+    );
+
+    expect(
+      mockLogoutAllSessions
+    ).toHaveBeenCalledOnce();
+
+    expect(
+      mockLogoutAllSessions
+    ).toHaveBeenCalledWith(
+      userId
+    );
+  });
+
+  it("should return 401 when authorization header is missing", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/logout-all",
+    });
+
+    expect(response.statusCode).toBe(401);
+
+    expect(
+      mockValidateAccessToken
+    ).not.toHaveBeenCalled();
+
+    expect(
+      mockLogoutAllSessions
+    ).not.toHaveBeenCalled();
+  });
+
+  it("should return 401 when access token is invalid", async () => {
+    mockValidateAccessToken.mockReturnValue(
+      null
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/logout-all",
+
+      headers: {
+        authorization:
+          "Bearer invalid-access-token",
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+
+    expect(
+      mockValidateAccessToken
+    ).toHaveBeenCalledWith(
+      "invalid-access-token"
+    );
+
+    expect(
+      mockLogoutAllSessions
+    ).not.toHaveBeenCalled();
+  });
+
+  it("should return 401 when authorization scheme is invalid", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/logout-all",
+
+      headers: {
+        authorization:
+          "Basic fake-access-token",
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+
+    expect(
+      mockValidateAccessToken
+    ).not.toHaveBeenCalled();
+
+    expect(
+      mockLogoutAllSessions
+    ).not.toHaveBeenCalled();
+  });
+
+  it("should return 500 when logout all sessions fails unexpectedly", async () => {
+    mockValidateAccessToken.mockReturnValue(
+      userId
+    );
+
+    mockLogoutAllSessions.mockRejectedValue(
+      new Error("Database failure")
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/logout-all",
+
+      headers: {
+        authorization:
+          "Bearer fake-access-token",
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+
+    expect(
+      mockLogoutAllSessions
+    ).toHaveBeenCalledWith(
+      userId
+    );
+  });
+});
 
 /* =========================================================
    REGISTER
    ========================================================= */
-
 describe("POST /register", () => {
   it("should register a new user", async () => {
     mockRegisterUser.mockResolvedValue(
@@ -1374,6 +2088,230 @@ describe("POST /auth/logout", () => {
     ).not.toHaveBeenCalled();
   });
 });
+
+describe(
+  "POST /me/avatar",
+  () => {
+    it(
+      "should upload an avatar",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(userId);
+
+        mockSaveAvatar
+          .mockResolvedValue({
+            ...createPublicUser(),
+
+            avatarUrl:
+              "/avatars/avatar-test.png",
+          });
+
+        const multipart =
+          createMultipartFile(
+            "avatar.png",
+            "image/png",
+            Buffer.from([
+              0x89,
+              0x50,
+              0x4e,
+              0x47,
+            ])
+          );
+
+        const response =
+          await app.inject({
+            method: "POST",
+
+            url:
+              "/me/avatar",
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+
+              "content-type":
+                multipart.contentType,
+            },
+
+            payload:
+              multipart.body,
+          });
+
+        expect(
+          response.statusCode
+        ).toBe(200);
+
+        const body =
+          response.json();
+
+        expect(
+          body.avatarUrl
+        ).toBe(
+          "/avatars/avatar-test.png"
+        );
+
+        expect(
+          mockSaveAvatar
+        ).toHaveBeenCalledOnce();
+
+        const [
+          receivedUserId,
+          file,
+        ] =
+          mockSaveAvatar.mock
+            .calls[0];
+
+        expect(
+          receivedUserId
+        ).toBe(userId);
+
+        expect(
+          file.mimetype
+        ).toBe(
+          "image/png"
+        );
+
+        expect(
+          Buffer.isBuffer(
+            file.buffer
+          )
+        ).toBe(true);
+      }
+    );
+
+
+    it(
+      "should return 401 without authentication",
+      async () => {
+        const multipart =
+          createMultipartFile(
+            "avatar.png",
+            "image/png",
+            Buffer.from("image")
+          );
+
+        const response =
+          await app.inject({
+            method: "POST",
+
+            url:
+              "/me/avatar",
+
+            headers: {
+              "content-type":
+                multipart.contentType,
+            },
+
+            payload:
+              multipart.body,
+          });
+
+        expect(
+          response.statusCode
+        ).toBe(401);
+
+        expect(
+          mockSaveAvatar
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+
+    it(
+      "should reject unsupported avatar formats",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(userId);
+
+        const multipart =
+          createMultipartFile(
+            "avatar.txt",
+            "text/plain",
+            Buffer.from(
+              "not an image"
+            )
+          );
+
+        const response =
+          await app.inject({
+            method: "POST",
+
+            url:
+              "/me/avatar",
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+
+              "content-type":
+                multipart.contentType,
+            },
+
+            payload:
+              multipart.body,
+          });
+
+        expect(
+          response.statusCode
+        ).toBe(400);
+
+        const body =
+          response.json();
+
+        expect(
+          body.error
+        ).toBe(
+          "Unsupported avatar format"
+        );
+
+        expect(
+          mockSaveAvatar
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+
+    it(
+      "should return 400 when no avatar file is provided",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(userId);
+
+        const boundary =
+          "----empty-boundary";
+
+        const response =
+          await app.inject({
+            method: "POST",
+
+            url:
+              "/me/avatar",
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+
+              "content-type":
+                `multipart/form-data; boundary=${boundary}`,
+            },
+
+            payload:
+              Buffer.from(
+                `--${boundary}--\r\n`
+              ),
+          });
+
+        expect(
+          response.statusCode
+        ).toBe(400);
+
+        expect(
+          mockSaveAvatar
+        ).not.toHaveBeenCalled();
+      }
+    );
+  }
+);
 
 
 /* =========================================================

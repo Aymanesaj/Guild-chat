@@ -7,18 +7,22 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "generate": "prisma generate --config prisma7.config.ts",
+    "prebuild": "npm run generate"
   },
   "keywords": [],
   "type": "module",
   "dependencies": {
+    "@fastify/multipart": "^10.1.2",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "bcrypt": "^6.0.0",
     "dotenv": "^18.0.4",
     "fastify": "^5.12.5",
     "jsonwebtoken": "^9.0.3",
-    "pg": "^8.23.0"
+    "pg": "^8.23.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",

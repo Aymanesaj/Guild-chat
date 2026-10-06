@@ -1,4 +1,3 @@
-import { da } from "zod/locales";
 import { prisma } from "../database/prisma.js";
 import { UpdateUserData } from "../types/user.types.js";
 
@@ -92,4 +91,18 @@ export function updateUserData(
     },
     data
   })
+}
+
+export function updateUserAvatar(
+  userId: string,
+  avatarUrl: string
+) {
+  return prisma.user.update({
+    where: {
+      id: userId
+    },
+    data: {
+      avatarUrl
+    }
+  });
 }

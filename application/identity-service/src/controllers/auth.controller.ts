@@ -4,7 +4,7 @@ import type {
 } from "fastify";
 
 import { registerSchema , loginSchema , refreshSchema , logoutSchema } from "../schemas/auth.schema.js";
-import { registerUser , loginUser , refreshSession , logoutSession } from "../services/auth.service.js";
+import { registerUser , loginUser , refreshSession , logoutSession , logoutAllSessions } from "../services/auth.service.js";
 import { error } from "node:console";
 import { deepPartial } from "zod";
 
@@ -73,4 +73,19 @@ export async function logoutController(
 
   await logoutSession(result.data);
   return reply.code(204).send();
+}
+
+export async function logoutAllController(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  if (!request.userId) {
+    return reply.status(401).send({ error: "Unauthorized" });
+  }
+
+  await logoutAllSessions(
+    request.userId
+  );
+
+  return reply.status(204).send();
 }

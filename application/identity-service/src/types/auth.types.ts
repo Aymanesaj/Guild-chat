@@ -1,16 +1,5 @@
 import type { AuthProvider } from "../generated/prisma/enums.js";
-
-export interface PublicUser {
-  id: string;
-  username: string;
-  email: string;
-  displayName: string;
-  bio: string | null;
-  avatarUrl: string | null;
-  authProvider: AuthProvider;
-  createdAt: Date;
-  updatedAt: Date;
-}
+import type { PublicUser } from "./user.types.js";
 
 export interface AuthResponse {
   tokenType: "Bearer";
