@@ -6,6 +6,9 @@ import { saveAvatar } from "../services/avatar.service.js";
 import { ALLOWED_AVATAR_TYPES } from "../constants/avatar.constants.js";
 import { BadRequestError } from "../errors/bad-request.error.js";
 import { MAX_AVATAR_SIZE } from "../constants/avatar.constants.js";
+import { getUserById } from "../services/user.service.js";
+import { userIdParamsSchema } from "../schemas/user.schema.js";
+
 
 export async function meController(
     request: FastifyRequest,
@@ -77,4 +80,21 @@ export async function uploadAvatarController(
     });
 
     return reply.code(200).send(user);
+}
+
+export async function getUserByIdController(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+    const result = userIdParamsSchema.safeParse(request.params);
+
+    if (!result.success) {
+        return reply.status(400).send({
+            error: "Invalid user id",
+        });
+    }
+
+    const user = await getUserById(result.data.id);
+
+    return reply.status(200).send(user);
 }

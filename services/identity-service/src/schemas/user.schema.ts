@@ -15,3 +15,9 @@ export const updateProfileSchema = z.object({
 )
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+export const userIdParamsSchema = z.object({
+  id: z.uuid(),
+});
+
+export type UserIdParams = z.infer<typeof userIdParamsSchema>;

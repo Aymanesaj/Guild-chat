@@ -6,6 +6,7 @@ import { NotFoundError } from "../errors/not-found.error.js";
 import { findUserById , updateUserAvatar } from "../repositories/user.repository.js";
 import { ALLOWED_AVATAR_TYPES , AVATAR_MIME_BY_EXTENSION , AVATAR_DIR } from "../constants/avatar.constants.js";
 import { stat } from "node:fs/promises";
+import { toPublicUser } from "../mappers/user.mapper.js";
 
 export interface AvatarFile {
   mimetype: string;
@@ -42,17 +43,7 @@ export async function saveAvatar(
 
     const updatedUser = await updateUserAvatar(userId, avatarUrl);
 
-    return {
-        id: updatedUser.id,
-        username: updatedUser.username,
-        email: updatedUser.email,
-        displayName: updatedUser.displayName,
-        bio: updatedUser.bio,
-        avatarUrl: updatedUser.avatarUrl,
-        authProvider: updatedUser.authProvider,
-        createdAt: updatedUser.createdAt,
-        updatedAt: updatedUser.updatedAt,
-    };
+    return toPublicUser(updatedUser);
 }
 
 
