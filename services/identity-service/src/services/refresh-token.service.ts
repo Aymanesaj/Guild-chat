@@ -64,10 +64,18 @@ export async function rotateRefreshToken(
   }
 
   if (existing.revoked) {
-    await revokeAllRefreshTokens(existing.userId);
+    if (existing.replacedBy) {
+      await revokeAllRefreshTokens(
+        existing.userId
+      );
+
+      throw new UnauthorizedError(
+        "Refresh token reuse detected; sessions revoked"
+      );
+    }
 
     throw new UnauthorizedError(
-      "Refresh token reuse detected; sessions revoked"
+      "Refresh token has been revoked"
     );
   }
 

@@ -11,7 +11,7 @@ import type { PublicUser } from "../types/user.types.js";
 import { createLocalUser , emailExists , usernameExists , findUserByEmail , findUserByUsername, findUserById } from "../repositories/user.repository.js";
 
 import { issueAccessToken } from "./jwt.service.js";
-import { issueRefreshToken , rotateRefreshToken , revokeRefreshSession } from "./refresh-token.service.js";
+import { issueRefreshToken , rotateRefreshToken , revokeRefreshSession , revokeAllSessions } from "./refresh-token.service.js";
 
 import { toPublicUser } from "../mappers/user.mapper.js";
 
@@ -85,8 +85,9 @@ export async function refreshSession(
 
   const user = await findUserById(rotated.userId);
 
-  if (!user)
-    throw new Error("Invalid refresh token");
+  if (!user) {
+    throw new UnauthorizedError("Invalid refresh token");
+  }
 
   const accessToken = issueAccessToken(user);
 
@@ -103,4 +104,10 @@ export async function logoutSession(
   logoutInput: LogoutInput
 ): Promise<void> {
   await revokeRefreshSession(logoutInput.refreshToken);
+}
+
+export async function logoutAllSessions(
+  userId: string
+): Promise<void> {
+  await revokeAllSessions(userId);
 }
