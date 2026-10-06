@@ -33,6 +33,7 @@ const {
   mockGetCurrentUser,
   mockUpdateCurrentUser,
   mockSaveAvatar,
+  mockGetUserById,
 } = vi.hoisted(() => ({
   mockRegisterUser: vi.fn(),
   mockLoginUser: vi.fn(),
@@ -42,6 +43,7 @@ const {
   mockGetCurrentUser: vi.fn(),
   mockUpdateCurrentUser: vi.fn(),
   mockSaveAvatar: vi.fn(),
+  mockGetUserById: vi.fn(),
 }));
 
 
@@ -62,6 +64,7 @@ vi.mock("../services/jwt.service.js", () => ({
 vi.mock("../services/user.service.js", () => ({
   getCurrentUser: mockGetCurrentUser,
   updateCurrentUser: mockUpdateCurrentUser,
+  getUserById: mockGetUserById,
 }));
 
 vi.mock(
@@ -126,6 +129,7 @@ beforeEach(() => {
   mockGetCurrentUser.mockReset();
   mockUpdateCurrentUser.mockReset();
   mockSaveAvatar.mockReset();
+  mockGetUserById.mockReset();
 });
 
 
@@ -165,11 +169,538 @@ afterAll(async () => {
   await app.close();
 });
 
+describe(
+  "GET /users/:id",
+  () => {
+    const authenticatedUserId =
+      "123e4567-e89b-12d3-a456-426614174000";
+
+    const targetUserId =
+      "223e4567-e89b-12d3-a456-426614174000";
+
+    const publicUser = {
+      id: targetUserId,
+      username: "sara",
+      email: "sara@example.com",
+      displayName: "Sara",
+      bio: "Hello there",
+      avatarUrl:
+        "/avatars/sara.png",
+      authProvider: "LOCAL",
+
+      createdAt: new Date(
+        "2026-10-01T10:00:00.000Z"
+      ),
+
+      updatedAt: new Date(
+        "2026-10-02T10:00:00.000Z"
+      ),
+    };
+
+
+    it(
+      "should return another user by id",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(
+            authenticatedUserId
+          );
+
+        mockGetUserById
+          .mockResolvedValue(
+            publicUser
+          );
+
+
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              `/users/${targetUserId}`,
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(200);
+
+
+        const body =
+          response.json();
+
+
+        expect(body.id).toBe(
+          targetUserId
+        );
+
+        expect(body.username).toBe(
+          "sara"
+        );
+
+        expect(body.email).toBe(
+          "sara@example.com"
+        );
+
+        expect(
+          body.displayName
+        ).toBe("Sara");
+
+        expect(body.bio).toBe(
+          "Hello there"
+        );
+
+        expect(
+          body.avatarUrl
+        ).toBe(
+          "/avatars/sara.png"
+        );
+
+
+        expect(
+          mockGetUserById
+        ).toHaveBeenCalledWith(
+          targetUserId
+        );
+
+        expect(
+          mockGetUserById
+        ).toHaveBeenCalledOnce();
+      }
+    );
+
+
+    it(
+      "should use the requested user id, not the authenticated user's id",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(
+            authenticatedUserId
+          );
+
+        mockGetUserById
+          .mockResolvedValue(
+            publicUser
+          );
+
+
+        await app.inject({
+          method: "GET",
+
+          url:
+            `/users/${targetUserId}`,
+
+          headers: {
+            authorization:
+              "Bearer fake-access-token",
+          },
+        });
+
+
+        expect(
+          mockGetUserById
+        ).toHaveBeenCalledWith(
+          targetUserId
+        );
+
+        expect(
+          mockGetUserById
+        ).not.toHaveBeenCalledWith(
+          authenticatedUserId
+        );
+      }
+    );
+
+
+    it(
+      "should allow a user to request their own profile",
+      async () => {
+        const ownUser = {
+          ...publicUser,
+
+          id:
+            authenticatedUserId,
+        };
+
+
+        mockValidateAccessToken
+          .mockReturnValue(
+            authenticatedUserId
+          );
+
+        mockGetUserById
+          .mockResolvedValue(
+            ownUser
+          );
+
+
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              `/users/${authenticatedUserId}`,
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(200);
+
+        expect(
+          response.json().id
+        ).toBe(
+          authenticatedUserId
+        );
+      }
+    );
+
+
+    it(
+      "should preserve nullable public profile fields",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(
+            authenticatedUserId
+          );
+
+        mockGetUserById
+          .mockResolvedValue({
+            ...publicUser,
+
+            displayName: null,
+            bio: null,
+            avatarUrl: null,
+          });
+
+
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              `/users/${targetUserId}`,
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(200);
+
+
+        const body =
+          response.json();
+
+
+        expect(
+          body.displayName
+        ).toBeNull();
+
+        expect(
+          body.bio
+        ).toBeNull();
+
+        expect(
+          body.avatarUrl
+        ).toBeNull();
+      }
+    );
+
+
+    it(
+      "should never expose sensitive user fields",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(
+            authenticatedUserId
+          );
+
+        mockGetUserById
+          .mockResolvedValue(
+            publicUser
+          );
+
+
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              `/users/${targetUserId}`,
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(200);
+
+
+        const body =
+          response.json();
+
+
+        expect(
+          body.passwordHash
+        ).toBeUndefined();
+
+        expect(
+          body.password
+        ).toBeUndefined();
+
+        expect(
+          body.oauthProviderId
+        ).toBeUndefined();
+      }
+    );
+
+
+    it(
+      "should return 401 without an access token",
+      async () => {
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              `/users/${targetUserId}`,
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(401);
+
+        expect(
+          mockGetUserById
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+
+    it(
+      "should return 401 for an invalid access token",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(null);
+
+
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              `/users/${targetUserId}`,
+
+            headers: {
+              authorization:
+                "Bearer invalid-token",
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(401);
+
+        expect(
+          mockGetUserById
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+
+    it(
+      "should return 400 for an invalid user id",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(
+            authenticatedUserId
+          );
+
+
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              "/users/not-a-uuid",
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(400);
+
+
+        expect(
+          response.json().error
+        ).toBe(
+          "Invalid user id"
+        );
+
+
+        expect(
+          mockGetUserById
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+
+    it(
+      "should authenticate before processing the user id",
+      async () => {
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              "/users/not-a-uuid",
+          });
+
+
+        /*
+         * Authentication runs as
+         * preHandler before the
+         * controller validates :id.
+         */
+        expect(
+          response.statusCode
+        ).toBe(401);
+
+
+        expect(
+          mockGetUserById
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+
+    it(
+      "should return 404 when the user does not exist",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(
+            authenticatedUserId
+          );
+
+
+        mockGetUserById
+          .mockRejectedValue(
+            new NotFoundError(
+              "User not found"
+            )
+          );
+
+
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              `/users/${targetUserId}`,
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(404);
+
+
+        expect(
+          response.json().error
+        ).toBe(
+          "User not found"
+        );
+      }
+    );
+
+
+    it(
+      "should hide unexpected internal errors",
+      async () => {
+        mockValidateAccessToken
+          .mockReturnValue(
+            authenticatedUserId
+          );
+
+
+        mockGetUserById
+          .mockRejectedValue(
+            new Error(
+              "Database connection exploded"
+            )
+          );
+
+
+        const response =
+          await app.inject({
+            method: "GET",
+
+            url:
+              `/users/${targetUserId}`,
+
+            headers: {
+              authorization:
+                "Bearer fake-access-token",
+            },
+          });
+
+
+        expect(
+          response.statusCode
+        ).toBe(500);
+
+
+        expect(
+          response.json().error
+        ).toBe(
+          "Internal Server Error"
+        );
+
+
+        expect(
+          response.body
+        ).not.toContain(
+          "Database connection exploded"
+        );
+      }
+    );
+  }
+);
 
 /* =========================================================
    REGISTER
    ========================================================= */
-
 describe("POST /register", () => {
   it("should register a new user", async () => {
     mockRegisterUser.mockResolvedValue(
