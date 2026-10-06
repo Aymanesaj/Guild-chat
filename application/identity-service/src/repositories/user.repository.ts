@@ -95,7 +95,7 @@ export function updateUserData(
 
 export function updateUserAvatar(
   userId: string,
-  avatarUrl: string
+  avatarUrl: string | null
 ) {
   return prisma.user.update({
     where: {

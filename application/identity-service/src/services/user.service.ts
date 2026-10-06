@@ -1,10 +1,12 @@
 import { findUserById, findUserByUsername } from "../repositories/user.repository.js";
 import { UpdateProfileInput } from "../schemas/user.schema.js";
-import { updateUserData , usernameExists } from "../repositories/user.repository.js";
+import { updateUserData , usernameExists , updateUserAvatar } from "../repositories/user.repository.js";
 import { ConflictError } from "../errors/conflict.error.js";
 import { PublicUser , PublicProfile } from "../types/user.types.js";
 import { toPublicUser , toPublicProfile } from "../mappers/user.mapper.js";
-
+import { unlink } from "node:fs/promises";
+import { basename , join } from "node:path";
+import { AVATAR_DIR } from "../constants/avatar.constants.js";
 import {
   NotFoundError,
 } from "../errors/not-found.error.js";
@@ -87,4 +89,35 @@ export async function getUserByUsername(
   }
 
   return toPublicProfile(user);
+}
+
+export async function deleteAvatar(
+  userId: string
+) {
+    const user =
+        await findUserById(userId);
+
+    if (!user) {
+        throw new NotFoundError(
+        "User not found"
+        );
+    }
+
+    if (!user.avatarUrl) {
+        return toPublicUser(user);
+    }
+
+    const oldAvatarUrl = user.avatarUrl;
+
+    const updatedUser = await updateUserAvatar(userId, null);
+    if (oldAvatarUrl.startsWith("/avatars/")) {
+        const filename = basename(oldAvatarUrl);
+
+        const filepath = join(AVATAR_DIR, filename);
+        await unlink(filepath).catch(() => {});
+    }
+
+    return toPublicUser(
+        updatedUser
+    );
 }

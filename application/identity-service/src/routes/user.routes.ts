@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 
 import { authenticate } from "../plugins/auth.plugin.js";
 
-import { meController ,  updateMeController , uploadAvatarController , getUserByIdController , usernameAvailabilityController , getUserByUsernameController } from "../controllers/user.controller.js";
+import { meController ,  updateMeController , uploadAvatarController , getUserByIdController , usernameAvailabilityController , getUserByUsernameController , deleteAvatarController } from "../controllers/user.controller.js";
 
 export const userRoutes:
   FastifyPluginAsync =
@@ -29,6 +29,13 @@ export const userRoutes:
       },
       uploadAvatarController
     )
+    app.delete(
+      "/me/avatar",
+      {
+        preHandler: authenticate,
+      },
+      deleteAvatarController
+    );
     app.get(
       "/:id",
       {
