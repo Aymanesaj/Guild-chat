@@ -1,6 +1,6 @@
 import { findUserById, findUserByUsername } from "../repositories/user.repository.js";
 import { UpdateProfileInput } from "../schemas/user.schema.js";
-import { updateUserData } from "../repositories/user.repository.js";
+import { updateUserData , usernameExists } from "../repositories/user.repository.js";
 import { ConflictError } from "../errors/conflict.error.js";
 import { PublicUser , PublicProfile } from "../types/user.types.js";
 import { toPublicUser , toPublicProfile } from "../mappers/user.mapper.js";
@@ -54,4 +54,22 @@ export async function getUserById(
     }
 
     return toPublicProfile(user);
+}
+
+export async function checkUsernameAvailability(
+  username: string
+) {
+  const exists = await usernameExists(username);
+
+  if (exists) {
+    return {
+      available: false,
+      message: "Username is already taken",
+    };
+  }
+
+  return {
+    available: true,
+    message: "Username is available",
+  };
 }

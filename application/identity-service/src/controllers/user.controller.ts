@@ -6,8 +6,8 @@ import { saveAvatar } from "../services/avatar.service.js";
 import { ALLOWED_AVATAR_TYPES } from "../constants/avatar.constants.js";
 import { BadRequestError } from "../errors/bad-request.error.js";
 import { MAX_AVATAR_SIZE } from "../constants/avatar.constants.js";
-import { getUserById } from "../services/user.service.js";
-import { userIdParamsSchema } from "../schemas/user.schema.js";
+import { getUserById , checkUsernameAvailability } from "../services/user.service.js";
+import { userIdParamsSchema , usernameAvailabilityQuerySchema } from "../schemas/user.schema.js";
 
 
 export async function meController(
@@ -97,4 +97,30 @@ export async function getUserByIdController(
     const user = await getUserById(result.data.id);
 
     return reply.status(200).send(user);
+}
+
+export async function usernameAvailabilityController(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const result =
+    usernameAvailabilityQuerySchema.safeParse(
+      request.query
+    );
+
+  if (!result.success) {
+    return reply.status(400).send({
+      error: "Invalid username",
+      details: result.error.issues,
+    });
+  }
+
+  const availability =
+    await checkUsernameAvailability(
+      result.data.username
+    );
+
+  return reply
+    .status(200)
+    .send(availability);
 }
