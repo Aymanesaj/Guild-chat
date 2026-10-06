@@ -1,6 +1,8 @@
 package com.fttranscendence.chatservice.websocket;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -8,6 +10,9 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
+import java.util.ArrayList;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -16,6 +21,8 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.scheduling.TaskScheduler;
+import org.springframework.web.socket.WebSocketSession;
 
 /** Pure logic, no Spring: counting sockets and the offline grace period. */
 class PresenceRegistryTest {
@@ -49,11 +56,22 @@ class PresenceRegistryTest {
 
     private MutableClock clock;
     private PresenceRegistry presence;
+    private TaskScheduler scheduler;
+    private FrameSender sender;
+    private final List<Runnable> delayed = new ArrayList<>();
+    private ScheduledFuture<?> pending;
 
     @BeforeEach
     void setUp() {
         clock = new MutableClock();
-        presence = new PresenceRegistry(clock);
+        scheduler = mock(TaskScheduler.class);
+        sender = mock(FrameSender.class);
+        pending = mock(ScheduledFuture.class);
+        when(scheduler.schedule(any(Runnable.class), any(Instant.class))).thenAnswer(invocation -> {
+            delayed.add(invocation.getArgument(0));
+            return pending;
+        });
+        presence = new PresenceRegistry(clock, scheduler, sender);
     }
 
     @Test
@@ -162,6 +180,114 @@ class PresenceRegistryTest {
                 .containsExactly(
                         org.assertj.core.api.Assertions.entry(ALICE, PresenceRegistry.OFFLINE),
                         org.assertj.core.api.Assertions.entry(BOB, PresenceRegistry.ONLINE));
+    }
+
+    private WebSocketSession watcher(String id) {
+        WebSocketSession session = mock(WebSocketSession.class);
+        when(session.getId()).thenReturn(id);
+        when(session.isOpen()).thenReturn(true);
+        return session;
+    }
+
+    @Test
+    void subscriptionReturnsSnapshotThenOnlyOneOnlineEventForMultipleTabs() {
+        WebSocketSession viewer = watcher("viewer");
+        presence.subscribe(viewer, List.of(ALICE, BOB));
+        verify(sender).send(viewer, WsEvents.PRESENCE_SNAPSHOT,
+                Map.of("statuses", Map.of(ALICE, "offline", BOB, "offline")));
+        clearInvocations(sender);
+
+        presence.connected(ALICE, "tab1");
+        presence.connected(ALICE, "tab2");
+        presence.connected(ALICE, "tab2");
+        presence.disconnected(ALICE, "tab1");
+
+        verify(sender, times(1)).send(viewer, WsEvents.PRESENCE_CHANGED,
+                Map.of("user_id", ALICE, "status", "online"));
+        verifyNoMoreInteractions(sender);
+        verifyNoInteractions(scheduler);
+    }
+
+    @Test
+    void offlineIsPushedAfterGraceEvenIfRestAlreadyReadOffline() {
+        WebSocketSession viewer = watcher("viewer");
+        presence.connected(ALICE, "tab1");
+        presence.subscribe(viewer, List.of(ALICE));
+        clearInvocations(sender);
+
+        presence.disconnected(ALICE, "tab1");
+        presence.disconnected(ALICE, "tab1");
+        verifyNoInteractions(sender);
+        assertThat(delayed).hasSize(1);
+        clock.advance(PresenceRegistry.GRACE);
+        assertThat(presence.isOnline(ALICE)).isFalse();
+        delayed.getFirst().run();
+
+        verify(sender).send(viewer, WsEvents.PRESENCE_CHANGED,
+                Map.of("user_id", ALICE, "status", "offline"));
+        delayed.getFirst().run();
+        verifyNoMoreInteractions(sender);
+    }
+
+    @Test
+    void reconnectCancelsOfflineEvenWhenCancelledCallbackStillRuns() {
+        WebSocketSession viewer = watcher("viewer");
+        presence.connected(ALICE, "old");
+        presence.subscribe(viewer, List.of(ALICE));
+        clearInvocations(sender);
+
+        presence.disconnected(ALICE, "old");
+        clock.advance(Duration.ofSeconds(1));
+        presence.connected(ALICE, "new");
+        verify(pending).cancel(false);
+        clock.advance(PresenceRegistry.GRACE);
+        delayed.getFirst().run();
+
+        assertThat(presence.isOnline(ALICE)).isTrue();
+        verifyNoInteractions(sender);
+    }
+
+    @Test
+    void staleCallbackDoesNotExpireALaterDisconnect() {
+        presence.connected(ALICE, "old");
+        presence.disconnected(ALICE, "old");
+        clock.advance(Duration.ofSeconds(1));
+        presence.connected(ALICE, "new");
+        presence.disconnected(ALICE, "new");
+        clock.advance(Duration.ofSeconds(4));
+        delayed.getFirst().run();
+        assertThat(presence.isOnline(ALICE)).isTrue();
+        clock.advance(Duration.ofSeconds(1));
+        delayed.get(1).run();
+        assertThat(presence.isOnline(ALICE)).isFalse();
+    }
+
+    @Test
+    void unsubscribeAndCloseRemoveOnlyThatSocketsWatchers() {
+        WebSocketSession first = watcher("first");
+        WebSocketSession second = watcher("second");
+        presence.subscribe(first, List.of(ALICE, BOB));
+        presence.subscribe(first, List.of(ALICE)); // duplicate subscription
+        presence.subscribe(second, List.of(ALICE));
+        presence.unsubscribe(first, List.of(ALICE));
+        presence.removeSession(first);
+        presence.removeSession(first); // duplicate cleanup
+        clearInvocations(sender);
+
+        presence.connected(ALICE, "alice");
+        presence.connected(BOB, "bob");
+        verify(sender).send(second, WsEvents.PRESENCE_CHANGED,
+                Map.of("user_id", ALICE, "status", "online"));
+        verifyNoMoreInteractions(sender);
+    }
+
+    @Test
+    void closedSocketCannotAddWatchers() {
+        WebSocketSession viewer = watcher("closed");
+        when(viewer.isOpen()).thenReturn(false);
+        presence.subscribe(viewer, List.of(ALICE));
+        presence.connected(ALICE, "alice");
+        verifyNoInteractions(sender);
     }
 
     @Test
