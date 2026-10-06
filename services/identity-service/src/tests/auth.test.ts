@@ -34,6 +34,7 @@ const {
   mockUpdateCurrentUser,
   mockSaveAvatar,
   mockGetUserById,
+  mockLogoutAllSessions,
 } = vi.hoisted(() => ({
   mockRegisterUser: vi.fn(),
   mockLoginUser: vi.fn(),
@@ -44,6 +45,7 @@ const {
   mockUpdateCurrentUser: vi.fn(),
   mockSaveAvatar: vi.fn(),
   mockGetUserById: vi.fn(),
+  mockLogoutAllSessions: vi.fn(),
 }));
 
 
@@ -52,6 +54,7 @@ vi.mock("../services/auth.service.js", () => ({
   loginUser: mockLoginUser,
   refreshSession: mockRefreshSession,
   logoutSession: mockLogoutSession,
+  logoutAllSessions: mockLogoutAllSessions,
 }));
 
 
@@ -130,6 +133,7 @@ beforeEach(() => {
   mockUpdateCurrentUser.mockReset();
   mockSaveAvatar.mockReset();
   mockGetUserById.mockReset();
+  mockLogoutAllSessions.mockReset();
 });
 
 
@@ -697,6 +701,144 @@ describe(
     );
   }
 );
+
+describe("POST /auth/logout-all", () => {
+  const userId =
+    "123e4567-e89b-12d3-a456-426614174000";
+
+  it("should logout all sessions successfully", async () => {
+    mockValidateAccessToken.mockReturnValue(
+      userId
+    );
+
+    mockLogoutAllSessions.mockResolvedValue(
+      undefined
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/logout-all",
+
+      headers: {
+        authorization:
+          "Bearer fake-access-token",
+      },
+    });
+
+    expect(response.statusCode).toBe(204);
+
+    expect(
+      mockValidateAccessToken
+    ).toHaveBeenCalledWith(
+      "fake-access-token"
+    );
+
+    expect(
+      mockLogoutAllSessions
+    ).toHaveBeenCalledOnce();
+
+    expect(
+      mockLogoutAllSessions
+    ).toHaveBeenCalledWith(
+      userId
+    );
+  });
+
+  it("should return 401 when authorization header is missing", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/logout-all",
+    });
+
+    expect(response.statusCode).toBe(401);
+
+    expect(
+      mockValidateAccessToken
+    ).not.toHaveBeenCalled();
+
+    expect(
+      mockLogoutAllSessions
+    ).not.toHaveBeenCalled();
+  });
+
+  it("should return 401 when access token is invalid", async () => {
+    mockValidateAccessToken.mockReturnValue(
+      null
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/logout-all",
+
+      headers: {
+        authorization:
+          "Bearer invalid-access-token",
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+
+    expect(
+      mockValidateAccessToken
+    ).toHaveBeenCalledWith(
+      "invalid-access-token"
+    );
+
+    expect(
+      mockLogoutAllSessions
+    ).not.toHaveBeenCalled();
+  });
+
+  it("should return 401 when authorization scheme is invalid", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/logout-all",
+
+      headers: {
+        authorization:
+          "Basic fake-access-token",
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+
+    expect(
+      mockValidateAccessToken
+    ).not.toHaveBeenCalled();
+
+    expect(
+      mockLogoutAllSessions
+    ).not.toHaveBeenCalled();
+  });
+
+  it("should return 500 when logout all sessions fails unexpectedly", async () => {
+    mockValidateAccessToken.mockReturnValue(
+      userId
+    );
+
+    mockLogoutAllSessions.mockRejectedValue(
+      new Error("Database failure")
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/logout-all",
+
+      headers: {
+        authorization:
+          "Bearer fake-access-token",
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+
+    expect(
+      mockLogoutAllSessions
+    ).toHaveBeenCalledWith(
+      userId
+    );
+  });
+});
 
 /* =========================================================
    REGISTER

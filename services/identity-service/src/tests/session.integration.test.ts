@@ -160,6 +160,8 @@ afterAll(async () => {
 });
 
 
+
+
 /* =========================================================
    REFRESH TOKEN LIFECYCLE
    ========================================================= */
@@ -534,6 +536,84 @@ describe(
       }
     );
 
+
+    it("logout all revokes all refresh sessions", async () => {
+      const loginOne = await app.inject({
+        method: "POST",
+        url: "/login",
+
+        payload: {
+          identifier: testUser.username,
+          password: testUser.password,
+        },
+      });
+
+      expect(loginOne.statusCode).toBe(200);
+
+      const sessionOne =
+        loginOne.json();
+
+      const loginTwo = await app.inject({
+        method: "POST",
+        url: "/login",
+
+        payload: {
+          identifier: testUser.username,
+  password: testUser.password,
+        },
+      });
+
+      expect(loginTwo.statusCode).toBe(200);
+
+      const sessionTwo =
+        loginTwo.json();
+
+      expect(
+        sessionOne.refreshToken
+      ).not.toBe(
+        sessionTwo.refreshToken
+      );
+
+      const logout = await app.inject({
+        method: "POST",
+        url: "/auth/logout-all",
+
+        headers: {
+          authorization:
+            `Bearer ${sessionOne.accessToken}`,
+        },
+      });
+
+      expect(logout.statusCode).toBe(204);
+
+      const refreshOne = await app.inject({
+        method: "POST",
+        url: "/auth/refresh",
+
+        payload: {
+          refreshToken:
+            sessionOne.refreshToken,
+        },
+      });
+
+      expect(
+        refreshOne.statusCode
+      ).toBe(401);
+
+      const refreshTwo = await app.inject({
+        method: "POST",
+        url: "/auth/refresh",
+
+        payload: {
+          refreshToken:
+            sessionTwo.refreshToken,
+        },
+      });
+
+      expect(
+        refreshTwo.statusCode
+      ).toBe(401);
+    });
 
     /* -----------------------------------------------------
        EXPIRED TOKEN
