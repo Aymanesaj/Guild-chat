@@ -17,10 +17,8 @@ services:
       - MODSEC_RULE_ENGINE=on
       - ALLOWED_METHODS=GET HEAD POST OPTIONS PUT PATCH DELETE
     ports:
-      - 80:8080
-      - 443:8443
-      - 8000:8080
-      - 8443:8443
+      - "80:80"
+      - "443:443"
     volumes:
       - ./certs:/certs:ro
       - nginx_tls:/etc/nginx/conf
@@ -44,7 +42,7 @@ services:
       status-page:
         condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -293,7 +291,7 @@ services:
     image: nginx/nginx-prometheus-exporter:1.1.0
     container_name: nginx-exporter
     command:
-      - -nginx.scrape-uri=http://nginx:8080/nginx_status
+      - -nginx.scrape-uri=http://nginx:80/nginx_status
     networks:
       - private
     depends_on:

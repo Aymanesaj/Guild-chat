@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// `npm run dev` talks to the running stack through the gateway on :8000.
-const GATEWAY = 'http://localhost:8000'
+// `npm run dev` talks to the running stack through the gateway on port 80.
+const GATEWAY = 'http://localhost'
 
 // https://vite.dev/config/
 export default defineConfig({

@@ -11,7 +11,6 @@ The Gateway serves as the single public entrypoint for the `ft_transcendence` mi
 - **Ports Exposed:**
   - `80` (HTTP) — redirects all plaintext traffic to HTTPS
   - `443` (HTTPS) — primary secure entrypoint
-  - `8000`, `8443` — legacy/internal port mapping compatibility
 
 ---
 
@@ -72,7 +71,7 @@ Nginx and ModSecurity allow request bodies up to 10 MiB. Backend-specific upload
 limits still apply.
 
 Gatus does not support a URL prefix. It uses `https://status.${DOMAIN}/`
-in production and `https://status.localhost:8443/` locally. Point the production
+in production and `https://status.localhost/` locally. Point the production
 subdomain at the same VM and include it in the TLS certificate. `/status/` now
 redirects to the production subdomain; the main site's `/css/`, `/js/`, icons,
 and `/api/v1/` routes are no longer sent to Gatus. No response rewriting is used.

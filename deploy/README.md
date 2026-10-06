@@ -23,7 +23,7 @@ In the OCI Web Console:
 3. Under **Ingress Rules**, click **Add Ingress Rules**:
    - **Source CIDR**: `0.0.0.0/0`
    - **IP Protocol**: `TCP`
-   - **Destination Port Range**: `22, 8000, 8443` (add `80, 443` if using standard web ports)
+   - **Destination Port Range**: `22, 80, 443`
 
 ---
 

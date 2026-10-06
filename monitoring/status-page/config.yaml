@@ -14,7 +14,7 @@ ui:
 endpoints:
   - name: API Gateway
     group: Core Ingress
-    url: "http://nginx:8080/nginx_status"
+    url: "http://nginx:80/nginx_status"
     interval: 10s
     conditions:
       - "[STATUS] == 200"

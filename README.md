@@ -93,7 +93,7 @@ The application is deployed at **https://guild-chat.tech** and runs locally with
                                      │  HTTPS / WSS
                                      ▼
                     ┌────────────────────────────────┐
-                    │   nginx + ModSecurity (WAF)    │   :8443
+                    │   nginx + ModSecurity (WAF)    │   :443
                     │   TLS · rate limiting · OWASP  │
                     └────────────────────────────────┘
                        │        │         │        │
@@ -361,11 +361,11 @@ Watch progress with `make logs`, and confirm with `make ps`.
 
 | Surface | URL | Auth |
 |---|---|---|
-| Application | `https://localhost:8443` | App login |
-| Application (HTTP, redirects) | `http://localhost:8000` | — |
-| Grafana dashboards | `https://localhost:8443/grafana/` | `GF_SECURITY_ADMIN_USER` / `..._PASSWORD` |
-| Status page (Gatus) | `https://status.localhost:8443/` | `STATUS_PAGE_USER` / `..._PASSWORD` |
-| Prometheus | `https://localhost:8443/prometheus/` | Restricted to private IP ranges |
+| Application | `https://localhost` | App login |
+| Application (HTTP, redirects) | `http://localhost` | — |
+| Grafana dashboards | `https://localhost/grafana/` | `GF_SECURITY_ADMIN_USER` / `..._PASSWORD` |
+| Status page (Gatus) | `https://status.localhost/` | `STATUS_PAGE_USER` / `..._PASSWORD` |
+| Prometheus | `https://localhost/prometheus/` | Restricted to private IP ranges |
 
 ### Environment configuration
 

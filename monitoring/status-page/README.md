@@ -14,7 +14,7 @@ The status service continuously monitors internal endpoints across core ingress,
 
 | Group | Target Endpoint | Health Evaluation Criteria |
 | :--- | :--- | :--- |
-| **Core Ingress** | API Gateway (`http://nginx:8080/nginx_status`) | HTTP `200` |
+| **Core Ingress** | API Gateway (`http://nginx:80/nginx_status`) | HTTP `200` |
 | **Core Ingress** | Frontend UI (`http://frontend:80/`) | HTTP `200` |
 | **Microservices**| Identity Service (`http://identity-service:8083/health`) | HTTP `200`, `[BODY].status == ok`, `[BODY].service == identity-service` |
 | **Microservices**| Org Service (`http://org-service:8082/actuator/health`) | HTTP `200` & `[BODY].status == UP` |
@@ -33,7 +33,7 @@ The status dashboard is served behind HTTP Basic Authentication:
 - **URL:** `https://status.${DOMAIN}/`
 - **Authentication:** Evaluated against bcrypt hash in environment variable `STATUS_PAGE_PASSWORD_BCRYPT_BASE64`.
 
-For local development, use `https://status.localhost:8443/` (resolves to loopback
+For local development, use `https://status.localhost/` (resolves to loopback
 in modern browsers). `make status` sets the local hostname explicitly for curl.
 Production requires a DNS record for `status.${DOMAIN}` and a certificate
 covering that name. Gatus owns routes only on this hostname, so its asset and API

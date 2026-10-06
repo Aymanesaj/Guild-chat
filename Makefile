@@ -67,8 +67,8 @@ status:
 	if [ -n "$$STATUS_USER" ] && [ -n "$$STATUS_PASS" ]; then \
 		set -- --user "$$STATUS_USER:$$STATUS_PASS"; \
 	fi; \
-	STATUS_JSON=$$(curl -kfsS "$$@" --resolve status.localhost:8443:127.0.0.1 https://status.localhost:8443/api/v1/endpoints/statuses) || { \
-		echo "Could not fetch status. Check credentials or open https://status.localhost:8443/ in your browser." >&2; \
+	STATUS_JSON=$$(curl -kfsS "$$@" --resolve status.localhost:443:127.0.0.1 https://status.localhost/api/v1/endpoints/statuses) || { \
+		echo "Could not fetch status. Check credentials or open https://status.localhost/ in your browser." >&2; \
 		exit 1; \
 	}; \
 	printf '%s\n' "$$STATUS_JSON" | jq '.[] | {name: .name, group: .group, status: (if .results[-1].success then "HEALTHY" else "UNHEALTHY" end), duration_ms: (.results[-1].duration / 1000000)}'
