@@ -3,6 +3,8 @@ import { authRoutes } from "./routes/auth.routes.js";
 import { userRoutes } from "./routes/user.routes.js";
 import { registerErrorHandler } from "./plugins/error-handler.plugin.js";
 import multipart from "@fastify/multipart";
+import { MAX_AVATAR_SIZE } from "./constants/avatar.constants.js";
+import { avatarRoutes } from "./routes/avatar.routes.js";
 
 export function buildApp() {
     const app = Fastify({
@@ -18,12 +20,12 @@ export function buildApp() {
 
     app.register(multipart, {
         limits: {
-            fileSize: 5 * 1024 * 1024,
+            fileSize: MAX_AVATAR_SIZE,
         },
     });
     registerErrorHandler(app);
     app.register(authRoutes);
     app.register(userRoutes);
-
+    app.register(avatarRoutes);
     return app;
 }

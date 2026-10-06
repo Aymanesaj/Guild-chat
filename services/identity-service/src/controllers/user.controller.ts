@@ -5,6 +5,7 @@ import { updateCurrentUser } from "../services/user.service.js";
 import { saveAvatar } from "../services/avatar.service.js";
 import { ALLOWED_AVATAR_TYPES } from "../constants/avatar.constants.js";
 import { BadRequestError } from "../errors/bad-request.error.js";
+import { MAX_AVATAR_SIZE } from "../constants/avatar.constants.js";
 
 export async function meController(
     request: FastifyRequest,
@@ -54,7 +55,7 @@ export async function uploadAvatarController(
     const file = await request.file({
         limits: {
             files: 1,
-            fileSize: 5 * 1024 * 1024
+            fileSize: MAX_AVATAR_SIZE
         }
     });
 

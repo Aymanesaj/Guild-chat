@@ -1,11 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { basename, extname, join } from "node:path";
 import { BadRequestError } from "../errors/bad-request.error.js";
 import { NotFoundError } from "../errors/not-found.error.js";
 import { findUserById , updateUserAvatar } from "../repositories/user.repository.js";
-import { ALLOWED_AVATAR_TYPES } from "../constants/avatar.constants.js";
-const AVATAR_DIR = process.env.AVATAR_DIR ?? "/tmp/identity-avatars";
+import { ALLOWED_AVATAR_TYPES , AVATAR_MIME_BY_EXTENSION , AVATAR_DIR } from "../constants/avatar.constants.js";
+import { stat } from "node:fs/promises";
 
 export interface AvatarFile {
   mimetype: string;
@@ -52,5 +52,38 @@ export async function saveAvatar(
         authProvider: updatedUser.authProvider,
         createdAt: updatedUser.createdAt,
         updatedAt: updatedUser.updatedAt,
+    };
+}
+
+
+export async function getAvatarFile(
+    filename: string
+) {
+    if (basename(filename) !== filename)
+        throw new NotFoundError("Avatar not found");
+
+    const extension = extname(filename).slice(1).toLowerCase();
+
+    const mimetype = AVATAR_MIME_BY_EXTENSION[extension];
+
+    if (!mimetype)
+        throw new NotFoundError("Avatar not found");
+
+    const filepath = join(AVATAR_DIR, filename);
+
+    let fileInfo;
+
+    try {
+        fileInfo = await stat(filepath);
+    } catch (error) {
+        throw new NotFoundError("Avatar not found");
+    }
+
+    if (!fileInfo.isFile())
+        throw new NotFoundError("Avatar not found");
+
+    return {
+        filepath,
+        mimetype
     };
 }
