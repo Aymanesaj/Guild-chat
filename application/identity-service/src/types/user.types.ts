@@ -12,7 +12,7 @@ export interface User {
   displayName: string | null;
   bio: string | null;
   avatarUrl: string | null;
-  authProvider: "LOCAL" | "GITHUB";
+  authProvider: string;
   oauthProviderId: string | null;
   createdAt: Date;
   updatedAt: Date;

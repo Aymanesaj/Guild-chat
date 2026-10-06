@@ -7,16 +7,6 @@ datasource db {
   provider = "postgresql"
 }
 
-enum AuthProvider {
-  LOCAL
-  GITHUB
-}
-
-enum FriendshipStatus {
-  PENDING
-  ACCEPTED
-}
-
 model User {
   id              String       @id @default(uuid()) @db.Uuid
   username        String       @unique(map: "uk_users_username") @db.VarChar(32)
@@ -25,7 +15,7 @@ model User {
   displayName     String       @map("display_name") @db.VarChar(80)
   bio             String?      @db.VarChar(280)
   avatarUrl       String?      @map("avatar_url")
-  authProvider    AuthProvider @default(LOCAL) @map("auth_provider")
+  authProvider    String       @default("LOCAL") @map("auth_provider")
   oauthProviderId String?      @map("oauth_provider_id")
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
@@ -52,7 +42,7 @@ model Friendship {
   id          String           @id @default(uuid()) @db.Uuid
   requesterId String           @map("requester_id") @db.Uuid
   addresseeId String           @map("addressee_id") @db.Uuid
-  status      FriendshipStatus @default(PENDING)
+  status      String           @default("PENDING")
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @updatedAt @map("updated_at")
 
