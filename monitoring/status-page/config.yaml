@@ -1,15 +1,10 @@
-security:
-  basic:
-    username: ${STATUS_PAGE_USER}
-    password-bcrypt-base64: ${STATUS_PAGE_PASSWORD_BCRYPT_BASE64}
-
 storage:
   type: memory
 
 ui:
   title: "ft_transcendence Status"
   header: "System Status"
-  description: "Real-time health status of microservices, databases, and core infrastructure"
+  description: "Real-time health status of microservices and infrastructure"
 
 endpoints:
   - name: API Gateway
@@ -49,27 +44,6 @@ endpoints:
     interval: 10s
     conditions:
       - "[STATUS] == 200"
-
-  - name: Identity PostgreSQL
-    group: Databases
-    url: "tcp://identity-service_postgres:5432"
-    interval: 10s
-    conditions:
-      - "[CONNECTED] == true"
-
-  - name: Organization PostgreSQL
-    group: Databases
-    url: "tcp://org-service_postgres:5432"
-    interval: 10s
-    conditions:
-      - "[CONNECTED] == true"
-
-  - name: MongoDB Database
-    group: Databases
-    url: "tcp://mongodb:27017"
-    interval: 10s
-    conditions:
-      - "[CONNECTED] == true"
 
   - name: Prometheus Metrics
     group: Observability
