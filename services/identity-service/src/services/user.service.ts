@@ -2,8 +2,8 @@ import { findUserById, findUserByUsername } from "../repositories/user.repositor
 import { UpdateProfileInput } from "../schemas/user.schema.js";
 import { updateUserData } from "../repositories/user.repository.js";
 import { ConflictError } from "../errors/conflict.error.js";
-import { PublicUser } from "../types/user.types.js";
-import { toPublicUser } from "../mappers/user.mapper.js";
+import { PublicUser , PublicProfile } from "../types/user.types.js";
+import { toPublicUser , toPublicProfile } from "../mappers/user.mapper.js";
 
 import {
   NotFoundError,
@@ -43,7 +43,7 @@ export async function updateCurrentUser(
 
 export async function getUserById(
   userId: string
-): Promise<PublicUser> {
+): Promise<PublicProfile> {
     const user =
         await findUserById(userId);
 
@@ -53,5 +53,5 @@ export async function getUserById(
         );
     }
 
-    return toPublicUser(user);
+    return toPublicProfile(user);
 }

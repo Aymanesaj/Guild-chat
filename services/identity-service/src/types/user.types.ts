@@ -22,3 +22,13 @@ export type PublicUser = Omit<
   User,
   "passwordHash" | "oauthProviderId"
 >;
+
+export type PublicProfile = Pick<
+  User,
+  | "id"
+  | "username"
+  | "displayName"
+  | "bio"
+  | "avatarUrl"
+  | "createdAt"
+>;
