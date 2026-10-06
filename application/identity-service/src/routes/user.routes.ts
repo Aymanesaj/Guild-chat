@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 
 import { authenticate } from "../plugins/auth.plugin.js";
 
-import { meController ,  updateMeController , uploadAvatarController , getUserByIdController , usernameAvailabilityController } from "../controllers/user.controller.js";
+import { meController ,  updateMeController , uploadAvatarController , getUserByIdController , usernameAvailabilityController , getUserByUsernameController } from "../controllers/user.controller.js";
 
 export const userRoutes:
   FastifyPluginAsync =
@@ -42,5 +42,12 @@ export const userRoutes:
         preHandler: authenticate,
       },
       usernameAvailabilityController
+    );
+    app.get(
+      "/username/get",
+      {
+        preHandler: authenticate,
+      },
+      getUserByUsernameController
     );
   };

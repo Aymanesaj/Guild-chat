@@ -73,3 +73,18 @@ export async function checkUsernameAvailability(
     message: "Username is available",
   };
 }
+
+export async function getUserByUsername(
+  username: string
+): Promise<PublicProfile> {
+  const user =
+    await findUserByUsername(username);
+
+  if (!user) {
+    throw new NotFoundError(
+      "User not found"
+    );
+  }
+
+  return toPublicProfile(user);
+}
