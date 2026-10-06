@@ -90,34 +90,3 @@ export async function getUserByUsername(
 
   return toPublicProfile(user);
 }
-
-export async function deleteAvatar(
-  userId: string
-) {
-    const user =
-        await findUserById(userId);
-
-    if (!user) {
-        throw new NotFoundError(
-        "User not found"
-        );
-    }
-
-    if (!user.avatarUrl) {
-        return toPublicUser(user);
-    }
-
-    const oldAvatarUrl = user.avatarUrl;
-
-    const updatedUser = await updateUserAvatar(userId, null);
-    if (oldAvatarUrl.startsWith("/avatars/")) {
-        const filename = basename(oldAvatarUrl);
-
-        const filepath = join(AVATAR_DIR, filename);
-        await unlink(filepath).catch(() => {});
-    }
-
-    return toPublicUser(
-        updatedUser
-    );
-}

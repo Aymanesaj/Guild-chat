@@ -9,8 +9,7 @@ import { MAX_AVATAR_SIZE } from "../constants/avatar.constants.js";
 import {
   getUserById,
   checkUsernameAvailability,
-  getUserByUsername,
-  deleteAvatar
+  getUserByUsername
 } from "../services/user.service.js";
 import {
   userIdParamsSchema,
@@ -141,17 +140,3 @@ export async function getUserByUsernameController(
   return reply.status(200).send(user);
 }
 
-export async function deleteAvatarController(
-  request: FastifyRequest,
-  reply: FastifyReply,
-) {
-  if (!request.userId) {
-    return reply.code(401).send({
-      error: "Unauthorized",
-    });
-  }
-
-  const user = await deleteAvatar(request.userId);
-
-  return reply.code(200).send(user);
-}

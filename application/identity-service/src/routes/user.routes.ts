@@ -2,8 +2,8 @@ import type { FastifyPluginAsync } from "fastify";
 
 import { authenticate } from "../plugins/auth.plugin.js";
 
-import { meController ,  updateMeController , uploadAvatarController , getUserByIdController , usernameAvailabilityController , getUserByUsernameController , deleteAvatarController } from "../controllers/user.controller.js";
-
+import { meController ,  updateMeController , uploadAvatarController , getUserByIdController , usernameAvailabilityController , getUserByUsernameController } from "../controllers/user.controller.js";
+import { deleteAvatarController } from "../controllers/avatar.controller.js";
 export const userRoutes:
   FastifyPluginAsync =
   async (app) => {
