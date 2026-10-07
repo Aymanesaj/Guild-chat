@@ -386,6 +386,6 @@ volumes:
 
 networks:
   docker-metrics:
-    internal: true
+    name: docker-metrics
   private:
     name: private
