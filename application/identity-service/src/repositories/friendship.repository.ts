@@ -50,3 +50,25 @@ export function deleteFriendshipById(id: string) {
     },
   });
 }
+
+export function findAcceptedFriendships(userId: string) {
+  return prisma.friendship.findMany({
+    where: {
+      status: "ACCEPTED",
+
+      OR: [
+        {
+          requesterId: userId,
+        },
+        {
+          addresseeId: userId,
+        },
+      ],
+    },
+
+    include: {
+      requester: true,
+      addressee: true,
+    },
+  });
+}

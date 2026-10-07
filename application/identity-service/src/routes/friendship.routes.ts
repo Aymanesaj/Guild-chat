@@ -5,6 +5,7 @@ import { authenticate } from "../plugins/auth.plugin.js";
 import {
   acceptFriendRequestController,
   declineFriendRequestController,
+  getFriendsController,
   removeFriendController,
   sendFriendRequestController,
 } from "../controllers/friendship.controller.js";
@@ -37,5 +38,12 @@ export async function friendshipRoutes(app: FastifyInstance) {
       preHandler: authenticate,
     },
     removeFriendController,
+  );
+  app.get(
+    "/friends",
+    {
+      preHandler: authenticate,
+    },
+    getFriendsController,
   );
 }

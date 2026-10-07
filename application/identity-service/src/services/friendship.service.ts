@@ -9,9 +9,12 @@ import {
   findFriendRequestById,
   acceptFriendRequest as acceptFriendRequestInDb,
   deleteFriendshipById,
+  findAcceptedFriendships,
 } from "../repositories/friendship.repository.js";
 import { toFriendRequestResponse } from "../mappers/friendship.mapper.js";
 import type { FriendRequestResponse } from "../types/friendship.types.js";
+import { toPublicProfile } from "../mappers/user.mapper.js";
+import { PublicProfile } from "../types/user.types.js";
 
 export async function sendFriendRequest(
   requesterId: string,
@@ -116,4 +119,17 @@ export async function removeFriend(
   }
 
   await deleteFriendshipById(friendship.id);
+}
+
+export async function getFriends(userId: string): Promise<PublicProfile[]> {
+  const friendships = await findAcceptedFriendships(userId);
+
+  return friendships.map((friendship) => {
+    const friend =
+      friendship.requesterId === userId
+        ? friendship.addressee
+        : friendship.requester;
+
+    return toPublicProfile(friend);
+  });
 }

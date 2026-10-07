@@ -11,6 +11,7 @@ import {
   acceptFriendRequest,
   declineFriendRequest,
   removeFriend,
+  getFriends,
 } from "../services/friendship.service.js";
 
 export async function sendFriendRequestController(
@@ -110,4 +111,19 @@ export async function removeFriendController(
   await removeFriend(request.userId, result.data.userId);
 
   return reply.status(204).send();
+}
+
+export async function getFriendsController(
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  if (!request.userId) {
+    return reply.status(401).send({
+      error: "Unauthorized",
+    });
+  }
+
+  const friends = await getFriends(request.userId);
+
+  return reply.status(200).send(friends);
 }
