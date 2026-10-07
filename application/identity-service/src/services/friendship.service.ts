@@ -96,3 +96,24 @@ export async function declineFriendRequest(
 
   await deleteFriendshipById(requestId);
 }
+
+export async function removeFriend(
+  userId: string,
+  friendId: string,
+): Promise<void> {
+  if (userId === friendId) {
+    throw new BadRequestError("You cannot remove yourself as a friend");
+  }
+
+  const friendship = await findFriendshipBetween(userId, friendId);
+
+  if (!friendship) {
+    throw new NotFoundError("Friendship not found");
+  }
+
+  if (friendship.status !== "ACCEPTED") {
+    throw new ConflictError("Users are not friends");
+  }
+
+  await deleteFriendshipById(friendship.id);
+}
