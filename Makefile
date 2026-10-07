@@ -35,6 +35,17 @@ re: clean build
 logs:
 	docker compose logs -f
 
+.PHONY: logs-app logs-microservices logs-proxy
+
+logs-app:
+	docker compose --ansi always logs -f chat-service identity-service org-service nginx
+
+logs-microservices:
+	docker compose --ansi always logs -f chat-service identity-service org-service
+
+logs-proxy:
+	docker compose --ansi always logs -f nginx
+
 run:
 	@if [ ! -f .env ]; then \
 		echo "ERROR: .env file is missing! Please create it before running."; \
