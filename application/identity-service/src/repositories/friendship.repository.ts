@@ -72,3 +72,24 @@ export function findAcceptedFriendships(userId: string) {
     },
   });
 }
+
+export function findPendingFriendRequests(userId: string) {
+  return prisma.friendship.findMany({
+    where: {
+      status: "PENDING",
+
+      OR: [
+        {
+          requesterId: userId,
+        },
+        {
+          addresseeId: userId,
+        },
+      ],
+    },
+
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+}

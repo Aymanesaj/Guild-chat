@@ -10,9 +10,13 @@ import {
   acceptFriendRequest as acceptFriendRequestInDb,
   deleteFriendshipById,
   findAcceptedFriendships,
+  findPendingFriendRequests,
 } from "../repositories/friendship.repository.js";
 import { toFriendRequestResponse } from "../mappers/friendship.mapper.js";
-import type { FriendRequestResponse } from "../types/friendship.types.js";
+import type {
+  FriendRequestResponse,
+  FriendRequestsResponse,
+} from "../types/friendship.types.js";
 import { toPublicProfile } from "../mappers/user.mapper.js";
 import { PublicProfile } from "../types/user.types.js";
 
@@ -132,4 +136,28 @@ export async function getFriends(userId: string): Promise<PublicProfile[]> {
 
     return toPublicProfile(friend);
   });
+}
+
+export async function getFriendRequests(
+  userId: string,
+): Promise<FriendRequestsResponse> {
+  const requests = await findPendingFriendRequests(userId);
+
+  const incoming: FriendRequestResponse[] = [];
+  const outgoing: FriendRequestResponse[] = [];
+
+  for (const request of requests) {
+    const response = toFriendRequestResponse(request);
+
+    if (request.addresseeId === userId) {
+      incoming.push(response);
+    } else {
+      outgoing.push(response);
+    }
+  }
+
+  return {
+    incoming,
+    outgoing,
+  };
 }

@@ -20,3 +20,8 @@ export interface FriendRequestResponse {
   createdAt: Date;
   updatedAt: Date;
 }
+
+export interface FriendRequestsResponse {
+  incoming: FriendRequestResponse[];
+  outgoing: FriendRequestResponse[];
+}
