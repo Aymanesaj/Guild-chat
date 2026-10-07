@@ -51,9 +51,24 @@ export async function sendFriendRequest(
     }
   }
 
-  const friendship = await createFriendRequest(requesterId, addresseeId);
+  try {
+    const friendship = await createFriendRequest(requesterId, addresseeId);
 
-  return toFriendRequestResponse(friendship);
+    return toFriendRequestResponse(friendship);
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "P2002"
+    ) {
+      throw new ConflictError(
+        "A relationship already exists between these users",
+      );
+    }
+
+    throw error;
+  }
 }
 
 export async function acceptFriendRequest(
