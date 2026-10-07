@@ -12,7 +12,7 @@ const protoPath = resolve(process.cwd(), "src/grpc/identity.proto");
 
 const packageDefinition = protoLoader.loadSync(protoPath, {
   keepCase: true,
-  longs: String,
+  longs: Number,
   enums: String,
   defaults: true,
   oneofs: true,

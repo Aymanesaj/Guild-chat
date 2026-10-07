@@ -7,6 +7,7 @@ export interface ValidateTokenResponse {
   user_id: string;
   username: string;
   email: string;
+  expires_at: number;
 }
 
 

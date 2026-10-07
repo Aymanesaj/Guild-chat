@@ -1,6 +1,6 @@
 import * as grpc from "@grpc/grpc-js";
 
-import { validateAccessToken } from "../services/jwt.service.js";
+import { validateAccessTokenDetails } from "../services/jwt.service.js";
 
 import { findUserById } from "../repositories/user.repository.js";
 
@@ -35,20 +35,21 @@ export async function validateTokenHandler(
   try {
     const token = call.request.token;
 
-    const userId = validateAccessToken(token);
+    const validated = validateAccessTokenDetails(token);
 
-    if (!userId) {
+    if (!validated) {
       callback(null, {
         valid: false,
         user_id: "",
         username: "",
         email: "",
+        expires_at: 0,
       });
 
       return;
     }
 
-    const user = await findUserById(userId);
+    const user = await findUserById(validated.userId);
 
     if (!user) {
       callback(null, {
@@ -56,6 +57,7 @@ export async function validateTokenHandler(
         user_id: "",
         username: "",
         email: "",
+        expires_at: 0,
       });
 
       return;
@@ -66,6 +68,7 @@ export async function validateTokenHandler(
       user_id: user.id,
       username: user.username,
       email: user.email,
+      expires_at: validated.expiresAt,
     });
   } catch {
     callback(createGrpcError(grpc.status.INTERNAL, "Failed to validate token"));
