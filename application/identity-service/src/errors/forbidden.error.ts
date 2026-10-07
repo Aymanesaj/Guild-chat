@@ -1,8 +1,7 @@
-export class ForbiddenError extends Error {
-  statusCode = 403;
+import { AppError } from "./app.error.js";
 
-  constructor(message: string) {
-    super(message);
-    this.name = "ForbiddenError";
+export class ForbiddenError extends AppError {
+  constructor(message = "ForbiddenError") {
+    super(message, 403);
   }
 }
