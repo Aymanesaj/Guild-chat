@@ -4,6 +4,7 @@ import { authenticate } from "../plugins/auth.plugin.js";
 
 import {
   acceptFriendRequestController,
+  declineFriendRequestController,
   sendFriendRequestController,
 } from "../controllers/friendship.controller.js";
 
@@ -21,5 +22,12 @@ export async function friendshipRoutes(app: FastifyInstance) {
       preHandler: authenticate,
     },
     acceptFriendRequestController,
+  );
+  app.post(
+    "/friends/requests/:id/decline",
+    {
+      preHandler: authenticate,
+    },
+    declineFriendRequestController,
   );
 }

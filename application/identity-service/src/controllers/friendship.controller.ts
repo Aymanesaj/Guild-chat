@@ -8,6 +8,7 @@ import {
 import {
   sendFriendRequest,
   acceptFriendRequest,
+  declineFriendRequest,
 } from "../services/friendship.service.js";
 
 export async function sendFriendRequestController(
@@ -59,4 +60,28 @@ export async function acceptFriendRequestController(
   const friendship = await acceptFriendRequest(request.userId, result.data.id);
 
   return reply.status(200).send(friendship);
+}
+
+export async function declineFriendRequestController(
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  if (!request.userId) {
+    return reply.status(401).send({
+      error: "Unauthorized",
+    });
+  }
+
+  const result = friendRequestParamsSchema.safeParse(request.params);
+
+  if (!result.success) {
+    return reply.status(400).send({
+      error: "Invalid friend request id",
+      details: result.error.issues,
+    });
+  }
+
+  await declineFriendRequest(request.userId, result.data.id);
+
+  return reply.status(204).send();
 }

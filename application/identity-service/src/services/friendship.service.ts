@@ -8,6 +8,7 @@ import {
   findFriendshipBetween,
   findFriendRequestById,
   acceptFriendRequest as acceptFriendRequestInDb,
+  deleteFriendshipById,
 } from "../repositories/friendship.repository.js";
 import { toFriendRequestResponse } from "../mappers/friendship.mapper.js";
 import type { FriendRequestResponse } from "../types/friendship.types.js";
@@ -71,4 +72,27 @@ export async function acceptFriendRequest(
   const accepted = await acceptFriendRequestInDb(requestId);
 
   return toFriendRequestResponse(accepted);
+}
+
+export async function declineFriendRequest(
+  userId: string,
+  requestId: string,
+): Promise<void> {
+  const friendship = await findFriendRequestById(requestId);
+
+  if (!friendship) {
+    throw new NotFoundError("Friend request not found");
+  }
+
+  if (friendship.addresseeId !== userId) {
+    throw new ForbiddenError(
+      "You are not allowed to decline this friend request",
+    );
+  }
+
+  if (friendship.status !== "PENDING") {
+    throw new ConflictError("Friend request is not pending");
+  }
+
+  await deleteFriendshipById(requestId);
 }

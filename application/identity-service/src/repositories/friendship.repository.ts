@@ -42,3 +42,11 @@ export function acceptFriendRequest(id: string) {
     },
   });
 }
+
+export function deleteFriendshipById(id: string) {
+  return prisma.friendship.delete({
+    where: {
+      id,
+    },
+  });
+}
