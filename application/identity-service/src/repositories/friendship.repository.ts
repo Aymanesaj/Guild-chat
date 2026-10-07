@@ -23,3 +23,22 @@ export function createFriendRequest(requesterId: string, addresseeId: string) {
     },
   });
 }
+
+export function findFriendRequestById(id: string) {
+  return prisma.friendship.findUnique({
+    where: {
+      id,
+    },
+  });
+}
+
+export function acceptFriendRequest(id: string) {
+  return prisma.friendship.update({
+    where: {
+      id,
+    },
+    data: {
+      status: "ACCEPTED",
+    },
+  });
+}

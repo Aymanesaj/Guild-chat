@@ -5,3 +5,9 @@ export const sendFriendRequestSchema = z.object({
 });
 
 export type SendFriendRequestInput = z.infer<typeof sendFriendRequestSchema>;
+
+export const friendRequestParamsSchema = z.object({
+  id: z.uuid("Invalid friend request id"),
+});
+
+export type FriendRequestParams = z.infer<typeof friendRequestParamsSchema>;

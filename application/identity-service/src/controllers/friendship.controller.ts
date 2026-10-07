@@ -1,8 +1,14 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 
-import { sendFriendRequestSchema } from "../schemas/friendship.schema.js";
+import {
+  sendFriendRequestSchema,
+  friendRequestParamsSchema,
+} from "../schemas/friendship.schema.js";
 
-import { sendFriendRequest } from "../services/friendship.service.js";
+import {
+  sendFriendRequest,
+  acceptFriendRequest,
+} from "../services/friendship.service.js";
 
 export async function sendFriendRequestController(
   request: FastifyRequest,
@@ -29,4 +35,28 @@ export async function sendFriendRequestController(
   );
 
   return reply.status(201).send(friendship);
+}
+
+export async function acceptFriendRequestController(
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  if (!request.userId) {
+    return reply.status(401).send({
+      error: "Unauthorized",
+    });
+  }
+
+  const result = friendRequestParamsSchema.safeParse(request.params);
+
+  if (!result.success) {
+    return reply.status(400).send({
+      error: "Invalid friend request id",
+      details: result.error.issues,
+    });
+  }
+
+  const friendship = await acceptFriendRequest(request.userId, result.data.id);
+
+  return reply.status(200).send(friendship);
 }
