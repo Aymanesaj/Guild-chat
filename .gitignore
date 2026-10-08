@@ -1,5 +1,5 @@
 Docs/
-docs/
+docs/*
 z.env
 test.js
 tmp/*
@@ -39,6 +39,13 @@ certs/*
 !application/health.sh
 
 # track devops documentation
+!gateway/*.md
+!scripts/*.md
+!infra/*.md
+!infra/**/*.md
+!docs/Frontend_report.md
+!docs/PRESENCE.md
+
 !gateway-frontend/gateway/*.md
 !databases/backup-recovery/scripts/*.md
 !docs/*.md

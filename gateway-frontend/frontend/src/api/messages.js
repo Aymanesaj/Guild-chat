@@ -11,7 +11,7 @@ import { resolveUsers } from "./users";
  *
  * The socket opens at login (`connectChat`, called by AppShell) and stays open
  * until logout, even with no room open: chat-service counts an open socket as
- * "online" (GET /presence).
+ * "online". Presence subscriptions receive snapshots and live changes.
  *
  * The socket carries `{ event, data }` frames. The client subscribes per room;
  * the server forgets subscriptions when a socket closes, so every (re)connect
@@ -91,6 +91,9 @@ export async function deleteMessage(messageId) {
 
 /** roomId (as a string: route params are strings, the server sends numbers) -> Set<handler> */
 const subscribers = new Map();
+/** userId -> Set<handler>; shared across member lists, friends and DM peers. */
+const presenceSubscribers = new Map();
+const PRESENCE_BATCH_SIZE = 100;
 const statusListeners = new Set();
 /** Listeners for user-level room events, see onRoomEvent. */
 const roomListeners = new Set();
@@ -125,7 +128,7 @@ function hasSubscribers() {
 }
 
 function wantsSocket() {
-  return keepOpen || hasSubscribers();
+  return keepOpen || hasSubscribers() || presenceSubscribers.size > 0;
 }
 
 /** Writes a frame if the socket is open. Closed? onopen will resubscribe. */
@@ -137,6 +140,18 @@ function sendFrame(event, data) {
 /** room_id must be a JSON integer: the server rejects "42" with INVALID_ROOM_ID. */
 function sendRoomFrame(event, key) {
   sendFrame(event, { room_id: Number(key) });
+}
+
+/** Match the backend's 100 distinct ids per presence frame limit. */
+function sendPresenceFrames(event, userIds) {
+  for (let start = 0; start < userIds.length; start += PRESENCE_BATCH_SIZE) {
+    sendFrame(event, { user_ids: userIds.slice(start, start + PRESENCE_BATCH_SIZE) });
+  }
+}
+
+function dispatchPresence(userId, status) {
+  if (status !== "online" && status !== "offline") return;
+  presenceSubscribers.get(userId)?.forEach((handler) => handler({ userId, status }));
 }
 
 function dispatch(roomId, update) {
@@ -170,6 +185,12 @@ async function handleFrame(frame) {
   if (!data) return;
 
   switch (event) {
+    case "presence.snapshot":
+      Object.entries(data.statuses || {}).forEach(([userId, status]) => dispatchPresence(userId, status));
+      break;
+    case "presence.changed":
+      dispatchPresence(data.user_id, data.status);
+      break;
     case "message.new": {
       const [message] = await withUsernames([data]);
       dispatch(data.room_id, { type: "new", message });
@@ -227,9 +248,12 @@ function connect() {
   socket = current;
 
   current.onopen = () => {
+    if (socket !== current) return;
     attempt = 0;
     // A new socket starts with no subscriptions on the server.
     subscribers.forEach((_, key) => sendRoomFrame("subscribe", key));
+    // Presence subscriptions return a fresh snapshot, including on reconnect.
+    sendPresenceFrames("presence.subscribe", [...presenceSubscribers.keys()]);
     setStatus("open");
     // Room events sent while the socket was down are lost for good, so lists
     // refetch once. Not on the first open: they are loading already.
@@ -238,6 +262,7 @@ function connect() {
   };
 
   current.onmessage = (event) => {
+    if (socket !== current) return;
     let frame;
     try {
       frame = JSON.parse(event.data);
@@ -247,7 +272,9 @@ function connect() {
     handleFrame(frame);
   };
 
-  current.onerror = () => setStatus("error");
+  current.onerror = () => {
+    if (socket === current) setStatus("error");
+  };
 
   current.onclose = async (event) => {
     if (socket !== current) return;
@@ -288,6 +315,7 @@ window.addEventListener(LOGOUT_EVENT, () => {
   keepOpen = false;
   hasOpened = false;
   subscribers.clear();
+  presenceSubscribers.clear();
   roomListeners.clear();
   disconnect();
 });
@@ -321,10 +349,46 @@ export function subscribeToRoom(roomId, handler) {
     }
     // Not at once: on a room switch React unsubscribes the old room before
     // subscribing the new one, and closing here would open a new socket per room.
-    if (!wantsSocket()) {
-      clearTimeout(idleTimer);
-      idleTimer = setTimeout(disconnect, IDLE_CLOSE_MS);
-    }
+    closeWhenUnused();
+  };
+}
+
+function closeWhenUnused() {
+  if (!wantsSocket()) {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(disconnect, IDLE_CLOSE_MS);
+  }
+}
+
+/**
+ * Watch users through the shared socket. Receives { userId, status } for the
+ * initial snapshot and later changes. Reconnect restores all watched users.
+ * Overlapping hooks share subscriptions; only the final listener unsubscribes.
+ */
+export function subscribeToPresence(userIds, handler) {
+  const ids = [...new Set((userIds || []).filter(Boolean))];
+  clearTimeout(idleTimer);
+  idleTimer = null;
+  ids.forEach((id) => {
+    if (!presenceSubscribers.has(id)) presenceSubscribers.set(id, new Set());
+    presenceSubscribers.get(id).add(handler);
+  });
+  // Include already-watched users: a new listener also needs their snapshot.
+  sendPresenceFrames("presence.subscribe", ids);
+  connect();
+
+  return () => {
+    const removed = [];
+    ids.forEach((id) => {
+      const handlers = presenceSubscribers.get(id);
+      handlers?.delete(handler);
+      if (handlers?.size === 0) {
+        presenceSubscribers.delete(id);
+        removed.push(id);
+      }
+    });
+    sendPresenceFrames("presence.unsubscribe", removed);
+    closeWhenUnused();
   };
 }
 

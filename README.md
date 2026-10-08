@@ -434,7 +434,7 @@ sizing, firewall rules, VM bootstrap and the GitHub Actions secrets
 | Avatar upload | Multipart upload capped at 5 MB, stored on a dedicated Docker volume and served back through the gateway. |
 | Friend requests | Send by username, with accept, decline and cancel flows for incoming and sent requests. |
 | Friends list | List and remove friends. |
-| Online presence | Live online/offline indicator driven by the chat-service presence registry. |
+| Online presence | Online/offline snapshots and changes delivered over the shared chat WebSocket, with no presence polling. |
 
 ### Rooms, DMs and permissions — *asajed*
 
@@ -455,7 +455,7 @@ sizing, firewall rules, VM bootstrap and the GitHub Actions secrets
 | Replies | Reply to a message; the reply renders a quoted line that jumps to the original when clicked. |
 | Editing | Edit your own messages within a 15-minute window; the edit broadcasts as a `message.edited` frame. |
 | History | Paginated room history served from the compound `(room_id, created_at)` index. |
-| Presence | Per-room presence tracking with graceful handling of disconnects. |
+| Presence | Per-user socket tracking across tabs and devices; the last disconnect gets a 5-second grace period. Clients subscribe to the users they display. See the [presence guide](docs/PRESENCE.md). |
 
 ### Interface — *rahmoham*
 
@@ -521,10 +521,15 @@ for routing and the guarded-route pattern in
 validated during the handshake by `TokenHandshakeInterceptor` — an unauthenticated socket is
 never established. `SubscriptionRegistry` maps sessions to rooms so `RoomBroadcaster` fans a
 message out only to the sessions that need it, rather than to every connected client.
-`PresenceRegistry` tracks who is online and cleans up on disconnect. The protocol
-(`WsEvents`) carries `subscribe`, `unsubscribe`, `message.new`, `message.edited`,
-`message.deleted` and `error` frames. On the client, `useRoomMessages` and `usePresence`
-own the socket lifecycle and reconnection.
+`PresenceRegistry` tracks each user's sockets and schedules an offline notification
+5 seconds after their last socket closes. Reconnecting within that grace period
+cancels the notification. The protocol (`WsEvents`) carries room subscriptions,
+message events, errors, and `presence.subscribe` / `presence.unsubscribe` requests
+with `presence.snapshot` / `presence.changed` responses. On the client,
+`api/messages.js` owns the shared socket and restores subscriptions after reconnect;
+`useRoomMessages` and `usePresence` consume its updates. Presence no longer polls REST,
+while `GET /api/chat/presence` remains available for snapshots. See the
+[presence guide](docs/PRESENCE.md) and [chat API contract](services/chat-service/API_CONTRACT.md).
 
 *Multi-user support:* concurrent writes are safe by construction — message identity comes
 from MongoDB, and membership uniqueness is enforced by a database constraint rather than a

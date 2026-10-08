@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +28,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
@@ -89,9 +92,22 @@ class WebSocketPresenceTest extends MongoTestSupport {
         }
     }
 
+    private static final class RecordingClient extends TextWebSocketHandler {
+        final BlockingQueue<String> frames = new LinkedBlockingQueue<>();
+
+        @Override
+        protected void handleTextMessage(WebSocketSession session, TextMessage message) {
+            frames.add(message.getPayload());
+        }
+    }
+
     private WebSocketSession connect(String userId) throws Exception {
+        return connect(userId, new TextWebSocketHandler());
+    }
+
+    private WebSocketSession connect(String userId, TextWebSocketHandler handler) throws Exception {
         WebSocketSession session = client
-                .execute(new TextWebSocketHandler(), "ws://localhost:" + port + "/ws/chat?token=" + userId + ".token")
+                .execute(handler, "ws://localhost:" + port + "/ws/chat?token=" + userId + ".token")
                 .get(5, TimeUnit.SECONDS);
         opened.add(session);
         return session;
@@ -149,6 +165,71 @@ class WebSocketPresenceTest extends MongoTestSupport {
         awaitOpenSockets(alice, 0);
 
         assertThat(presence(alice).path(alice).asText()).isEqualTo("online");
+    }
+
+    private JsonNode nextFrame(RecordingClient recorder) throws Exception {
+        String frame = recorder.frames.poll(8, TimeUnit.SECONDS);
+        assertThat(frame).as("expected a WebSocket frame").isNotNull();
+        return objectMapper.readTree(frame);
+    }
+
+    private void watch(WebSocketSession session, String event, List<String> ids) throws Exception {
+        session.sendMessage(new TextMessage(objectMapper.writeValueAsString(
+                java.util.Map.of("event", event, "data", java.util.Map.of("user_ids", ids)))));
+    }
+
+    @Test
+    void snapshotAndTransitionsArriveWithoutRoomSubscriptionsOrRestPolling() throws Exception {
+        RecordingClient recorder = new RecordingClient();
+        WebSocketSession viewerSocket = connect(viewer, recorder);
+        watch(viewerSocket, "presence.subscribe", List.of(alice));
+        JsonNode snapshot = nextFrame(recorder);
+        assertThat(snapshot.path("event").asText()).isEqualTo("presence.snapshot");
+        assertThat(snapshot.path("data").path("statuses").path(alice).asText()).isEqualTo("offline");
+
+        WebSocketSession aliceSocket = connect(alice);
+        JsonNode online = nextFrame(recorder);
+        assertThat(online.path("event").asText()).isEqualTo("presence.changed");
+        assertThat(online.path("data").path("user_id").asText()).isEqualTo(alice);
+        assertThat(online.path("data").path("status").asText()).isEqualTo("online");
+
+        aliceSocket.close();
+        awaitOpenSockets(alice, 0);
+        assertThat(recorder.frames.poll(200, TimeUnit.MILLISECONDS)).isNull();
+        JsonNode offline = nextFrame(recorder);
+        assertThat(offline.path("data").path("status").asText()).isEqualTo("offline");
+        assertThat(presence(alice).path(alice).asText()).isEqualTo("offline");
+    }
+
+    @Test
+    void unsubscribingStopsChangesAndResubscribingReturnsFreshSnapshot() throws Exception {
+        RecordingClient recorder = new RecordingClient();
+        WebSocketSession viewerSocket = connect(viewer, recorder);
+        watch(viewerSocket, "presence.subscribe", List.of(alice));
+        nextFrame(recorder);
+        watch(viewerSocket, "presence.unsubscribe", List.of(alice));
+        // This snapshot is an ordering barrier: the unsubscribe was processed.
+        watch(viewerSocket, "presence.subscribe", List.of(bob));
+        nextFrame(recorder);
+        connect(alice);
+        awaitOpenSockets(alice, 1);
+        assertThat(recorder.frames.poll(300, TimeUnit.MILLISECONDS)).isNull();
+
+        watch(viewerSocket, "presence.subscribe", List.of(alice));
+        assertThat(nextFrame(recorder).path("data").path("statuses").path(alice).asText()).isEqualTo("online");
+    }
+
+    @Test
+    void invalidPresenceSubscriptionsReturnErrors() throws Exception {
+        RecordingClient recorder = new RecordingClient();
+        WebSocketSession viewerSocket = connect(viewer, recorder);
+        watch(viewerSocket, "presence.subscribe", List.of());
+        assertThat(nextFrame(recorder).path("data").path("code").asText()).isEqualTo("INVALID_USER_IDS");
+        watch(viewerSocket, "presence.subscribe", List.of(" "));
+        assertThat(nextFrame(recorder).path("data").path("code").asText()).isEqualTo("INVALID_USER_IDS");
+        watch(viewerSocket, "presence.subscribe", java.util.stream.IntStream.range(0, 101)
+                .mapToObj(i -> "user-" + i).toList());
+        assertThat(nextFrame(recorder).path("data").path("code").asText()).isEqualTo("TOO_MANY_IDS");
     }
 
     @Test

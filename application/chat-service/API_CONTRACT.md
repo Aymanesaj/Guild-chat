@@ -170,6 +170,10 @@ Any authenticated user may ask about any user. `ids` is comma-separated
 
 A user is `online` while they have at least one open `/ws/chat` socket, and
 for 5 seconds after the last one closes (so a page refresh does not flicker).
+This REST snapshot remains available; the frontend uses WebSocket presence
+subscriptions instead of polling it.
+See the [presence guide](../../docs/PRESENCE.md) for the backend lifecycle,
+frontend subscriptions, reconnect handling and validation commands.
 
 | Status | Code | When |
 |---|---|---|
@@ -216,20 +220,30 @@ Every frame, in both directions, is JSON:
 |---|---|---|
 | `subscribe` | `{ "room_id": 5 }` | Start receiving the room's live events. Membership is checked. Subscribing twice is harmless. |
 | `unsubscribe` | `{ "room_id": 5 }` | Stop receiving them. Always allowed. |
+| `presence.subscribe` | `{ "user_ids": ["a", "b"] }` | Watch users and receive a `presence.snapshot`. Any authenticated user may watch anyone. Repeat subscriptions are harmless and return another snapshot. |
+| `presence.unsubscribe` | `{ "user_ids": ["a", "b"] }` | Stop watching these users on this socket. |
 
 `room_id` must be a JSON **integer**: `"5"` (a string) and `5.5` are rejected.
 Subscriptions live on the socket: after every reconnect, subscribe again.
+Presence frames accept 1–100 distinct nonempty string IDs; larger lists can
+be subscribed in batches. Disconnecting clears all presence subscriptions.
 
 ### Server → client
 
 | Event | Data | When |
 |---|---|---|
+| `presence.snapshot` | `{ "statuses": { "a": "online", "b": "offline" } }` | Immediately after a presence subscription, for the requested IDs |
+| `presence.changed` | `{ "user_id": "a", "status": "online" }` | A watched user opens their first socket, or becomes `offline` 5 seconds after their last socket closes |
 | `message.new` | message object | A message was posted in a subscribed room |
 | `message.edited` | message object | A message was edited |
 | `message.deleted` | message object (`deleted: true`, `content: null`) | A message was deleted |
 | `error` | `{ "code": "...", "message": "..." }` | A client frame was refused (see below). The socket stays open. |
 
 Clients should ignore events they don't know, so new ones can be added.
+Presence changes only reach sockets watching that user. Extra tabs do not
+publish duplicate online events. Reconnecting within the grace period cancels
+the offline notification. Restoring subscriptions after a reconnect returns
+fresh snapshots to recover changes missed while disconnected.
 
 #### User events (no subscription needed)
 
@@ -261,7 +275,9 @@ All of these are best effort. Events sent while a socket is down are lost, so
 |---|---|
 | `INVALID_JSON` | Frame is not valid JSON |
 | `MISSING_EVENT` | No `event` field |
-| `UNKNOWN_EVENT` | `event` is not `subscribe` / `unsubscribe` |
+| `UNKNOWN_EVENT` | `event` is not a supported room or presence subscription event |
+| `INVALID_USER_IDS` | `data.user_ids` is not a nonempty array of nonempty strings |
+| `TOO_MANY_IDS` | More than 100 distinct presence user IDs in one frame |
 | `MISSING_ROOM_ID` | No `data.room_id` |
 | `INVALID_ROOM_ID` | `room_id` is not an integer |
 | `NOT_A_MEMBER` | Subscribe refused: not a member of the room |
@@ -271,7 +287,6 @@ All of these are best effort. Events sent while a socket is down are lost, so
 
 - Sending messages over the socket: send with `POST`, receive over the socket.
 - `typing` events: dropped from v1 scope (2026-09-22).
-- `presence` push events: poll `GET /presence` instead.
 
 ### Known limitations
 

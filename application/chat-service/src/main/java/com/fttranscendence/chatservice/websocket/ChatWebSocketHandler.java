@@ -2,6 +2,7 @@ package com.fttranscendence.chatservice.websocket;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -111,6 +112,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         switch (event) {
             case WsEvents.SUBSCRIBE -> subscribe(session, data);
             case WsEvents.UNSUBSCRIBE -> unsubscribe(session, data);
+            case WsEvents.PRESENCE_SUBSCRIBE -> presenceSubscription(session, data, true);
+            case WsEvents.PRESENCE_UNSUBSCRIBE -> presenceSubscription(session, data, false);
             default -> frameSender.sendError(guarded(session), "UNKNOWN_EVENT" , "Unknown event: "+ event);
         }
         log.debug("frame from user={} length={}", userId(session), message.getPayloadLength());
@@ -131,6 +134,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     /** Idempotent, and must not leave empty sets behind: a hard drop may never call this. */
     private void remove(WebSocketSession session) {
         subscriptionRegistry.removeSession(session);
+        presenceRegistry.removeSession(session);
         String userId = userId(session);
         if (userId == null) {
             return;
@@ -220,6 +224,32 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         }
         subscriptionRegistry.unsubscribe(roomId, guarded(session));
         log.debug("user={} unsubscribed from room={}", userId(session), roomId);
+    }
+
+    /** Any authenticated user may watch anyone, matching GET /presence permissions. */
+    private void presenceSubscription(WebSocketSession session, JsonNode data, boolean subscribe) {
+        JsonNode ids = data.path("user_ids");
+        if (!ids.isArray() || ids.isEmpty()) {
+            frameSender.sendError(guarded(session), "INVALID_USER_IDS", "'user_ids' must be a nonempty array of strings");
+            return;
+        }
+        Set<String> wanted = new LinkedHashSet<>();
+        for (JsonNode id : ids) {
+            if (!id.isTextual() || id.asText().isBlank()) {
+                frameSender.sendError(guarded(session), "INVALID_USER_IDS", "'user_ids' must contain nonempty strings");
+                return;
+            }
+            wanted.add(id.asText().trim());
+        }
+        if (wanted.size() > 100) {
+            frameSender.sendError(guarded(session), "TOO_MANY_IDS", "'user_ids' may list at most 100 distinct user ids");
+            return;
+        }
+        if (subscribe) {
+            presenceRegistry.subscribe(guarded(session), wanted);
+        } else {
+            presenceRegistry.unsubscribe(guarded(session), wanted);
+        }
     }
 
     /** Reads data.room_id, or sends an error frame and returns null. */
