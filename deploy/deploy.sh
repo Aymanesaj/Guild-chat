@@ -1,9 +1,24 @@
 #!/usr/bin/env bash
-set -eo pipefail
+set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-git pull origin main
+if [[ $# -ne 1 || ! "${1:-}" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "Usage: bash deploy/deploy.sh <full-tested-commit-sha>" >&2
+    exit 1
+fi
+DEPLOY_SHA="$1"
+
+if [[ "$(git rev-parse HEAD)" != "$DEPLOY_SHA" ]]; then
+    echo "ERROR: Check out the tested commit $DEPLOY_SHA before deploying." >&2
+    exit 1
+fi
+if [[ -n "$(git status --porcelain)" ]]; then
+    echo "ERROR: The deployment checkout has local changes. Resolve them before deploying." >&2
+    exit 1
+fi
+
+echo "Deploying commit $DEPLOY_SHA"
 
 if [ ! -f .env ]; then
     echo "❌ ERROR: .env file is missing in $(pwd)"

@@ -5,3 +5,13 @@
 **/npm-debug.log
 .vscode
 .idea
+
+# Credentials, private keys, and runtime data must not enter the build context.
+**/.env
+**/.env.*
+**/*.env
+**/*.env.*
+**/certs
+**/backups
+**/*.key
+**/*.pem

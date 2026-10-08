@@ -23,7 +23,7 @@ In the OCI Web Console:
 3. Under **Ingress Rules**, click **Add Ingress Rules**:
    - **Source CIDR**: `0.0.0.0/0`
    - **IP Protocol**: `TCP`
-   - **Destination Port Range**: `22, 8000, 8443` (add `80, 443` if using standard web ports)
+   - **Destination Port Range**: `22, 80, 443`
 
 ---
 
@@ -46,19 +46,44 @@ newgrp docker
 cp .env.example .env
 nano .env
 
-# 5. (Optional) Setup SSL Certificates for guild-chat.tech
-# If skipped, Nginx will automatically generate self-signed certificates.
-sudo certbot certonly --standalone -d guild-chat.tech
-sudo cp /etc/letsencrypt/live/guild-chat.tech/fullchain.pem ~/ft_transcendence/certs/
-sudo cp /etc/letsencrypt/live/guild-chat.tech/privkey.pem ~/ft_transcendence/certs/
-sudo chmod 644 ~/ft_transcendence/certs/*
+# 5. (Optional) Set up trusted TLS certificates (rootful Docker on this VM).
+# Set DOMAIN in .env (bare hostname, e.g. example.com).
+# Read the resolved value without sourcing the whole .env as shell code.
+DOMAIN=$(docker compose config --format json | jq -r '.services.nginx.environment.DOMAIN')
+# Point DOMAIN, www.DOMAIN and status.DOMAIN DNS records at the VM first.
+# Port 80 must be available for Certbot's standalone challenge.
+sudo certbot certonly --standalone --cert-name "$DOMAIN" -d "$DOMAIN" -d "www.$DOMAIN" -d "status.$DOMAIN"
+docker compose build nginx
+NGINX_GID=$(docker compose run --rm --no-deps --entrypoint id nginx -g)
+sudo install -m 644 "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" certs/fullchain.pem
+sudo install -m 640 -o root -g "$NGINX_GID" "/etc/letsencrypt/live/$DOMAIN/privkey.pem" certs/privkey.pem
 ```
+
+`DOMAIN` also supplies the default GitHub callback and Grafana URLs in `.env.example`.
+Update the registered GitHub OAuth callback when changing domains. Nginx renders
+its config from the template at startup; recreate it after changing `.env`.
+Existing certificates must also cover the new domain. For development, regenerate
+only the self-signed certificate files if you change `DOMAIN`; do not remove all
+Compose volumes, which also contain your databases.
+
+The private key is owned by root and readable by the gateway's existing group,
+not by all local users. Repeat the install commands after certificate renewal,
+then restart Nginx. The same permissions apply to a custom `server.key`.
+If you skip trusted certificates, the gateway reuses a self-signed certificate
+from the `nginx_tls` volume; browsers still need to trust it explicitly.
 
 ---
 
 ## 4. GitHub Actions CI/CD Integration
 
-To enable automated testing and continuous deployment on push to `main`:
+CI runs on pushes and pull requests. The deployment job in
+`.github/workflows/ci-cd.yml` is commented out; uncomment it when ready to enable
+VM deployment after all CI jobs pass. It passes `${{ github.sha }}` to the VM,
+fetches that exact commit, and checks it out detached before running the deployment
+script. Deployments are serialized, and local checkout changes cause a failure
+instead of being discarded.
+
+To configure the deployment job:
 
 1. In your GitHub repository, navigate to **Settings** → **Secrets and variables** → **Actions**.
 2. Add the following repository secrets:
@@ -70,10 +95,28 @@ To enable automated testing and continuous deployment on push to `main`:
 | `OCI_SSH_KEY` | Private SSH key (matching `~/.ssh/authorized_keys`) | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
 | `OCI_SSH_PORT` | *(Optional, defaults to 22)* | `22` |
 
+For a manual deployment, copy the full commit SHA from a successful CI run:
+
+```bash
+DEPLOY_SHA='<full-40-character-tested-commit-sha>'
+git fetch --no-tags origin "$DEPLOY_SHA"
+git checkout --detach "$DEPLOY_SHA"
+bash deploy/deploy.sh "$DEPLOY_SHA"
+```
+
+`deploy.sh` requires that exact commit to be checked out with no local changes;
+it never pulls `main`. Keep `.env`, certificates, and backups in their ignored
+runtime locations. This pins the source revision. Images are still built on the
+VM from the repository's existing base-image tags, so builds are not guaranteed
+to be byte-for-byte identical; immutable image releases would be a separate step.
+
+The frontend uses Node 22 in both CI and its Docker build. The root and frontend
+Docker contexts exclude environment files, certificates, private keys, and backups.
+
 ---
 
 ## 5. Scripts Overview
 
-- [`setup-vm.sh`](file:///home/seraph/dev/ft_transcendence/deploy/setup-vm.sh): Installs Docker, Compose, configures Docker log rotation, and opens local OS-level firewall ports.
-- [`deploy.sh`](file:///home/seraph/dev/ft_transcendence/deploy/deploy.sh): Pulls the latest code from `main`, rebuilds containers via `docker compose up -d --build`, prunes stale images, and checks status. Executed automatically by GitHub Actions over SSH.
+- [`setup-vm.sh`](setup-vm.sh): Installs Docker, Compose, configures Docker log rotation, and opens local OS-level firewall ports.
+- [`deploy.sh`](deploy.sh): Verifies the supplied tested SHA and clean checkout, rebuilds containers, prunes dangling images, and checks status. Called over SSH when the deployment job is enabled.
 

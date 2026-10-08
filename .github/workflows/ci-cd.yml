@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: frontend/app
+        working-directory: gateway-frontend/frontend
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,7 +25,7 @@ jobs:
         with:
           node-version: 22
           cache: 'npm'
-          cache-dependency-path: frontend/app/package-lock.json
+          cache-dependency-path: gateway-frontend/frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -47,11 +47,9 @@ jobs:
       matrix:
         service:
           - name: Chat Service
-            dir: services/chat-service
-          # - name: Identity Service
-          #   dir: services/identity-service/demo
+            dir: application/chat-service
           - name: Org Service
-            dir: services/org-service
+            dir: application/org-service
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -68,6 +66,60 @@ jobs:
         run: ./mvnw test -q
 
   # -------------------------------------------------------------
+  # IDENTITY: Node.js Tests & Build
+  # -------------------------------------------------------------
+  identity-tests:
+    name: Identity Tests & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: application/identity-service
+    env:
+      DATABASE_URL: postgresql://identity_ci:identity_ci@localhost:5432/identity_ci
+      JWT_SECRET: identity-ci-only-secret-never-use-in-production
+      AVATAR_DIR: /tmp/identity-ci-avatars
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: identity_ci
+          POSTGRES_PASSWORD: identity_ci
+          POSTGRES_DB: identity_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U identity_ci -d identity_ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: application/identity-service/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run generate
+
+      - name: Apply database migrations
+        run: npx prisma migrate deploy --config prisma7.config.ts
+
+      - name: Run existing tests
+        run: npm test -- src/tests
+
+      - name: Build service
+        run: npm run build
+
+  # -------------------------------------------------------------
   # 3. DOCKER: Compose Configuration Validation
   # -------------------------------------------------------------
   validate-compose:
@@ -80,34 +132,43 @@ jobs:
       - name: Create mock .env from example
         run: cp .env.example .env
 
-      - name: Check Compose Syntax
-        run: docker compose config -q
+      - name: Check Compose and monitoring
+        run: bash monitoring/scripts/test-monitoring.sh
 
   # -------------------------------------------------------------
   # 4. DEPLOY: Continuous Deployment to OCI Free Tier VM via SSH
   # -------------------------------------------------------------
-  deploy:
-    name: Deploy to OCI VM
-    needs: [frontend-lint-and-build, backend-tests, validate-compose]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Execute Remote Deploy on OCI Instance
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.OCI_HOST }}
-          username: ${{ secrets.OCI_USERNAME }}
-          key: ${{ secrets.OCI_SSH_KEY }}
-          port: ${{ secrets.OCI_SSH_PORT || 22 }}
-          script: |
-            if [ -d ~/ft_transcendence ]; then
-              cd ~/ft_transcendence
-              echo "📥 Pulling latest code from main..."
-              git fetch origin main
-              git reset --hard origin/main
-              bash deploy/deploy.sh
-            else
-              echo "❌ ERROR: ~/ft_transcendence not found on VM!"
-              exit 1
-            fi
-
+  # deploy:
+  #   name: Deploy to OCI VM
+  #   needs: [frontend-lint-and-build, backend-tests, identity-tests, validate-compose]
+  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #   runs-on: ubuntu-latest
+  #   concurrency:
+  #     group: production-deploy
+  #     cancel-in-progress: false
+  #   steps:
+  #     - name: Execute Remote Deploy on OCI Instance
+  #       uses: appleboy/ssh-action@v1.2.0
+  #       env:
+  #         DEPLOY_SHA: ${{ github.sha }}
+  #       with:
+  #         host: ${{ secrets.OCI_HOST }}
+  #         username: ${{ secrets.OCI_USERNAME }}
+  #         key: ${{ secrets.OCI_SSH_KEY }}
+  #         port: ${{ secrets.OCI_SSH_PORT || 22 }}
+  #         envs: DEPLOY_SHA
+  #         script: |
+  #           set -eu
+  #           if [ -d ~/ft_transcendence ]; then
+  #             cd ~/ft_transcendence
+  #             if [ -n "$(git status --porcelain)" ]; then
+  #               echo "ERROR: Deployment checkout has local changes."
+  #               exit 1
+  #             fi
+  #             git fetch --no-tags origin "$DEPLOY_SHA"
+  #             git checkout --detach "$DEPLOY_SHA"
+  #             bash deploy/deploy.sh "$DEPLOY_SHA"
+  #           else
+  #             echo "ERROR: ~/ft_transcendence not found on VM!"
+  #             exit 1
+  #           fi

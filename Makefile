@@ -35,40 +35,51 @@ re: clean build
 logs:
 	docker compose logs -f
 
+.PHONY: logs-app logs-microservices logs-proxy
+
+logs-app:
+	docker compose --ansi always logs -f chat-service identity-service org-service nginx
+
+logs-microservices:
+	docker compose --ansi always logs -f chat-service identity-service org-service
+
+logs-proxy:
+	docker compose --ansi always logs -f nginx
+
 run:
 	@if [ ! -f .env ]; then \
-		@echo "ERROR: .env file is missing! Please create it before running."; \
-		@exit 1; \
+		echo "ERROR: .env file is missing! Please create it before running."; \
+		exit 1; \
 	fi
 	@echo "Starting the application..."
 
-monitoring:
-	docker compose down -v --remove-orphans grafana prometheus docker-exporter alertmanager
-	docker compose up --build -d grafana prometheus docker-exporter alertmanager
+monitoring: run
+	DOCKER_SOCK=$(DOCKER_SOCK) docker compose up --build -d grafana prometheus docker-exporter alertmanager
 
-microservices:
-	docker compose down -v --remove-orphans chat-service identity-service org-service 
-	docker compose up --build -d chat-service identity-service org-service 
-proxy:
-	docker compose down -v --remove-orphans nginx
-	docker compose up --build -d nginx 
+microservices: run
+	DOCKER_SOCK=$(DOCKER_SOCK) docker compose up --build -d chat-service identity-service org-service
+
+proxy: run
+	DOCKER_SOCK=$(DOCKER_SOCK) docker compose up --build -d nginx
 
 backup:
-	@./scripts/backup.sh
+	@./databases/backup-recovery/scripts/backup.sh
 
 restore:
-	@./scripts/restore.sh $(SNAPSHOT)
+	@./databases/backup-recovery/scripts/restore.sh $(SNAPSHOT)
 
 test-recovery:
-	@./scripts/test-disaster-recovery.sh
+	@./databases/backup-recovery/scripts/test-disaster-recovery.sh
 
 status:
-	@curl -k -s https://localhost:8443/api/v1/endpoints/statuses | jq '.[] | {name: .name, group: .group, status: (if .results[-1].success then "HEALTHY" else "UNHEALTHY" end), duration_ms: (.results[-1].duration / 1000000)}' 2>/dev/null || echo "Open https://localhost:8443/status/ in browser."
-	@STATUS_USER=$$(grep -E '^STATUS_PAGE_USER=' .env 2>/dev/null | cut -d= -f2); \
-	STATUS_PASS=$$(grep -E '^STATUS_PAGE_PASSWORD=' .env 2>/dev/null | cut -d= -f2); \
-	AUTH_FLAG=""; \
+	@STATUS_USER=$$(grep -E '^STATUS_PAGE_USER=' .env 2>/dev/null | cut -d= -f2-); \
+	STATUS_PASS=$$(grep -E '^STATUS_PAGE_PASSWORD=' .env 2>/dev/null | cut -d= -f2-); \
+	set --; \
 	if [ -n "$$STATUS_USER" ] && [ -n "$$STATUS_PASS" ]; then \
-		AUTH_FLAG="-u $$STATUS_USER:$$STATUS_PASS"; \
+		set -- --user "$$STATUS_USER:$$STATUS_PASS"; \
 	fi; \
-	curl -k -s $$AUTH_FLAG https://localhost:8443/api/v1/endpoints/statuses | jq '.[] | {name: .name, group: .group, status: (if .results[-1].success then "HEALTHY" else "UNHEALTHY" end), duration_ms: (.results[-1].duration / 1000000)}' 2>/dev/null || echo "Open https://localhost:8443/status/ in browser."
-
+	STATUS_JSON=$$(curl -kfsS "$$@" --resolve status.localhost:443:127.0.0.1 https://status.localhost/api/v1/endpoints/statuses) || { \
+		echo "Could not fetch status. Check credentials or open https://status.localhost/ in your browser." >&2; \
+		exit 1; \
+	}; \
+	printf '%s\n' "$$STATUS_JSON" | jq '.[] | {name: .name, group: .group, status: (if .results[-1].success then "HEALTHY" else "UNHEALTHY" end), duration_ms: (.results[-1].duration / 1000000)}'

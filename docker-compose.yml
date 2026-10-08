@@ -1,22 +1,27 @@
 services:
 
+  # ============================================================
+  # GATEWAY & FRONTEND
+  # ============================================================
+
   nginx:
+    mem_limit: 256m
     container_name: nginx
     build:
       context: .
-      dockerfile: gateway/Dockerfile
+      dockerfile: gateway-frontend/gateway/Dockerfile
     environment:
+      - DOMAIN=${DOMAIN:-localhost}
       - PARANOIA=1
       - BLOCKING_PARANOIA=1
       - MODSEC_RULE_ENGINE=on
       - ALLOWED_METHODS=GET HEAD POST OPTIONS PUT PATCH DELETE
     ports:
-      - 80:8080
-      - 443:8443
-      - 8000:8080
-      - 8443:8443
+      - "80:80"
+      - "443:443"
     volumes:
       - ./certs:/certs:ro
+      - nginx_tls:/etc/nginx/conf
     networks:
       - private
     depends_on:
@@ -37,15 +42,16 @@ services:
       status-page:
         condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
       interval: 30s
       timeout: 5s
       retries: 5
     restart: always
 
   frontend:
+    mem_limit: 64m
     build:
-      context: ./frontend/app
+      context: ./gateway-frontend/frontend
       dockerfile: Dockerfile
     container_name: frontend
     networks:
@@ -59,13 +65,19 @@ services:
       retries: 3
     restart: always
 
+
+  # ============================================================
+  # APPLICATION / MICROSERVICES
+  # ============================================================
+
   org-service:
-    build: services/org-service/.
+    mem_limit: 1g
+    build: application/org-service/.
     container_name: org-service
     environment:
       SPRING_DATASOURCE_URL: ${ORG_DATASOURCE_URL}
-      SPRING_DATASOURCE_USERNAME: ${ORG_DATASOURCE_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${ORG_DATASOURCE_PASSWORD}
+      SPRING_DATASOURCE_USERNAME: ${ORG_POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${ORG_POSTGRES_PASSWORD}
       PORT: 8082
     env_file:
       - ./.env
@@ -80,14 +92,14 @@ services:
       retries: 5
       start_period: 10s
     depends_on:
-      postgres:
+      org-service_postgres:
         condition: service_healthy
     restart: always
 
-
   chat-service:
+    mem_limit: 1g
     build:
-      context: ./services/
+      context: ./application/
       dockerfile: ./chat-service/Dockerfile
     container_name: chat-service
     environment:
@@ -110,7 +122,93 @@ services:
       - "9090" # gRPC: org-service pushes room changes here (ChatNotifyService)
     restart: always
 
+  identity-migrate:
+    build:
+      context: application/identity-service/.
+      target: migration
+    env_file:
+      - ./.env
+    networks:
+      - private
+    depends_on:
+      identity-service_postgres:
+        condition: service_healthy
+    restart: "no"
+
+  identity-service:
+    mem_limit: 512m
+    build: application/identity-service/.
+    container_name: identity-service
+    networks:
+      - private
+    expose:
+      - "8083"
+    env_file:
+      - ./.env
+    volumes:
+      - identity_avatars:/tmp/identity-avatars
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:$${IDENTITY_HTTP_PORT:-8083}/health || exit 1"]
+      interval: 20s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      identity-migrate:
+        condition: service_completed_successfully
+      identity-service_postgres:
+        condition: service_healthy
+    restart: always
+
+
+  # ============================================================
+  # DATABASES
+  # ============================================================
+
+  identity-service_postgres:
+    mem_limit: 512m
+    image: postgres:16-alpine
+    container_name: identity-service_postgres
+    environment:
+      POSTGRES_USER: ${IDENTITY_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${IDENTITY_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${IDENTITY_POSTGRES_DB}
+    volumes:
+      - database:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    restart: always
+    networks:
+      - private
+
+  org-service_postgres:
+    mem_limit: 512m
+    image: postgres:16-alpine
+    container_name: org-service_postgres
+    environment:
+      POSTGRES_USER: ${ORG_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${ORG_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${ORG_POSTGRES_DB}
+    volumes:
+      - org-service_postgres_data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    restart: always
+    networks:
+      - private
+
   mongodb:
+    mem_limit: 1g
     image: mongo:7
     container_name: mongodb
     env_file:
@@ -129,58 +227,13 @@ services:
       start_period: 10s
     restart: always
 
-  identity-service:
-    build: services/identity-service/.
-    container_name: identity-service
-    networks:
-      - private
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health/readiness"]
-      interval: 20s
-      timeout: 3s
-      retries: 5
-      start_period: 15s
-    env_file:
-      - ./.env
-    volumes:
-      - identity_avatars:/tmp/identity-avatars
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: always
 
-
-  docker-exporter:
-    container_name: docker-exporter
-    build: ./infra/docker-exporter/
-    expose:
-    - "8090"
-    volumes:
-      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
-    networks:
-    - private
-    env_file:
-    - ./.env
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://docker-exporter:8090/metrics.prom"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
-    restart: always
-
-  nginx-exporter:
-    image: nginx/nginx-prometheus-exporter:1.1.0
-    container_name: nginx-exporter
-    command:
-      - -nginx.scrape-uri=http://nginx:8080/nginx_status
-    networks:
-      - private
-    depends_on:
-      - nginx
-    restart: always
+  # ============================================================
+  # MONITORING & OBSERVABILITY
+  # ============================================================
 
   prometheus:
+    mem_limit: 512m
     container_name: prometheus
     image: prom/prometheus
     expose:
@@ -191,20 +244,24 @@ services:
       - '--web.external-url=http://localhost/prometheus/'
       - '--web.route-prefix=/'
     volumes:
-      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./infra/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
       - prometheus_data:/prometheus
     networks:
       - private
     restart: always
 
   alertmanager:
+    mem_limit: 128m
     container_name: alertmanager
     image: prom/alertmanager:latest
+    environment:
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
     volumes:
-      - ./infra/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml
-    command:
-      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - ./monitoring/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./monitoring/prometheus/start-alertmanager.sh:/etc/alertmanager/start.sh:ro
+    entrypoint: ["/bin/sh", "/etc/alertmanager/start.sh"]
+    command: ["--storage.path=/alertmanager"]
     expose:
       - "9093"
     networks:
@@ -212,7 +269,8 @@ services:
     restart: always
 
   grafana:
-    build: ./infra/grafana/
+    mem_limit: 512m
+    image: grafana/grafana:13.0.3-slim
     container_name: grafana
     expose:
       - "3000"
@@ -220,7 +278,7 @@ services:
       - private
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./infra/grafana/:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/:/etc/grafana/provisioning:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
       interval: 15s
@@ -230,40 +288,81 @@ services:
       - ./.env
     restart: always
 
-  postgres:
-    image: postgres:16-alpine
-    container_name: postgres
-    volumes:
-      - database:/var/lib/postgresql/data
-      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
-    env_file:
-      - ./.env
-    expose:
-      - "5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 15
-    restart: always
-    networks:
-      - private
-
   status-page:
+    mem_limit: 128m
     image: twinproduction/gatus:latest
     container_name: status-page
     env_file:
       - ./.env
     volumes:
-      - ./infra/status/config.yaml:/config/config.yaml:ro
+      - ./monitoring/status-page/config.yaml:/config/config.yaml:ro
     expose:
       - "8080"
     networks:
       - private
     restart: always
 
+
+  # ============================================================
+  # METRICS EXPORTERS
+  # ============================================================
+
+  nginx-exporter:
+    mem_limit: 64m
+    image: nginx/nginx-prometheus-exporter:1.1.0
+    container_name: nginx-exporter
+    command:
+      - -nginx.scrape-uri=http://nginx:80/nginx_status
+    networks:
+      - private
+    depends_on:
+      - nginx
+    restart: always
+
+  docker-exporter:
+    mem_limit: 64m
+    container_name: docker-exporter
+    build: ./monitoring/metrics-exporters/docker-exporter/
+    expose:
+    - "8090"
+    environment:
+      DOCKER_API_URL: http://docker-socket-proxy:2375
+    depends_on:
+      - docker-socket-proxy
+    networks:
+    - private
+    - docker-metrics
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://docker-exporter:8090/metrics.prom"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: always
+
+  docker-socket-proxy:
+    mem_limit: 64m
+    image: tecnativa/docker-socket-proxy:latest
+    environment:
+      CONTAINERS: 1
+      POST: 0
+      EVENTS: 0
+      PING: 0
+      VERSION: 0
+    volumes:
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+    networks:
+      - docker-metrics
+    restart: always
+
+
+  # ============================================================
+  # BACKUP & RECOVERY
+  # ============================================================
+
   backup-service:
-    build: ./infra/backup
+    mem_limit: 512m
+    build: ./databases/backup-recovery/backup-service
     container_name: backup-service
     volumes:
       - ./backups:/backups
@@ -272,15 +371,26 @@ services:
     networks:
       - private
     depends_on:
-      postgres:
+      identity-service_postgres:
+        condition: service_healthy
+      org-service_postgres:
         condition: service_healthy
       mongodb:
         condition: service_healthy
     restart: always
 
+
+# ============================================================
+# PERSISTENT VOLUMES
+# ============================================================
+
 volumes:
+  nginx_tls:
   database:
+    # Identity storage: keep the existing volume and its Compose label.
     name: "database"
+  org-service_postgres_data:
+    name: "org-service_postgres_data"
   prometheus_data:
     name: "prometheus_data"
   grafana_data:
@@ -290,6 +400,13 @@ volumes:
   mongo_data:
     name: "mongo_data"
 
+
+# ============================================================
+# NETWORKS
+# ============================================================
+
 networks:
+  docker-metrics:
+    name: docker-metrics
   private:
     name: private

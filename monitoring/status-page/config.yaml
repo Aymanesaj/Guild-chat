@@ -1,0 +1,60 @@
+storage:
+  type: memory
+
+ui:
+  title: "ft_transcendence Status"
+  header: "System Status"
+  description: "Real-time health status of microservices and infrastructure"
+
+endpoints:
+  - name: API Gateway
+    group: Core Ingress
+    url: "http://nginx:80/nginx_status"
+    interval: 10s
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Frontend UI
+    group: Core Ingress
+    url: "http://frontend:80/"
+    interval: 10s
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Identity Service
+    group: Microservices
+    url: "http://identity-service:8083/health"
+    interval: 10s
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].status == ok"
+      - "[BODY].service == identity-service"
+
+  - name: Organization Service
+    group: Microservices
+    url: "http://org-service:8082/actuator/health"
+    interval: 10s
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].status == UP"
+
+  - name: Chat Service
+    group: Microservices
+    url: "http://chat-service:8081/actuator/health"
+    interval: 10s
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Prometheus Metrics
+    group: Observability
+    url: "http://prometheus:9090/-/healthy"
+    interval: 10s
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Grafana Dashboards
+    group: Observability
+    url: "http://grafana:3000/api/health"
+    interval: 10s
+    conditions:
+      - "[STATUS] == 200"

@@ -6,16 +6,18 @@ tmp/*
 .vscode/
 *.sh
 config/
-services/chat-service/target/
+!application/**/src/**/config/
+application/chat-service/target/
 .idea/
 notes/*
 .env
+monitoring/DEVOPS*.md
 # shared with the frontend dev — must be tracked despite the *.md rule above
 # shared documentation — must be tracked despite the *.md rule above
-!services/chat-service/API_CONTRACT.md
+!application/chat-service/API_CONTRACT.md
 
 node_modules/
-frontend/app/dist/
+gateway-frontend/frontend/dist/
 
 # backup dumps directory
 backups/
@@ -25,12 +27,16 @@ certs/*
 !certs/.gitkeep
 
 # track project scripts
-!gateway/script.sh
-!scripts/*.sh
-!infra/backup/*.sh
+!gateway-frontend/gateway/script.sh
+!databases/backup-recovery/scripts/*.sh
+!databases/backup-recovery/backup-service/*.sh
 .idea/
+
 !deploy/*.md
-!infra/docker-exporter/*.sh
+!monitoring/metrics-exporters/docker-exporter/*.sh
+!monitoring/prometheus/*.sh
+!monitoring/scripts/*.sh
+!application/health.sh
 
 # track devops documentation
 !gateway/*.md
@@ -40,5 +46,11 @@ certs/*
 !docs/Frontend_report.md
 !docs/PRESENCE.md
 
+!gateway-frontend/gateway/*.md
+!databases/backup-recovery/scripts/*.md
+!docs/*.md
+.test/
 # track the root readme
 !README.md
+
+contracts/*.md
