@@ -16,6 +16,24 @@ service ChatNotifyService {
   rpc RoomChanged(RoomChangedRequest) returns (RoomChangedResponse);
 }
 
+service MemberRemovedService {
+  rpc MemberRemoved(MemberRemovedRequest) returns (MemberRemovedResponse);
+  rpc RoomRemoved(RoomRemovedRequest) returns (RoomRemovedResponse);
+}
+
+message RoomRemovedRequest {
+  string room_id = 1;
+}
+
+message RoomRemovedResponse {}
+
+message MemberRemovedRequest {
+  string room_id = 1;
+  string user_id = 2;
+}
+
+message MemberRemovedResponse {}
+
 enum RoomChange {
   ROOM_CHANGE_UNSPECIFIED = 0; // proto3 default; rejected as INVALID_ARGUMENT
   ROOM_ADDED = 1;              // the users can now see the room (created, added, new DM)

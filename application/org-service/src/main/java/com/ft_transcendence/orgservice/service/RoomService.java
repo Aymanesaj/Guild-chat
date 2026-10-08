@@ -39,6 +39,7 @@ public class RoomService {
     private final IdentityGrpcClient IdentityGrpcClient;
     private final DirectMessageCreationService directMessageCreationService;
     private final ApplicationEventPublisher events;
+	private final MemberRemovedClient memberRemovedClient;
 
     public RoomService(
             RoomRepository roomRepository, 
@@ -47,6 +48,7 @@ public class RoomService {
             MemberRoleRepository memberRoleRepository,
             IdentityGrpcClient IdentityGrpcClient,
             DirectMessageCreationService directMessageCreationService,
+            MemberRemovedClient memberRemovedClient,
             ApplicationEventPublisher events
     ) {
         this.roomRepository = roomRepository;
@@ -55,6 +57,7 @@ public class RoomService {
         this.memberRoleRepository = memberRoleRepository;
         this.IdentityGrpcClient = IdentityGrpcClient;
         this.directMessageCreationService = directMessageCreationService;
+        this.memberRemovedClient = memberRemovedClient;
         this.events = events;
     }
 
@@ -312,9 +315,12 @@ public class RoomService {
         roomMemberRepository.delete(roomMember);
         // Covers leaving and being kicked: removeMember ends up here too.
         publishRoomChange(roomId, RoomChange.ROOM_REMOVED, List.of(userId));
+		memberRemovedClient.notifyMemberRemoved(roomId, userId);
         if (removeRoom) {
             deleteRoom(roomId);
-        } else {
+			memberRemovedClient.notifyRoomRemoved(roomId);
+		}
+        else {
             publishRoomChange(roomId, RoomChange.ROOM_UPDATED, memberIds(roomId));
         }
     }
