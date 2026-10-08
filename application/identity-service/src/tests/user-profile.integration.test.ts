@@ -176,7 +176,7 @@ describe(
             method: "GET",
 
             url:
-              `/users/${targetId}`,
+              `/${targetId}`,
 
             headers: {
               authorization:
@@ -229,7 +229,7 @@ describe(
             method: "GET",
 
             url:
-              `/users/${callerId}`,
+              `/${callerId}`,
 
             headers: {
               authorization:
@@ -257,7 +257,7 @@ describe(
             method: "GET",
 
             url:
-              `/users/${randomUUID()}`,
+              `/${randomUUID()}`,
 
             headers: {
               authorization:
@@ -287,7 +287,7 @@ describe(
             method: "GET",
 
             url:
-              "/users/not-a-uuid",
+              "/not-a-uuid",
 
             headers: {
               authorization:
@@ -311,7 +311,7 @@ describe(
             method: "GET",
 
             url:
-              `/users/${targetId}`,
+              `/${targetId}`,
           });
 
 

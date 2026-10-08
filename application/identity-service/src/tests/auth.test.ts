@@ -174,7 +174,7 @@ afterAll(async () => {
 });
 
 describe(
-  "GET /users/:id",
+  "GET /:id",
   () => {
     const authenticatedUserId =
       "123e4567-e89b-12d3-a456-426614174000";
@@ -221,7 +221,7 @@ describe(
             method: "GET",
 
             url:
-              `/users/${targetUserId}`,
+              `/${targetUserId}`,
 
             headers: {
               authorization:
@@ -297,7 +297,7 @@ describe(
           method: "GET",
 
           url:
-            `/users/${targetUserId}`,
+            `/${targetUserId}`,
 
           headers: {
             authorization:
@@ -348,7 +348,7 @@ describe(
             method: "GET",
 
             url:
-              `/users/${authenticatedUserId}`,
+              `/${authenticatedUserId}`,
 
             headers: {
               authorization:
@@ -393,7 +393,7 @@ describe(
             method: "GET",
 
             url:
-              `/users/${targetUserId}`,
+              `/${targetUserId}`,
 
             headers: {
               authorization:
@@ -445,7 +445,7 @@ describe(
             method: "GET",
 
             url:
-              `/users/${targetUserId}`,
+              `/${targetUserId}`,
 
             headers: {
               authorization:
@@ -486,7 +486,7 @@ describe(
             method: "GET",
 
             url:
-              `/users/${targetUserId}`,
+              `/${targetUserId}`,
           });
 
 
@@ -513,7 +513,7 @@ describe(
             method: "GET",
 
             url:
-              `/users/${targetUserId}`,
+              `/${targetUserId}`,
 
             headers: {
               authorization:
@@ -547,7 +547,7 @@ describe(
             method: "GET",
 
             url:
-              "/users/not-a-uuid",
+              "/not-a-uuid",
 
             headers: {
               authorization:
@@ -583,7 +583,7 @@ describe(
             method: "GET",
 
             url:
-              "/users/not-a-uuid",
+              "/not-a-uuid",
           });
 
 
@@ -626,7 +626,7 @@ describe(
             method: "GET",
 
             url:
-              `/users/${targetUserId}`,
+              `/${targetUserId}`,
 
             headers: {
               authorization:
@@ -671,7 +671,7 @@ describe(
             method: "GET",
 
             url:
-              `/users/${targetUserId}`,
+              `/${targetUserId}`,
 
             headers: {
               authorization:

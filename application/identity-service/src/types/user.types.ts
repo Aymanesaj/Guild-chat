@@ -4,12 +4,16 @@ export interface UpdateUserData {
   bio?: string | null;
 }
 
+export type AuthProvider =
+  | "LOCAL"
+  | "GITHUB";
+
 export interface User {
   id: string;
   username: string;
   email: string;
   passwordHash: string | null;
-  displayName: string | null;
+  displayName: string;
   bio: string | null;
   avatarUrl: string | null;
   authProvider: string;

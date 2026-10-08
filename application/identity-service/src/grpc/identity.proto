@@ -21,6 +21,7 @@ message ValidateTokenResponse {
   string user_id = 2;
   string username = 3;
   string email = 4;
+  int64 expires_at = 5;
 }
 
 message GetUserRequest {

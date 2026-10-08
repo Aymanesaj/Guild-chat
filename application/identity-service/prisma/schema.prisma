@@ -20,21 +20,29 @@ model User {
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
 
+  refreshTokens       RefreshToken[]
+  sentFriendships     Friendship[] @relation("FriendshipRequester")
+  receivedFriendships Friendship[] @relation("FriendshipAddressee")
+
   @@unique([authProvider, oauthProviderId], map: "uk_users_oauth")
   @@map("users")
 }
 
 model RefreshToken {
-  id         String   @id @default(uuid()) @db.Uuid
-  userId     String   @map("user_id") @db.Uuid
-  tokenHash  String   @unique @map("token_hash") @db.VarChar(64)
-  expiresAt  DateTime @map("expires_at")
-  revoked    Boolean  @default(false)
-  replacedBy String?  @map("replaced_by") @db.Uuid
-  createdAt  DateTime @default(now()) @map("created_at")
+  id          String        @id @default(uuid()) @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
+  tokenHash   String        @unique @map("token_hash") @db.VarChar(64)
+  expiresAt   DateTime      @map("expires_at")
+  revoked     Boolean       @default(false)
+  replacedBy  String?       @unique @map("replaced_by") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  replacement RefreshToken? @relation("RefreshTokenRotation", fields: [replacedBy], references: [id], onDelete: SetNull)
+  replaces    RefreshToken? @relation("RefreshTokenRotation")
 
   @@index([userId], map: "idx_refresh_tokens_user")
-  @@index([tokenHash], map: "idx_refresh_tokens_hash")
   @@map("refresh_tokens")
 }
 
@@ -42,12 +50,15 @@ model Friendship {
   id          String           @id @default(uuid()) @db.Uuid
   requesterId String           @map("requester_id") @db.Uuid
   addresseeId String           @map("addressee_id") @db.Uuid
+  pairKey     String           @unique(map: "uk_friendships_pair") @map("pair_key") @db.VarChar(73)
   status      String           @default("PENDING")
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @updatedAt @map("updated_at")
 
-  @@unique([requesterId, addresseeId], map: "uk_friendships_pair")
-  @@index([requesterId], map: "idx_friendships_requester")
-  @@index([addresseeId], map: "idx_friendships_addressee")
+  requester   User             @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee   User             @relation("FriendshipAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@index([requesterId, status], map: "idx_friendships_requester_status")
+  @@index([addresseeId, status], map: "idx_friendships_addressee_status")
   @@map("friendships")
 }
