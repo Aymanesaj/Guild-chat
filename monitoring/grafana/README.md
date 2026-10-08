@@ -42,8 +42,14 @@ The dashboard provider automatically loads and continuously syncs dashboards fro
 
 | Dashboard | File | Metrics & Visualizations |
 | :--- | :--- | :--- |
-| **Microservices Overview** | `microservices-dashboard.json` | Service health status, HTTP request rates, 2xx/4xx/5xx status breakdowns, JVM heap memory, garbage collection pause times |
+| **Microservices Overview** | `microservices-dashboard.json` | Service health, firing-alert count, active alerts, HTTP request and error rates, JVM heap memory, and container CPU usage |
 | **Docker & Host Metrics** | `docker-metrics.json` | System uptime, container CPU and memory utilization, block I/O, network traffic, and container restarts |
+
+Below the service health panel, **Firing Alerts** shows the current count and
+**Active Alerts** lists pending and firing alerts with their severity and affected
+container or service. Both panels query Prometheus. A pending alert is waiting for
+its rule's duration before firing. With no active alerts, the count is `0` and the
+table displays **No data**. Silenced alerts still appear; silences mute notifications.
 
 Access Grafana at:
 ```
