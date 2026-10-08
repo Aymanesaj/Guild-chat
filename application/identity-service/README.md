@@ -24,9 +24,17 @@ template. Identity has no inline `environment` block in Compose.
   `/api/users/` prefix rewrite, so `/api/users/login` reaches `/login`.
 - Docker and Gatus check `/health`. Identity has no Actuator metrics scrape.
 
-The Prisma schema has no models yet. Client generation and database migration
-commands must be agreed with the application owner before deploying schema
-changes; the image does not run migrations automatically.
+The Prisma schema defines users, refresh tokens, and friendships. Compose runs
+the `identity-migrate` service (`prisma migrate deploy`) before starting identity.
+Its dedicated Docker build target retains the Prisma CLI; the runtime image
+contains only production dependencies. The initial migration creates the tables
+on an empty database, followed by the friendship pair-key upgrade.
+
+Run `docker compose up -d --build identity-service` from the repository root.
+If migration fails, inspect `docker compose logs identity-migrate`; identity
+will not start until migrations succeed. Existing databases created outside
+Prisma need their schema checked and migration history baselined before using
+this deployment path; do not delete stored data to bypass a migration error.
 
 ### Public gateway routes
 
@@ -80,8 +88,8 @@ Chat-service and org-service call these over the private network at
 ### Infra needs (handoff)
 
 - Compose exposes port `9090` inside the private network only.
-- The SQL below documents the previous Java data model. The application owner
-  must provide Prisma migrations and agree on their deployment with DevOps.
+- The SQL below documents the previous Java data model. Current Prisma
+  migrations live in `prisma/migrations` and are deployed by `identity-migrate`.
 
 ```sql
 CREATE TABLE refresh_tokens (

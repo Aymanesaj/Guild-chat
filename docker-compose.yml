@@ -122,6 +122,19 @@ services:
       - "9090" # gRPC: org-service pushes room changes here (ChatNotifyService)
     restart: always
 
+  identity-migrate:
+    build:
+      context: application/identity-service/.
+      target: migration
+    env_file:
+      - ./.env
+    networks:
+      - private
+    depends_on:
+      identity-service_postgres:
+        condition: service_healthy
+    restart: "no"
+
   identity-service:
     mem_limit: 512m
     build: application/identity-service/.
@@ -135,6 +148,8 @@ services:
     volumes:
       - identity_avatars:/tmp/identity-avatars
     depends_on:
+      identity-migrate:
+        condition: service_completed_successfully
       identity-service_postgres:
         condition: service_healthy
     restart: always
