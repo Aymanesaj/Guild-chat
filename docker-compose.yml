@@ -27,8 +27,8 @@ services:
     depends_on:
       frontend:
         condition: service_healthy
-      # identity-service:
-      #   condition: service_healthy
+      identity-service:
+        condition: service_healthy
       chat-service:
         condition: service_healthy
       org-service:
@@ -147,6 +147,12 @@ services:
       - ./.env
     volumes:
       - identity_avatars:/tmp/identity-avatars
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:$${IDENTITY_HTTP_PORT:-8083}/health || exit 1"]
+      interval: 20s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     depends_on:
       identity-migrate:
         condition: service_completed_successfully

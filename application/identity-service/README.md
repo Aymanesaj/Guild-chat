@@ -118,6 +118,12 @@ CREATE INDEX idx_friendships_addressee ON friendships(addressee_id);
 
 ### Local development
 
+GitHub Actions runs identity checks directly in `.github/workflows/ci-cd.yml`:
+start a temporary PostgreSQL database, install dependencies, generate Prisma,
+apply migrations, run the existing `src/tests` tests, and build the service.
+Docker Compose checks the existing `/health` endpoint, and Nginx waits for that
+check to pass. This healthcheck verifies the HTTP server is responding.
+
 From `application/identity-service`:
 
 ```sh

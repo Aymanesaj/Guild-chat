@@ -66,6 +66,60 @@ jobs:
         run: ./mvnw test -q
 
   # -------------------------------------------------------------
+  # IDENTITY: Node.js Tests & Build
+  # -------------------------------------------------------------
+  identity-tests:
+    name: Identity Tests & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: application/identity-service
+    env:
+      DATABASE_URL: postgresql://identity_ci:identity_ci@localhost:5432/identity_ci
+      JWT_SECRET: identity-ci-only-secret-never-use-in-production
+      AVATAR_DIR: /tmp/identity-ci-avatars
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: identity_ci
+          POSTGRES_PASSWORD: identity_ci
+          POSTGRES_DB: identity_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U identity_ci -d identity_ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: application/identity-service/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run generate
+
+      - name: Apply database migrations
+        run: npx prisma migrate deploy --config prisma7.config.ts
+
+      - name: Run existing tests
+        run: npm test -- src/tests
+
+      - name: Build service
+        run: npm run build
+
+  # -------------------------------------------------------------
   # 3. DOCKER: Compose Configuration Validation
   # -------------------------------------------------------------
   validate-compose:
@@ -86,7 +140,7 @@ jobs:
   # -------------------------------------------------------------
   # deploy:
   #   name: Deploy to OCI VM
-  #   needs: [frontend-lint-and-build, backend-tests, validate-compose]
+  #   needs: [frontend-lint-and-build, backend-tests, identity-tests, validate-compose]
   #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
   #   runs-on: ubuntu-latest
   #   concurrency:
@@ -118,4 +172,3 @@ jobs:
   #             echo "ERROR: ~/ft_transcendence not found on VM!"
   #             exit 1
   #           fi
-
