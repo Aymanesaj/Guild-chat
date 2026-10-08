@@ -7,12 +7,32 @@ remove plugins from the final image. There is no custom Grafana build now.
 
 ## Datasource Auto-Provisioning (`datasources/prometheus.yml`)
 
-Grafana is preconfigured to automatically link with the internal Prometheus service without manual UI setup:
-- **Datasource Name:** `Prometheus`
-- **Type:** `prometheus`
-- **URL:** `http://prometheus:9090`
-- **Access Mode:** `proxy` (internal server-to-server communication)
-- **Editable:** `false` (enforces immutable infrastructure)
+Grafana connects to both services automatically:
+
+| Data source | URL | Purpose |
+| --- | --- | --- |
+| **Prometheus** (default) | `http://prometheus:9090` | Metrics, dashboards, and alert state history |
+| **Alertmanager** | `http://alertmanager:9093` | Notification policies, contact points, and silences |
+
+Both connections use server access (`proxy`) over the private Docker network.
+Their settings are managed in `datasources/prometheus.yml`.
+
+After updating this file on a running installation, reload it by restarting Grafana:
+
+```bash
+docker compose restart grafana
+```
+
+In Grafana's **Alerting** section, open **Silences**, **Contact points**, or
+**Notification policies** and select **Alertmanager** in the **Choose Alertmanager**
+menu. Silences temporarily mute notifications, for example during maintenance.
+Contact points and notification policies are read-only for Prometheus Alertmanager;
+edit `monitoring/prometheus/alertmanager.yml` to change them.
+
+Prometheus continues evaluating the rules in `monitoring/prometheus/alert_rules.yml`.
+Receiving Grafana-managed alerts is disabled for this data source. For dashboard
+panels showing firing alerts, query `ALERTS{alertstate="firing"}` through Prometheus.
+See the [Grafana Alertmanager documentation](https://grafana.com/docs/grafana/latest/datasources/alertmanager/).
 
 ---
 
