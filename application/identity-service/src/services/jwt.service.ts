@@ -17,23 +17,16 @@ const JWT_ISSUER = process.env.JWT_ISSUER ?? "ft-transcendence";
 
 const JWT_TTL_SECONDS = Number(process.env.JWT_TTL_SECONDS ?? 900);
 
-interface JwtUser {
-  id: string;
-  username: string;
-  email: string;
-}
 
-export function issueAccessToken(user: JwtUser): string {
+
+export function issueAccessToken(userId: string): string {
   return jwt.sign(
-    {
-      username: user.username,
-      email: user.email,
-    },
+    {},
     JWT_SECRET,
     {
       algorithm: "HS256",
       issuer: JWT_ISSUER,
-      subject: user.id,
+      subject: userId,
       expiresIn: JWT_TTL_SECONDS,
     },
   );

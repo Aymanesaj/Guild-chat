@@ -915,11 +915,6 @@ verified answer — this happened often enough with configuration to be a workin
 
 - **GitHub OAuth is not implemented in the Node identity service.** The schema and
   `.env.example` retain provider fields and credentials, but there are no OAuth routes.
-- **Frontend logout needs API alignment.** The client posts to `/auth/logout` without
-  the required `refreshToken` body, then clears local tokens. Backend revocation
-  requires that body, or a bearer-authenticated call to `/auth/logout-all`.
-- **Cancelling outgoing friend requests is not implemented.** The frontend calls
-  `DELETE /friends/{userId}`, but the current backend only removes accepted friendships.
 - **Identity monitoring is limited to health and container metrics.** `/health` checks
   that Fastify responds; it does not probe PostgreSQL or expose Prometheus metrics.
 - **Identity gRPC configuration differs between server and clients.** The Node listener

@@ -191,11 +191,7 @@ describe("Identity gRPC server", () => {
       avatarUrl: null,
     });
 
-    const token = issueAccessToken({
-      id: userId,
-      username: "obendaou",
-      email: "oumaima@example.com",
-    });
+    const token = issueAccessToken(userId);
 
     const decoded = jwt.decode(token);
 
