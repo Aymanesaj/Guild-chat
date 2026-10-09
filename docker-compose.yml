@@ -269,7 +269,7 @@ services:
     restart: always
 
   grafana:
-    mem_limit: 512m
+    mem_limit: 1g
     image: grafana/grafana:13.0.3-slim
     container_name: grafana
     expose:

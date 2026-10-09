@@ -50,9 +50,9 @@ nano .env
 # Set DOMAIN in .env (bare hostname, e.g. example.com).
 # Read the resolved value without sourcing the whole .env as shell code.
 DOMAIN=$(docker compose config --format json | jq -r '.services.nginx.environment.DOMAIN')
-# Point DOMAIN, www.DOMAIN and status.DOMAIN DNS records at the VM first.
+# Point DOMAIN and status.DOMAIN DNS records at the VM first (see below).
 # Port 80 must be available for Certbot's standalone challenge.
-sudo certbot certonly --standalone --cert-name "$DOMAIN" -d "$DOMAIN" -d "www.$DOMAIN" -d "status.$DOMAIN"
+sudo certbot certonly --standalone --cert-name "$DOMAIN" -d "$DOMAIN" -d "status.$DOMAIN"
 docker compose build nginx
 NGINX_GID=$(docker compose run --rm --no-deps --entrypoint id nginx -g)
 sudo install -m 644 "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" certs/fullchain.pem
@@ -71,6 +71,70 @@ not by all local users. Repeat the install commands after certificate renewal,
 then restart Nginx. The same permissions apply to a custom `server.key`.
 If you skip trusted certificates, the gateway reuses a self-signed certificate
 from the `nginx_tls` volume; browsers still need to trust it explicitly.
+
+### Status page DNS and certificate
+
+Set `DOMAIN=guild-chat.tech` in the VM's `.env`. The gateway redirects
+`https://guild-chat.tech/status` to `https://status.guild-chat.tech/`.
+The status hostname needs its own DNS record and must be covered by the certificate.
+
+In the DNS panel for your domain, point these records at the VM's public IPv4 address:
+
+| Type | Name / Host | Value |
+| --- | --- | --- |
+| A | `@` | VM public IPv4 address |
+| A | `status` | VM public IPv4 address |
+
+If you also use `www`, add an A record for `www` and include `-d "www.$DOMAIN"`
+in the certificate request. Every requested hostname must resolve to the VM.
+Wait for DNS caches to refresh, then check on the VM:
+
+```bash
+getent ahostsv4 guild-chat.tech
+getent ahostsv4 status.guild-chat.tech
+```
+
+"Server not found" or `NXDOMAIN` means DNS has not resolved the hostname.
+Rebuilding Docker containers does not create public DNS records.
+
+To add the status hostname to an existing certificate, run on the VM:
+
+```bash
+cd ~/ft_transcendence
+DOMAIN=$(docker compose config --format json | jq -r '.services.nginx.environment.DOMAIN')
+sudo certbot certificates
+```
+
+Use the listed **Certificate Name** for `CERT_NAME` below. When expanding a
+certificate, keep all its existing domains in the request and add the status
+hostname. For a certificate currently covering only the main domain:
+
+```bash
+CERT_NAME="$DOMAIN"
+NGINX_GID=$(docker compose exec -T nginx id -g)
+docker compose stop nginx
+
+sudo certbot certonly --standalone --cert-name "$CERT_NAME" --expand \
+    -d "$DOMAIN" -d "status.$DOMAIN"
+```
+
+Standalone validation uses port 80, which must be reachable from the Internet.
+The website is briefly offline while Nginx is stopped. If Certbot fails, run
+`docker compose start nginx` to restore the website before troubleshooting.
+See the [Certbot documentation](https://eff-certbot.readthedocs.io/en/stable/using.html#re-creating-and-updating-existing-certificates).
+
+After Certbot succeeds, copy the new files into the gateway's mounted directory:
+
+```bash
+sudo install -m 644 "/etc/letsencrypt/live/$CERT_NAME/fullchain.pem" certs/fullchain.pem
+sudo install -m 640 -o root -g "$NGINX_GID" "/etc/letsencrypt/live/$CERT_NAME/privkey.pem" certs/privkey.pem
+docker compose start nginx
+curl -I "https://status.$DOMAIN"
+```
+
+The gateway's startup script copies these mounted files into its TLS volume.
+Updating only `/etc/letsencrypt/live/` does not update the certificate it serves;
+repeat the copy and restart steps after renewal.
 
 ---
 
@@ -119,4 +183,3 @@ Docker contexts exclude environment files, certificates, private keys, and backu
 
 - [`setup-vm.sh`](setup-vm.sh): Installs Docker, Compose, configures Docker log rotation, and opens local OS-level firewall ports.
 - [`deploy.sh`](deploy.sh): Verifies the supplied tested SHA and clean checkout, rebuilds containers, prunes dangling images, and checks status. Called over SSH when the deployment job is enabled.
-
