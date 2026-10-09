@@ -1,34 +1,36 @@
 package com.ft_transcendence.orgservice.service;
 
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.ft_transcendence.orgservice.repository.RoomRepository;
+
+import com.ft_transcendence.orgservice.client.IdentityGrpcClient;
 import com.ft_transcendence.orgservice.dto.CreateRoomRequest;
+import com.ft_transcendence.orgservice.dto.MemberResponse;
 import com.ft_transcendence.orgservice.dto.RoomResponse;
-import com.ft_transcendence.orgservice.model.RoomType;
-import com.ft_transcendence.orgservice.model.Room;
+import com.ft_transcendence.orgservice.dto.UpdateRoomRequest;
 import com.ft_transcendence.orgservice.exception.BadRequestException;
-import com.ft_transcendence.orgservice.repository.RoomMemberRepository;
-import com.ft_transcendence.orgservice.repository.RoleRepository;
-import com.ft_transcendence.orgservice.repository.MemberRoleRepository;
+import com.ft_transcendence.orgservice.exception.ForbiddenException;
+import com.ft_transcendence.orgservice.exception.NotFoundException;
+import com.ft_transcendence.orgservice.model.MemberRole;
 import com.ft_transcendence.orgservice.model.Role;
 import com.ft_transcendence.orgservice.model.RoleName;
+import com.ft_transcendence.orgservice.model.Room;
 import com.ft_transcendence.orgservice.model.RoomMember;
-import com.ft_transcendence.orgservice.model.MemberRole;
-import com.ft_transcendence.orgservice.exception.NotFoundException;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-import com.ft_transcendence.orgservice.exception.ForbiddenException;
-import com.ft_transcendence.orgservice.dto.MemberResponse;
-import com.ft_transcendence.orgservice.dto.UpdateRoomRequest;
-import com.ft_transcendence.orgservice.client.IdentityGrpcClient;
+import com.ft_transcendence.orgservice.model.RoomType;
+import com.ft_transcendence.orgservice.repository.MemberRoleRepository;
+import com.ft_transcendence.orgservice.repository.RoleRepository;
+import com.ft_transcendence.orgservice.repository.RoomMemberRepository;
+import com.ft_transcendence.orgservice.repository.RoomRepository;
 import com.fttranscendence.chat.grpc.RoomChange;
-import java.util.Collection;
-import java.util.Set;
-import java.util.stream.Collectors;
-import org.springframework.context.ApplicationEventPublisher;
 
 @Service
 public class RoomService {
@@ -39,16 +41,14 @@ public class RoomService {
     private final IdentityGrpcClient IdentityGrpcClient;
     private final DirectMessageCreationService directMessageCreationService;
     private final ApplicationEventPublisher events;
-	private final MemberRemovedClient memberRemovedClient;
 
     public RoomService(
-            RoomRepository roomRepository, 
-            RoomMemberRepository roomMemberRepository, 
-            RoleRepository roleRepository, 
+            RoomRepository roomRepository,
+            RoomMemberRepository roomMemberRepository,
+            RoleRepository roleRepository,
             MemberRoleRepository memberRoleRepository,
             IdentityGrpcClient IdentityGrpcClient,
             DirectMessageCreationService directMessageCreationService,
-            MemberRemovedClient memberRemovedClient,
             ApplicationEventPublisher events
     ) {
         this.roomRepository = roomRepository;
@@ -57,7 +57,6 @@ public class RoomService {
         this.memberRoleRepository = memberRoleRepository;
         this.IdentityGrpcClient = IdentityGrpcClient;
         this.directMessageCreationService = directMessageCreationService;
-        this.memberRemovedClient = memberRemovedClient;
         this.events = events;
     }
 
@@ -269,7 +268,7 @@ public class RoomService {
 
     @Transactional
     public void removeMember(Long roomId, UUID actorId, UUID targetUserId) {
-        
+
         roomRepository.findById(roomId)
                 .orElseThrow(() ->
                         new NotFoundException("Room not found with id: " + roomId)
@@ -297,7 +296,7 @@ public class RoomService {
                                 "User is not a member of this room"
                         )
                 );
-        
+
         boolean removeRoom = false;
 
         if (memberRoleRepository
@@ -315,10 +314,8 @@ public class RoomService {
         roomMemberRepository.delete(roomMember);
         // Covers leaving and being kicked: removeMember ends up here too.
         publishRoomChange(roomId, RoomChange.ROOM_REMOVED, List.of(userId));
-		memberRemovedClient.notifyMemberRemoved(roomId, userId);
         if (removeRoom) {
             deleteRoom(roomId);
-			memberRemovedClient.notifyRoomRemoved(roomId);
 		}
         else {
             publishRoomChange(roomId, RoomChange.ROOM_UPDATED, memberIds(roomId));
@@ -389,7 +386,7 @@ public class RoomService {
         List<RoomMember> roomMembers = roomMemberRepository.findByUserId(userId);
         return roomMembers.stream()
                 .filter(roomMember -> roomMember.getRoom().getType() != RoomType.DM) // Exclude DM rooms
-                .map(roomMember -> new RoomResponse(roomMember.getRoom().getId(), 
+                .map(roomMember -> new RoomResponse(roomMember.getRoom().getId(),
                             roomMember.getRoom().getName(), roomMember.getRoom().getCreatedAt(),
                             roomMember.getRoom().getType(), roomMember.getRoom().getUpdatedAt(),
                             null))
@@ -461,7 +458,7 @@ public class RoomService {
             throw new NotFoundException("Target user not found with id: " + targetUserId);
         }
 
-        try 
+        try
         {
             RoomResponse created = directMessageCreationService.createDirectMessageRoom(
                     dmUser1,
@@ -501,7 +498,7 @@ public class RoomService {
         room.setName(request.name());
         room.setType(RoomType.GROUP);
         Room savedRoom = roomRepository.save(room);
-        
+
         // Create default roles for the room
         // Create ADMIN role
         Role adminRole = new Role();

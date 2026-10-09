@@ -1,3 +1,4 @@
+
 syntax = "proto3";
 
 package chat;
@@ -6,28 +7,35 @@ option java_multiple_files = true;
 option java_package = "com.fttranscendence.chat.grpc";
 option java_outer_classname = "ChatProto";
 
-// Served by chat-service, called by org-service. The same file lives in both
-// services; keep the copies identical.
-//
-// org owns rooms and memberships but has no connection to the browser. When a
-// room changes, org tells chat who is affected, and chat pushes a frame down
-// those users' /ws/chat sockets so their room lists update without a refresh.
 service ChatNotifyService {
+  // Notify connected users about room changes.
   rpc RoomChanged(RoomChangedRequest) returns (RoomChangedResponse);
+
+  // Delete all chat data associated with a deleted room.
+  rpc DeleteRoom(DeleteRoomRequest) returns (DeleteRoomResponse);
 }
 
 enum RoomChange {
-  ROOM_CHANGE_UNSPECIFIED = 0; // proto3 default; rejected as INVALID_ARGUMENT
-  ROOM_ADDED = 1;              // the users can now see the room (created, added, new DM)
-  ROOM_REMOVED = 2;            // the users can no longer see it (left, kicked, room deleted)
-  ROOM_UPDATED = 3;            // still visible, but its name, members or roles changed
+  ROOM_CHANGE_UNSPECIFIED = 0;
+  ROOM_ADDED = 1;
+  ROOM_REMOVED = 2;
+  ROOM_UPDATED = 3;
 }
 
 message RoomChangedRequest {
-  string room_id = 1;            // a number, as a string like every id in org.proto
+  string room_id = 1;
   RoomChange change = 2;
-  repeated string user_ids = 3;  // who to tell; users with no open socket are skipped
+  repeated string user_ids = 3;
 }
 
 message RoomChangedResponse {
+}
+
+message DeleteRoomRequest {
+  string room_id = 1;
+}
+
+message DeleteRoomResponse {
+  // Number of messages deleted, if useful for logging.
+  int64 deleted_messages = 1;
 }
