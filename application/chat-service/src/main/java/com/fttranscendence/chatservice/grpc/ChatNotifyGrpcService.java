@@ -62,7 +62,25 @@ public class ChatNotifyGrpcService
                             .asRuntimeException());
             return;
         }
-
+        // dELETE a message if the room is removed
+        if(event == RoomChange.ROOM_REMOVED.toString()) {
+                try {
+                        long deletedMessages = messageRepository.deleteByRoomId(roomId.toString());
+                        log.info(
+                                "Deleted chat messages for room={} count={}",
+                                roomId,
+                                deletedMessages);
+                }catch(Exception e) {
+                        log.error("Failed to delete chat messages from room={}", roomId, e);
+                        responseObserver.onError(
+                                Status.INTERNAL
+                                        .withDescription(
+                                                "Failed to delete room messages")
+                                        .withCause(e)
+                                        .asRuntimeException());
+                        return;
+                }
+        }
         roomMembers.invalidate(roomId);
 
         Map<String, Object> data = Map.of("room_id", roomId);
