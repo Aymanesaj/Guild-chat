@@ -102,10 +102,189 @@
     {
       "collapsed": false,
       "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 6
+      },
+      "id": 6,
+      "title": "Firing Alerts",
+      "description": "Number of alerts currently firing in Prometheus, including silenced alerts. Zero means no alerts are firing.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "min": 0,
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      }
+    },
+    {
+      "gridPos": {
+        "h": 6,
+        "w": 18,
+        "x": 6,
+        "y": 6
+      },
+      "id": 7,
+      "title": "Active Alerts",
+      "description": "Current pending and firing alerts from Prometheus. An empty table means no active alerts. Silenced alerts still appear because silences mute notifications in Alertmanager.",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "ALERTS",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "__name__": true
+            },
+            "indexByName": {
+              "alertname": 0,
+              "alertstate": 1,
+              "severity": 2,
+              "container": 3,
+              "job": 4,
+              "instance": 5
+            },
+            "renameByName": {
+              "alertname": "Alert",
+              "alertstate": "State",
+              "severity": "Severity",
+              "container": "Container",
+              "job": "Service",
+              "instance": "Instance"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "State"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "pending": {
+                        "color": "yellow",
+                        "index": 0,
+                        "text": "Pending"
+                      },
+                      "firing": {
+                        "color": "red",
+                        "index": 1,
+                        "text": "Firing"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "State",
+            "desc": false
+          }
+        ]
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 6
+        "y": 12
       },
       "id": 2,
       "title": "HTTP Request Rate (req/sec)",
@@ -142,7 +321,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 6
+        "y": 12
       },
       "id": 3,
       "title": "HTTP 5xx Error Rate by Service",
@@ -181,7 +360,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 14
+        "y": 20
       },
       "id": 4,
       "title": "JVM Heap Memory Usage (MB)",
@@ -218,7 +397,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 14
+        "y": 20
       },
       "id": 5,
       "title": "Microservice Container CPU Usage (%)",

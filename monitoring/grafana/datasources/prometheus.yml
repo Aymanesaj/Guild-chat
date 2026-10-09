@@ -11,6 +11,17 @@ datasources:
     isDefault: true
     editable: false
 
+  - name: Alertmanager
+    type: alertmanager
+    uid: alertmanager
+    access: proxy
+    url: http://alertmanager:9093
+    isDefault: false
+    editable: false
+    jsonData:
+      implementation: prometheus
+      handleGrafanaManagedAlerts: false
+
 deleteDatasources:
   - name: loki
     orgId: 1
