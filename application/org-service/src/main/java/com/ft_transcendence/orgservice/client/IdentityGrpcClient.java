@@ -1,15 +1,17 @@
 package com.ft_transcendence.orgservice.client;
 
+import java.util.UUID;
+
+import org.springframework.stereotype.Component;
+
 import com.fttranscendence.identity.grpc.GetUserRequest;
 import com.fttranscendence.identity.grpc.IdentityServiceGrpc;
 import com.fttranscendence.identity.grpc.UserResponse;
 import com.fttranscendence.identity.grpc.ValidateTokenRequest;
 import com.fttranscendence.identity.grpc.ValidateTokenResponse;
+
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
-import org.springframework.stereotype.Component;
-
-import java.util.UUID;
 
 @Component
 public class IdentityGrpcClient {

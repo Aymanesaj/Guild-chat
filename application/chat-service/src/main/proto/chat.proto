@@ -10,9 +10,6 @@ option java_outer_classname = "ChatProto";
 service ChatNotifyService {
   // Notify connected users about room changes.
   rpc RoomChanged(RoomChangedRequest) returns (RoomChangedResponse);
-
-  // Delete all chat data associated with a deleted room.
-  rpc DeleteRoom(DeleteRoomRequest) returns (DeleteRoomResponse);
 }
 
 enum RoomChange {
@@ -29,13 +26,4 @@ message RoomChangedRequest {
 }
 
 message RoomChangedResponse {
-}
-
-message DeleteRoomRequest {
-  string room_id = 1;
-}
-
-message DeleteRoomResponse {
-  // Number of messages deleted, if useful for logging.
-  int64 deleted_messages = 1;
 }

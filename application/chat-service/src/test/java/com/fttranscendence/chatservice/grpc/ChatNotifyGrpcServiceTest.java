@@ -9,8 +9,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Map;
@@ -21,8 +19,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.fttranscendence.chat.grpc.ChatNotifyServiceGrpc;
-import com.fttranscendence.chat.grpc.DeleteRoomRequest;
-import com.fttranscendence.chat.grpc.DeleteRoomResponse;
 import com.fttranscendence.chat.grpc.RoomChange;
 import com.fttranscendence.chat.grpc.RoomChangedRequest;
 import com.fttranscendence.chatservice.repository.MessageRepository;
@@ -183,79 +179,4 @@ class ChatNotifyGrpcServiceTest {
                 any());
     }
 
-    // DeleteRoom tests
-
-    @Test
-    @DisplayName("DeleteRoom deletes messages and invalidates the cache")
-    void deleteRoomDeletesMessages() {
-        when(messageRepository.deleteByRoomId("7"))
-                .thenReturn(3L);
-
-        DeleteRoomResponse response = stub.deleteRoom(
-                DeleteRoomRequest.newBuilder()
-                        .setRoomId("7")
-                        .build());
-
-        assertThat(response.getDeletedMessages()).isEqualTo(3L);
-
-        verify(messageRepository).deleteByRoomId("7");
-        verify(roomMembers).invalidate(7L);
-        verifyNoInteractions(sockets);
-    }
-
-    @Test
-    @DisplayName("DeleteRoom succeeds when the room has no messages")
-    void deleteRoomWithNoMessages() {
-        when(messageRepository.deleteByRoomId("7"))
-                .thenReturn(0L);
-
-        DeleteRoomResponse response = stub.deleteRoom(
-                DeleteRoomRequest.newBuilder()
-                        .setRoomId("7")
-                        .build());
-
-        assertThat(response.getDeletedMessages()).isZero();
-
-        verify(messageRepository).deleteByRoomId("7");
-        verify(roomMembers).invalidate(7L);
-    }
-
-    @Test
-    @DisplayName("DeleteRoom rejects an empty room ID")
-    void deleteRoomRejectsEmptyId() {
-        assertThatThrownBy(() ->
-                stub.deleteRoom(
-                        DeleteRoomRequest.newBuilder()
-                                .setRoomId("")
-                                .build()))
-                .isInstanceOfSatisfying(
-                        StatusRuntimeException.class,
-                        e -> assertThat(e.getStatus().getCode())
-                                .isEqualTo(Status.Code.INVALID_ARGUMENT));
-
-        verifyNoInteractions(messageRepository);
-        verify(roomMembers, never()).invalidate(anyLong());
-        verifyNoInteractions(sockets);
-    }
-
-    @Test
-    @DisplayName("DeleteRoom reports repository failures")
-    void deleteRoomReportsRepositoryFailure() {
-        when(messageRepository.deleteByRoomId("7"))
-                .thenThrow(
-                        new RuntimeException("Database unavailable"));
-
-        assertThatThrownBy(() ->
-                stub.deleteRoom(
-                        DeleteRoomRequest.newBuilder()
-                                .setRoomId("7")
-                                .build()))
-                .isInstanceOfSatisfying(
-                        StatusRuntimeException.class,
-                        e -> assertThat(e.getStatus().getCode())
-                                .isEqualTo(Status.Code.INTERNAL));
-
-        verify(messageRepository).deleteByRoomId("7");
-        verify(roomMembers, never()).invalidate(anyLong());
-    }
 }

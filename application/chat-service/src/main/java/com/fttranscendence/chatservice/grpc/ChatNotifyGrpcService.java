@@ -8,8 +8,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.fttranscendence.chat.grpc.ChatNotifyServiceGrpc;
-import com.fttranscendence.chat.grpc.DeleteRoomRequest;
-import com.fttranscendence.chat.grpc.DeleteRoomResponse;
 import com.fttranscendence.chat.grpc.RoomChange;
 import com.fttranscendence.chat.grpc.RoomChangedRequest;
 import com.fttranscendence.chat.grpc.RoomChangedResponse;
@@ -97,63 +95,6 @@ public class ChatNotifyGrpcService
         responseObserver.onNext(
                 RoomChangedResponse.getDefaultInstance());
         responseObserver.onCompleted();
-    }
-
-    /**
-     * Deletes all chat messages belonging to a room deleted by org-service.
-     * The actual room remains the responsibility of org-service.
-     */
-    @Override
-    public void deleteRoom(
-            DeleteRoomRequest request,
-            StreamObserver<DeleteRoomResponse> responseObserver) {
-
-        String roomId = request.getRoomId();
-
-        if (roomId.isBlank()) {
-            responseObserver.onError(
-                    Status.INVALID_ARGUMENT
-                            .withDescription("room_id must not be empty")
-                            .asRuntimeException());
-            return;
-        }
-
-        try {
-            long deletedMessages =
-                    messageRepository.deleteByRoomId(roomId);
-
-            Long numericRoomId = parseRoomId(roomId);
-
-            if (numericRoomId != null) {
-                roomMembers.invalidate(numericRoomId);
-            }
-
-            DeleteRoomResponse response =
-                    DeleteRoomResponse.newBuilder()
-                            .setDeletedMessages(deletedMessages)
-                            .build();
-
-            log.info(
-                    "Deleted chat messages for room={} count={}",
-                    roomId,
-                    deletedMessages);
-
-            responseObserver.onNext(response);
-            responseObserver.onCompleted();
-
-        } catch (Exception e) {
-            log.error(
-                    "DeleteRoom failed for room={}",
-                    roomId,
-                    e);
-
-            responseObserver.onError(
-                    Status.INTERNAL
-                            .withDescription(
-                                    "Failed to delete room messages")
-                            .withCause(e)
-                            .asRuntimeException());
-        }
     }
 
     /**

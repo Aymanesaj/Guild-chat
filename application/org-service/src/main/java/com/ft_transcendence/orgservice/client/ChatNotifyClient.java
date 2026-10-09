@@ -14,8 +14,6 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 import com.ft_transcendence.orgservice.service.RoomChangedEvent;
 import com.fttranscendence.chat.grpc.ChatNotifyServiceGrpc;
-import com.fttranscendence.chat.grpc.DeleteRoomRequest;
-import com.fttranscendence.chat.grpc.DeleteRoomResponse;
 import com.fttranscendence.chat.grpc.RoomChangedRequest;
 import com.fttranscendence.chat.grpc.RoomChangedResponse;
 
@@ -104,44 +102,7 @@ public class ChatNotifyClient {
                 });
     }
 
-    /**
-     * Request deletion of all chat messages associated with a room.
-     *
-     * This method returns immediately. The result is handled asynchronously.
-     */
-    public void deleteRoom(String roomId) {
 
-        DeleteRoomRequest request = DeleteRoomRequest.newBuilder()
-                .setRoomId(roomId)
-                .build();
-
-        stub.withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
-                .deleteRoom(request, new StreamObserver<>() {
-
-                    @Override
-                    public void onNext(DeleteRoomResponse response) {
-                        log.info(
-                                "chat-service deleted room={} messages={}",
-                                roomId,
-                                response.getDeletedMessages());
-                    }
-
-                    @Override
-                    public void onError(Throwable error) {
-                        log.error(
-                                "chat-service DeleteRoom failed for room={}: {}",
-                                roomId,
-                                error.toString());
-                    }
-
-                    @Override
-                    public void onCompleted() {
-                        log.debug(
-                                "chat-service DeleteRoom completed for room={}",
-                                roomId);
-                    }
-                });
-    }
 
     @PreDestroy
     void shutdown() {
