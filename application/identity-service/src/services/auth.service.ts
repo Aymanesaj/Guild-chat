@@ -37,7 +37,7 @@ export async function registerUser(
     displayName,
   });
 
-  const accessToken = issueAccessToken(user);
+  const accessToken = issueAccessToken(user.id);
 
   const refreshToken = await issueRefreshToken(user.id);
 
@@ -67,7 +67,7 @@ export async function loginUser(
 
   if (!passwordMatchs) throw new UnauthorizedError("Invalid credentials");
 
-  const accessToken = issueAccessToken(user);
+  const accessToken = issueAccessToken(user.id);
 
   const refreshToken = await issueRefreshToken(user.id);
   return {
@@ -89,7 +89,7 @@ export async function refreshSession(
     throw new UnauthorizedError("Invalid refresh token");
   }
 
-  const accessToken = issueAccessToken(user);
+  const accessToken = issueAccessToken(user.id);
 
   return {
     tokenType: 'Bearer',
