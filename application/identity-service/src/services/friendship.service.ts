@@ -133,9 +133,6 @@ export async function removeFriend(
     throw new NotFoundError("Friendship not found");
   }
 
-  if (friendship.status !== "ACCEPTED") {
-    throw new ConflictError("Users are not friends");
-  }
 
   await deleteFriendshipById(friendship.id);
 }
