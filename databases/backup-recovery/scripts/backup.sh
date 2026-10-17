@@ -50,7 +50,7 @@ docker exec -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" identity-service_postg
 echo "  -> Created: ${PG_FILE} ($(du -h "$PG_FILE" | cut -f1))"
 
 echo "Dumping PostgreSQL ('${ORG_POSTGRES_DB}')..."
-docker exec -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" org-service_postgres \
+docker exec -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" identity-service_postgres \
     pg_dump -h /var/run/postgresql -U "$ORG_POSTGRES_USER" --clean --if-exists --format=p "$ORG_POSTGRES_DB" | gzip -9 > "$ORG_FILE"
 echo "  -> Created: ${ORG_FILE} ($(du -h "$ORG_FILE" | cut -f1))"
 
