@@ -242,8 +242,18 @@ token, with `ON DELETE SET NULL`. Declining a pending request deletes its friend
 
 ### PostgreSQL — `org_service_db` (owned by org-service)
 
-Runs in `org-service_postgres`, using its own `org-service_postgres_data` volume.
-Identity and org use separate databases and credentials configured in the root `.env`.
+Runs alongside identity in `identity-service_postgres`, using the shared `database` volume.
+Identity and org use separate databases with credentials configured in the root `.env`.
+The [initialization script](databases/postgres/init-org.sh) creates the organization
+role and database on a fresh volume. For an existing identity volume, run it once:
+
+```bash
+docker compose exec -T identity-service_postgres sh /docker-entrypoint-initdb.d/10-init-org.sh
+```
+
+This creates missing objects without overwriting existing data. It does not copy
+an old organization database; migrate that data before switching hosts if needed.
+If both services use the same PostgreSQL role, configure the same password for both.
 
 | Table | Key fields | Notes |
 |---|---|---|
@@ -420,9 +430,9 @@ change the defaults before any deployment.
 | Group | Keys | Notes |
 |---|---|---|
 | Gateway / WAF | `DOMAIN`; `MODSEC_RULE_ENGINE`, `PARANOIA`, `BLOCKING_PARANOIA` in Compose | Compose currently sets blocking mode and paranoia 1 directly in Nginx's environment; changing only `.env` does not override those values. |
-| PostgreSQL | `IDENTITY_POSTGRES_*`, `ORG_POSTGRES_*` | Separate host, port, user, password and database settings for each service. Keep `DATABASE_URL` and `ORG_DATASOURCE_URL` aligned with these values. |
+| PostgreSQL | `IDENTITY_POSTGRES_*`, `ORG_POSTGRES_*` | Both hosts point to `identity-service_postgres:5432`; database names remain separate. Keep `DATABASE_URL` and `ORG_DATASOURCE_URL` aligned with these values. |
 | Identity runtime | `IDENTITY_HTTP_PORT`, `GRPC_PORT`, `AVATAR_DIR`, `DATABASE_URL` | Fastify defaults to 8083; the gRPC server reads `GRPC_PORT` and defaults to 9090. `IDENTITY_GRPC_PORT` configures chat's client; org currently hardcodes 9090. Keep these ports aligned and use `/tmp/identity-avatars` for the mounted volume. |
-| Org datasource | `ORG_DATASOURCE_URL`, `ORG_POSTGRES_USER`, `ORG_POSTGRES_PASSWORD` | Mapped to org's Spring datasource variables by Compose; connects to `org-service_postgres:5432`. |
+| Org datasource | `ORG_DATASOURCE_URL`, `ORG_POSTGRES_USER`, `ORG_POSTGRES_PASSWORD` | Mapped to org's Spring datasource variables by Compose; connects to `identity-service_postgres:5432`. |
 | JWT | `JWT_SECRET`, `JWT_ISSUER`, optional `JWT_TTL_SECONDS`, `JWT_REFRESH_TTL_SECONDS` | Replace the placeholder secret. Identity defaults to issuer `ft-transcendence`, 900-second access tokens and 604800-second refresh tokens. |
 | Legacy OAuth variables | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_REDIRECT_URI` | Present in the template but unused by the current Node identity service. Setting them does not enable GitHub sign-in. |
 | MongoDB | `MONGO_INITDB_ROOT_USERNAME/PASSWORD`, `CHAT_MONGO_DB/USER/PASSWORD/AUTH_DB` | Match chat credentials to the configured MongoDB user. Initial root credentials apply on the first start only; an existing database needs an explicit credential update. |
@@ -564,7 +574,7 @@ Points follow the proposed Major = 2, Minor = 1 mapping. The modules of choice r
 - **Organization system:** Group rooms serve as organizations. [RoomController.java](application/org-service/src/main/java/com/ft_transcendence/orgservice/controller/RoomController.java) exposes room creation, viewing, updates, membership management and role changes. [RoomService.java](application/org-service/src/main/java/com/ft_transcendence/orgservice/service/RoomService.java) deletes a room when its owner leaves as the last member; the controller has no standalone room-deletion endpoint.
 - **Hardened WAF:** The [gateway Dockerfile](gateway-frontend/gateway/Dockerfile) uses the ModSecurity/OWASP CRS image. [nginx.conf](gateway-frontend/gateway/nginx.conf) configures HTTPS, proxy routes and API rate limits, while [modsecurity-override.conf](gateway-frontend/gateway/modsec/modsecurity-override.conf) enables blocking and request-body limits. WebSocket and selected monitoring routes have explicit WAF exclusions.
 - **Monitoring:** [monitoring/prometheus](monitoring/prometheus/prometheus.yml) configures metric scrapes and alert rules. [monitoring/grafana](monitoring/grafana) contains provisioned data sources and dashboards; [Alertmanager configuration](monitoring/prometheus/alertmanager.yml) provides notification routing. Prometheus scrapes chat, organization, Docker and NGINX metrics; identity currently has health checks rather than a Prometheus scrape.
-- **Microservices:** [docker-compose.yml](docker-compose.yml) defines separate identity, organization and chat services under [application](application), with independent runtimes and data stores: two PostgreSQL instances and MongoDB. The services communicate through HTTP and internal gRPC APIs.
+- **Microservices:** [docker-compose.yml](docker-compose.yml) defines separate identity, organization and chat services under [application](application), with independent runtimes, two databases in one shared PostgreSQL instance, and MongoDB. The services communicate through HTTP and internal gRPC APIs.
 - **Health, status and recovery:** [docker-compose.yml](docker-compose.yml) defines container health checks, and [Gatus configuration](monitoring/status-page/config.yaml) defines status-page checks. The [backup service](databases/backup-recovery/backup-service/backup.sh) creates scheduled database dumps. [backup.sh](databases/backup-recovery/scripts/backup.sh), [restore.sh](databases/backup-recovery/scripts/restore.sh) and [test-disaster-recovery.sh](databases/backup-recovery/scripts/test-disaster-recovery.sh) provide manual snapshots, restoration and a recovery verification procedure.
 - **CI/CD:** [.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml) lints and builds the frontend, tests both Spring Boot services, tests and builds identity, and checks Compose and monitoring. After those jobs pass on a push to `main`, the workflow deploys the tested commit to the OCI VM over SSH using [deploy/deploy.sh](deploy/deploy.sh). Deployment requires the configured repository secrets and VM setup.
 

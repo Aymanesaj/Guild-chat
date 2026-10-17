@@ -17,14 +17,19 @@ echo -e "${BLUE}======================================================${NC}"
 
 echo -e "\n${YELLOW}[STEP 1/5] Injecting test records into PostgreSQL (transdb & org_service_db) & MongoDB...${NC}"
 IDENTITY_POSTGRES_DB=$(docker exec identity-service_postgres printenv POSTGRES_DB)
-ORG_POSTGRES_DB=$(docker exec org-service_postgres printenv POSTGRES_DB)
+# POSTGRES_DB identifies only the initial database in the shared container.
+# Resolve the organization database the same way as backup.sh and restore.sh.
+if [ -z "$ORG_POSTGRES_DB" ] && [ -f "$PROJECT_DIR/.env" ]; then
+  ORG_POSTGRES_DB=$( (grep -E '^ORG_POSTGRES_DB=' "$PROJECT_DIR/.env" || true) | head -n 1 | cut -d '=' -f 2- | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
+fi
+ORG_POSTGRES_DB="${ORG_POSTGRES_DB:-org_service_db}"
 
 docker exec -i identity-service_postgres sh -c 'psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "'"${IDENTITY_POSTGRES_DB}"'" -c "
   CREATE TABLE IF NOT EXISTS defense_recovery_test (id serial PRIMARY KEY, note text, created_at timestamptz DEFAULT now());
   INSERT INTO defense_recovery_test (note) VALUES ('\''Evaluation Defense Live Test Record'\'');
 "' > /dev/null
 
-docker exec -i org-service_postgres sh -c 'psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "'"${ORG_POSTGRES_DB}"'" -c "
+docker exec -i identity-service_postgres sh -c 'psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "'"${ORG_POSTGRES_DB}"'" -c "
   CREATE TABLE IF NOT EXISTS defense_recovery_org_test (id serial PRIMARY KEY, note text, created_at timestamptz DEFAULT now());
   INSERT INTO defense_recovery_org_test (note) VALUES ('\''Evaluation Defense Org Test Record'\'');
 "' > /dev/null
@@ -44,7 +49,7 @@ docker exec -i identity-service_postgres sh -c 'psql -h /var/run/postgresql -U "
   DROP TABLE defense_recovery_test;
 "' > /dev/null
 
-docker exec -i org-service_postgres sh -c 'psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "'"${ORG_POSTGRES_DB}"'" -c "
+docker exec -i identity-service_postgres sh -c 'psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "'"${ORG_POSTGRES_DB}"'" -c "
   DROP TABLE defense_recovery_org_test;
 "' > /dev/null
 
@@ -56,7 +61,7 @@ PG_CHECK=$(docker exec -i identity-service_postgres sh -c 'psql -h /var/run/post
   SELECT to_regclass('\''defense_recovery_test'\'');
 "' 2>/dev/null | tr -d '[:space:]')
 
-ORG_CHECK=$(docker exec -i org-service_postgres sh -c 'psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "'"${ORG_POSTGRES_DB}"'" -t -c "
+ORG_CHECK=$(docker exec -i identity-service_postgres sh -c 'psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "'"${ORG_POSTGRES_DB}"'" -t -c "
   SELECT to_regclass('\''defense_recovery_org_test'\'');
 "' 2>/dev/null | tr -d '[:space:]')
 
@@ -82,7 +87,7 @@ PG_RESULT=$(docker exec -i identity-service_postgres sh -c 'psql -h /var/run/pos
   SELECT note FROM defense_recovery_test LIMIT 1;
 "' 2>/dev/null | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 
-ORG_RESULT=$(docker exec -i org-service_postgres sh -c 'psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "'"${ORG_POSTGRES_DB}"'" -t -c "
+ORG_RESULT=$(docker exec -i identity-service_postgres sh -c 'psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "'"${ORG_POSTGRES_DB}"'" -t -c "
   SELECT note FROM defense_recovery_org_test LIMIT 1;
 "' 2>/dev/null | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 
@@ -91,7 +96,7 @@ MONGO_RESULT=$(docker exec -i mongodb sh -c 'mongosh -u "$MONGO_INITDB_ROOT_USER
 "' 2>/dev/null | tr -d '[:space:]')
 
 docker exec -i identity-service_postgres sh -c 'psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "'"${IDENTITY_POSTGRES_DB}"'" -c "DROP TABLE IF EXISTS defense_recovery_test;"' > /dev/null 2>&1 || true
-docker exec -i org-service_postgres sh -c 'psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "'"${ORG_POSTGRES_DB}"'" -c "DROP TABLE IF EXISTS defense_recovery_org_test;"' > /dev/null 2>&1 || true
+docker exec -i identity-service_postgres sh -c 'psql -h /var/run/postgresql -U "$POSTGRES_USER" -d "'"${ORG_POSTGRES_DB}"'" -c "DROP TABLE IF EXISTS defense_recovery_org_test;"' > /dev/null 2>&1 || true
 docker exec -i mongodb sh -c 'mongosh -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin chatdb --eval "db.messages.deleteOne({ content: \"DEFENSE_TEST_CHAT_MESSAGE\" });"' > /dev/null 2>&1 || true
 
 if [ "$PG_RESULT" = "Evaluation Defense Live Test Record" ] && [ "$ORG_RESULT" = "Evaluation Defense Org Test Record" ] && [ "$MONGO_RESULT" = "1" ]; then

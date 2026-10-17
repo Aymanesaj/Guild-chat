@@ -30,6 +30,7 @@ certs/*
 !gateway-frontend/gateway/script.sh
 !databases/backup-recovery/scripts/*.sh
 !databases/backup-recovery/backup-service/*.sh
+!databases/postgres/*.sh
 .idea/
 
 !deploy/*.md

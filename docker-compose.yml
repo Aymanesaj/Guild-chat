@@ -90,7 +90,7 @@ services:
       retries: 5
       start_period: 10s
     depends_on:
-      org-service_postgres:
+      identity-service_postgres:
         condition: service_healthy
     restart: always
 
@@ -150,6 +150,10 @@ services:
       JWT_ISSUER: ${JWT_ISSUER}
       IDENTITY_HTTP_PORT: ${IDENTITY_HTTP_PORT}
       AVATAR_DIR: ${AVATAR_DIR}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID} 
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
+      R2_BUCKET: ${R2_BUCKET}
     volumes:
       - identity_avatars:/tmp/identity-avatars
     healthcheck:
@@ -178,33 +182,16 @@ services:
       POSTGRES_USER: ${IDENTITY_POSTGRES_USER}
       POSTGRES_PASSWORD: ${IDENTITY_POSTGRES_PASSWORD}
       POSTGRES_DB: ${IDENTITY_POSTGRES_DB}
+      ORG_POSTGRES_USER: ${ORG_POSTGRES_USER}
+      ORG_POSTGRES_PASSWORD: ${ORG_POSTGRES_PASSWORD}
+      ORG_POSTGRES_DB: ${ORG_POSTGRES_DB}
     volumes:
       - database:/var/lib/postgresql/data
+      - ./databases/postgres/init-org.sh:/docker-entrypoint-initdb.d/10-init-org.sh:ro
     expose:
       - "5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 15
-    restart: always
-    networks:
-      - private
-
-  org-service_postgres:
-    mem_limit: 512m
-    image: postgres:16-alpine
-    container_name: org-service_postgres
-    environment:
-      POSTGRES_USER: ${ORG_POSTGRES_USER}
-      POSTGRES_PASSWORD: ${ORG_POSTGRES_PASSWORD}
-      POSTGRES_DB: ${ORG_POSTGRES_DB}
-    volumes:
-      - org-service_postgres_data:/var/lib/postgresql/data
-    expose:
-      - "5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 15
@@ -401,8 +388,6 @@ services:
     depends_on:
       identity-service_postgres:
         condition: service_healthy
-      org-service_postgres:
-        condition: service_healthy
       mongodb:
         condition: service_healthy
     restart: always
@@ -418,6 +403,7 @@ volumes:
     # Identity storage: keep the existing volume and its Compose label.
     name: "database"
   org-service_postgres_data:
+    # Retained for recovery of pre-consolidation data; no service mounts it.
     name: "org-service_postgres_data"
   prometheus_data:
     name: "prometheus_data"
