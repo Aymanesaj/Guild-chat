@@ -182,7 +182,7 @@ function LoginView({ setView, onLogin, values, onChange, error, loading }) {
     <>
       <Subtitle>Sign in to continue.</Subtitle>
 
-      <Form onSubmit={handleLogin}>
+      <Form noValidate onSubmit={handleLogin}>
         <Input
           type="text"
           name="identifier"
@@ -230,7 +230,7 @@ function SignupView({ setView, onSignup, values, onChange, error, loading }) {
     <>
       <Subtitle>Create an account to get started.</Subtitle>
 
-      <Form onSubmit={handleSignup}>
+      <Form noValidate onSubmit={handleSignup}>
         <Input
           name="username"
           autoComplete="username"
@@ -304,11 +304,16 @@ function AuthPage( { onLogin } ) {
 
   /** Resolves to true when the session is established, so the view can navigate. */
   const handleLogin = async (email, password) => {
+    if (!email.trim() || !password.length) {
+      setError(!email.trim() ? "Username or email is required" : "Password is required");
+      return false;
+    }
+
     setLoading(true);
     setError("");
 
     try {
-      onLogin(await loginUser(email, password));
+      onLogin(await loginUser(email.trim(), password));
       return true;
     } catch (err) {
       if (err?.status >= 500) {
@@ -323,8 +328,31 @@ function AuthPage( { onLogin } ) {
   };
 
   const handleSignup = async (username, email, password, confirmPassword) => {
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
+    username = username.trim();
+    email = email.trim();
+
+    // Match identity-service's registration rules, including its Zod email pattern.
+    let validationError = "";
+    if (username.length < 3) {
+      validationError = "Username must be at least 3 characters";
+    } else if (username.length > 32) {
+      validationError = "Username must be at most 32 characters";
+    } else if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      validationError = "Username can only contain letters, numbers and underscores";
+    } else if (!/^(?:[A-Za-z0-9_'+-]+\.)*[A-Za-z0-9_'+-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/.test(email)) {
+      validationError = "Email is not valid";
+    } else if (email.length > 255) {
+      validationError = "Email must be at most 255 characters";
+    } else if (password.length < 8) {
+      validationError = "Password must be at least 8 characters long";
+    } else if (password.length > 128) {
+      validationError = "Password must be at most 128 characters";
+    } else if (password !== confirmPassword) {
+      validationError = "Passwords do not match";
+    }
+
+    if (validationError) {
+      setError(validationError);
       return false;
     }
 
@@ -332,7 +360,7 @@ function AuthPage( { onLogin } ) {
     setError("");
 
     try {
-      onLogin(await registerUser(username, email, password));
+      onLogin(await registerUser(username.toLowerCase(), email.toLowerCase(), password));
       return true;
     } catch (err) {
       if (err?.status >= 500) {

@@ -58,4 +58,7 @@ public interface MessageRepository extends MongoRepository<Message , String> {
         "{ '$replaceRoot' : { 'newRoot' : '$latest' } }"
     })
     List<Message> findLatestMessagesByRoomIds(List<Long> roomIds);
+
+
+    long deleteByRoomId(String roomId);
 }

@@ -1,5 +1,5 @@
 import { jsonBody, request, requestPublic } from "./http";
-import { clearTokens, setTokens } from "./tokens";
+import { clearTokens, getRefreshToken, setTokens } from "./tokens";
 import { clearUserCache, normalizeUser, rememberUser } from "./users";
 
 export { LOGOUT_EVENT } from "./http";
@@ -31,10 +31,17 @@ export async function loginUser(identifier, password) {
   return startSession(auth);
 }
 
-/** Revokes every refresh token server-side, then forgets the local pair regardless. */
+/** Revokes the current refresh token server-side, then forgets the local pair regardless. */
 export async function logoutUser() {
   try {
-    return await request(`${API_URL}/auth/logout`, { method: "POST" }, "Failed to log out");
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) return;
+
+    return await requestPublic(
+      `${API_URL}/auth/logout`,
+      { method: "POST", ...jsonBody({ refreshToken }) },
+      "Failed to log out",
+    );
   } finally {
     clearTokens();
     clearUserCache();
