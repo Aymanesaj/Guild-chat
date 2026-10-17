@@ -64,24 +64,24 @@ echo " - MongoDB:                      $(basename "$MONGO_FILE")"
 echo ""
 
 echo ">>> Restoring PostgreSQL database '${IDENTITY_POSTGRES_DB}'..."
-docker exec -i -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" identity-service_postgres psql -h /var/run/postgresql -U "$IDENTITY_POSTGRES_USER" -d postgres -c "
+docker exec -i -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" postgres_db psql -h /var/run/postgresql -U "$IDENTITY_POSTGRES_USER" -d postgres -c "
 SELECT pg_terminate_backend(pid) FROM pg_stat_activity 
 WHERE datname = '${IDENTITY_POSTGRES_DB}' AND pid <> pg_backend_pid();
 " > /dev/null 2>&1 || true
 
-gunzip -c "$PG_FILE" | docker exec -i -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" identity-service_postgres psql -h /var/run/postgresql -U "$IDENTITY_POSTGRES_USER" -d "$IDENTITY_POSTGRES_DB" -v ON_ERROR_STOP=1 > /dev/null
+gunzip -c "$PG_FILE" | docker exec -i -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" postgres_db psql -h /var/run/postgresql -U "$IDENTITY_POSTGRES_USER" -d "$IDENTITY_POSTGRES_DB" -v ON_ERROR_STOP=1 > /dev/null
 echo ">>> PostgreSQL '${IDENTITY_POSTGRES_DB}' restored successfully!"
 
 if [ -f "$ORG_FILE" ]; then
     echo ">>> Restoring PostgreSQL database '${ORG_POSTGRES_DB}'..."
-    docker exec -i -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" identity-service_postgres psql -h /var/run/postgresql -U "$ORG_POSTGRES_USER" -d postgres -c "
+    docker exec -i -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" postgres_db psql -h /var/run/postgresql -U "$ORG_POSTGRES_USER" -d postgres -c "
     SELECT pg_terminate_backend(pid) FROM pg_stat_activity 
     WHERE datname = '${ORG_POSTGRES_DB}' AND pid <> pg_backend_pid();
     " > /dev/null 2>&1 || true
 
     # Use the shared instance's administrator to create a missing database.
     # psql meta-commands such as \gexec must be supplied via stdin, not SQL -c.
-    docker exec -i -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" identity-service_postgres \
+    docker exec -i -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" postgres_db \
         psql -X -h /var/run/postgresql -U "$IDENTITY_POSTGRES_USER" -d postgres \
         -v ON_ERROR_STOP=1 -v org_db="$ORG_POSTGRES_DB" -v org_owner="$ORG_POSTGRES_USER" > /dev/null <<'SQL'
 SELECT format('CREATE DATABASE %I OWNER %I', :'org_db', :'org_owner')
@@ -89,7 +89,7 @@ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'org_db')
 \gexec
 SQL
 
-    gunzip -c "$ORG_FILE" | docker exec -i -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" identity-service_postgres psql -h /var/run/postgresql -U "$ORG_POSTGRES_USER" -d "$ORG_POSTGRES_DB" -v ON_ERROR_STOP=1 > /dev/null
+    gunzip -c "$ORG_FILE" | docker exec -i -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" postgres_db psql -h /var/run/postgresql -U "$ORG_POSTGRES_USER" -d "$ORG_POSTGRES_DB" -v ON_ERROR_STOP=1 > /dev/null
     echo ">>> PostgreSQL '${ORG_POSTGRES_DB}' restored successfully!"
 else
     echo "Notice: Organization database backup '$ORG_FILE' not found, skipped."
@@ -122,11 +122,11 @@ echo "=========================================="
 echo " Disaster Recovery Complete! Verifying..."
 echo "=========================================="
 echo "PostgreSQL Tables in '${IDENTITY_POSTGRES_DB}':"
-docker exec -i -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" identity-service_postgres psql -h /var/run/postgresql -U "$IDENTITY_POSTGRES_USER" -d "$IDENTITY_POSTGRES_DB" -c "\dt" || true
+docker exec -i -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" postgres_db psql -h /var/run/postgresql -U "$IDENTITY_POSTGRES_USER" -d "$IDENTITY_POSTGRES_DB" -c "\dt" || true
 
 echo ""
 echo "PostgreSQL Tables in '${ORG_POSTGRES_DB}':"
-docker exec -i -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" identity-service_postgres psql -h /var/run/postgresql -U "$ORG_POSTGRES_USER" -d "$ORG_POSTGRES_DB" -c "\dt" || true
+docker exec -i -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" postgres_db psql -h /var/run/postgresql -U "$ORG_POSTGRES_USER" -d "$ORG_POSTGRES_DB" -c "\dt" || true
 
 echo ""
 echo "MongoDB Collections in 'chatdb':"

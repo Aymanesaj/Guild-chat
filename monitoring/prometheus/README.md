@@ -84,7 +84,7 @@ can be OOM-killed at its limit, and JVM heap/database caches must fit inside it.
 | Containers | Limit per container |
 | --- | --- |
 | chat-service, org-service, mongodb | 1 GiB |
-| identity-service, identity-service_postgres, org-service_postgres, prometheus, grafana, backup-service | 512 MiB |
+| identity-service, postgres_db, org-service_postgres, prometheus, grafana, backup-service | 512 MiB |
 | nginx | 256 MiB |
 | alertmanager, status-page | 128 MiB |
 | frontend, docker-exporter, docker-socket-proxy, nginx-exporter | 64 MiB |

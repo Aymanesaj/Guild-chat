@@ -90,7 +90,7 @@ services:
       retries: 5
       start_period: 10s
     depends_on:
-      identity-service_postgres:
+      postgres_db:
         condition: service_healthy
     restart: always
 
@@ -132,7 +132,7 @@ services:
     networks:
       - private
     depends_on:
-      identity-service_postgres:
+      postgres_db:
         condition: service_healthy
     restart: "no"
 
@@ -165,7 +165,7 @@ services:
     depends_on:
       identity-migrate:
         condition: service_completed_successfully
-      identity-service_postgres:
+      postgres_db:
         condition: service_healthy
     restart: always
 
@@ -174,10 +174,10 @@ services:
   # DATABASES
   # ============================================================
 
-  identity-service_postgres:
+  postgres_db:
     mem_limit: 512m
     image: postgres:16-alpine
-    container_name: identity-service_postgres
+    container_name: postgres_db
     environment:
       POSTGRES_USER: ${IDENTITY_POSTGRES_USER}
       POSTGRES_PASSWORD: ${IDENTITY_POSTGRES_PASSWORD}
@@ -391,7 +391,7 @@ services:
     networks:
       - private
     depends_on:
-      identity-service_postgres:
+      postgres_db:
         condition: service_healthy
       mongodb:
         condition: service_healthy
@@ -405,11 +405,7 @@ services:
 volumes:
   nginx_tls:
   database:
-    # Identity storage: keep the existing volume and its Compose label.
     name: "database"
-  org-service_postgres_data:
-    # Retained for recovery of pre-consolidation data; no service mounts it.
-    name: "org-service_postgres_data"
   prometheus_data:
     name: "prometheus_data"
   grafana_data:

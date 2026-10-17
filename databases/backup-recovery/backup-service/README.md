@@ -31,7 +31,7 @@ This directory provides the automated, continuous background backup daemon conta
 | `BACKUP_INTERVAL` | `43200` (12h) | Frequency between automatic backup runs (seconds) |
 | `RETENTION_DAYS` | `7` | Retention window before automatic file deletion |
 | `BACKUP_DIR` | `/backups` | Volume mount path storing backup archives |
-| `IDENTITY_POSTGRES_HOST` / `IDENTITY_POSTGRES_PORT` | `identity-service_postgres` / `5432` | Identity PostgreSQL connection |
+| `IDENTITY_POSTGRES_HOST` / `IDENTITY_POSTGRES_PORT` | `postgres_db` / `5432` | Identity PostgreSQL connection |
 | `ORG_POSTGRES_HOST` / `ORG_POSTGRES_PORT` | Values of `IDENTITY_POSTGRES_HOST` / `IDENTITY_POSTGRES_PORT` | Organization connection; defaults to the shared PostgreSQL instance |
 | `IDENTITY_POSTGRES_USER` / `IDENTITY_POSTGRES_PASSWORD` / `IDENTITY_POSTGRES_DB` | `admin` / `admin` / `transdb` | Identity credentials and database |
 | `ORG_POSTGRES_USER` / `ORG_POSTGRES_PASSWORD` / `ORG_POSTGRES_DB` | `admin` / `admin` / `org_service_db` | Organization credentials and database |

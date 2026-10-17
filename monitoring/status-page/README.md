@@ -19,7 +19,7 @@ The status service continuously monitors internal endpoints across core ingress,
 | **Microservices**| Identity Service (`http://identity-service:8083/health`) | HTTP `200`, `[BODY].status == ok`, `[BODY].service == identity-service` |
 | **Microservices**| Org Service (`http://org-service:8082/actuator/health`) | HTTP `200` & `[BODY].status == UP` |
 | **Microservices**| Chat Service (`http://chat-service:8081/actuator/health`) | HTTP `200` |
-| **Databases**    | Identity PostgreSQL (`tcp://identity-service_postgres:5432`) | TCP Connection Handshake |
+| **Databases**    | Identity PostgreSQL (`tcp://postgres_db:5432`) | TCP Connection Handshake |
 | **Databases**    | Organization PostgreSQL (`tcp://org-service_postgres:5432`) | TCP Connection Handshake |
 | **Databases**    | MongoDB (`tcp://mongodb:27017`) | TCP Connection Handshake |
 | **Observability**| Prometheus (`http://prometheus:9090/-/healthy`) | HTTP `200` |

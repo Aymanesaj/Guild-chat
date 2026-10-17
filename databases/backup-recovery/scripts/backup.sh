@@ -46,12 +46,12 @@ ORG_FILE="${BACKUP_DIR}/org_${TIMESTAMP}.sql.gz"
 ORG_LATEST="${BACKUP_DIR}/org_latest.sql.gz"
 
 echo "Dumping PostgreSQL ('${IDENTITY_POSTGRES_DB}')..."
-docker exec -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" identity-service_postgres \
+docker exec -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" postgres_db \
     pg_dump -h /var/run/postgresql -U "$IDENTITY_POSTGRES_USER" --clean --if-exists --format=p "$IDENTITY_POSTGRES_DB" | gzip -9 > "$PG_FILE"
 echo "  -> Created: ${PG_FILE} ($(du -h "$PG_FILE" | cut -f1))"
 
 echo "Dumping PostgreSQL ('${ORG_POSTGRES_DB}')..."
-docker exec -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" identity-service_postgres \
+docker exec -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" postgres_db \
     pg_dump -h /var/run/postgresql -U "$ORG_POSTGRES_USER" --clean --if-exists --format=p "$ORG_POSTGRES_DB" | gzip -9 > "$ORG_FILE"
 echo "  -> Created: ${ORG_FILE} ($(du -h "$ORG_FILE" | cut -f1))"
 

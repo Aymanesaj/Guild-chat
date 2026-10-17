@@ -29,7 +29,7 @@ Compose loads the repository's root `.env`; start with [the template](../../.env
 
 | Variable | Default or requirement |
 |---|---|
-| `DATABASE_URL` | Required PostgreSQL connection URL; in Compose, use `identity-service_postgres:5432` and the identity database credentials. |
+| `DATABASE_URL` | Required PostgreSQL connection URL; in Compose, use `postgres_db:5432` and the identity database credentials. |
 | `JWT_SECRET` | Required signing secret; replace the template value. |
 | `JWT_ISSUER` | `ft-transcendence` |
 | `JWT_TTL_SECONDS` | `900` (15 minutes) |
