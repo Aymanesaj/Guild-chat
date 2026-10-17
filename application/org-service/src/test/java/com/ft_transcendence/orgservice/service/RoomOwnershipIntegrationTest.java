@@ -1,0 +1,368 @@
+package com.ft_transcendence.orgservice.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.when;
+
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
+import com.ft_transcendence.orgservice.client.ChatNotifyClient;
+import com.ft_transcendence.orgservice.client.IdentityGrpcClient;
+import com.ft_transcendence.orgservice.dto.CreateRoomRequest;
+import com.ft_transcendence.orgservice.exception.ForbiddenException;
+import com.ft_transcendence.orgservice.exception.NotFoundException;
+import com.ft_transcendence.orgservice.model.MemberRole;
+import com.ft_transcendence.orgservice.model.Role;
+import com.ft_transcendence.orgservice.model.RoleName;
+import com.ft_transcendence.orgservice.model.Room;
+import com.ft_transcendence.orgservice.model.RoomMember;
+import com.ft_transcendence.orgservice.model.RoomType;
+import com.ft_transcendence.orgservice.repository.MemberRoleRepository;
+import com.ft_transcendence.orgservice.repository.RoleRepository;
+import com.ft_transcendence.orgservice.repository.RoomMemberRepository;
+import com.ft_transcendence.orgservice.repository.RoomRepository;
+import com.fttranscendence.chat.grpc.RoomChange;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.persistence.autoconfigure.EntityScan;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+/** Real transactions, SQL constraints and row locks; no HTTP/gRPC servers. */
+@SpringBootTest(classes = RoomOwnershipIntegrationTest.Config.class, properties = {
+        "spring.datasource.url=${ownership.test.database-url:jdbc:h2:mem:ownership;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=5000}",
+        "spring.datasource.driver-class-name=${ownership.test.database-driver:org.h2.Driver}",
+        "spring.datasource.username=${ownership.test.database-user:sa}",
+        "spring.datasource.password=${ownership.test.database-password:}",
+        "spring.jpa.open-in-view=false"
+})
+class RoomOwnershipIntegrationTest {
+    @Configuration(proxyBeanMethods = false)
+    @EnableAutoConfiguration
+    @EntityScan(basePackageClasses = Room.class)
+    @EnableJpaRepositories(basePackageClasses = RoomRepository.class)
+    @Import({RoomService.class, ChatNotifyClient.class})
+    static class Config {}
+
+    @Autowired RoomService service;
+    @Autowired RoomRepository rooms;
+    @Autowired RoomMemberRepository members;
+    @Autowired RoleRepository roles;
+    @Autowired MemberRoleRepository assignments;
+    @Autowired PlatformTransactionManager transactionManager;
+    @MockitoBean IdentityGrpcClient identity;
+    @MockitoBean DirectMessageCreationService dmCreation;
+    @MockitoSpyBean ChatNotifyClient notifications;
+
+    private final List<RoomChangedEvent> delivered = new CopyOnWriteArrayList<>();
+    private TransactionTemplate tx;
+    private UUID owner;
+    private long room;
+
+    @BeforeEach
+    void setup() {
+        tx = new TransactionTemplate(transactionManager);
+        // Keep the real @TransactionalEventListener registration, replacing only
+        // its network body. Calls here prove the production AFTER_COMMIT boundary.
+        doAnswer(call -> { delivered.add(call.getArgument(0)); return null; })
+                .when(notifications).onRoomChanged(any());
+        when(identity.userExists(any())).thenReturn(true);
+        owner = UUID.randomUUID();
+        room = service.createRoom(new CreateRoomRequest("ownership"), owner).id();
+        delivered.clear();
+    }
+
+    private UUID add(RoleName role) {
+        UUID user = UUID.randomUUID();
+        service.addMember(room, owner, user);
+        if (role == RoleName.ADMIN) service.updateMemberRole(room, user, role, owner);
+        delivered.clear();
+        return user;
+    }
+
+    private void assertOwner(UUID user) {
+        assertThat(service.findRoleInRoom(room, user)).contains(RoleName.OWNER);
+        tx.executeWithoutResult(status -> assertThat(assignments.findByRoomMemberRoomId(room)
+                .stream().filter(a -> a.getRole().getName() == RoleName.OWNER).toList()).hasSize(1));
+    }
+
+    private void assertDeparture(UUID leaver, UUID... remaining) {
+        assertThat(delivered).containsExactly(
+                new RoomChangedEvent(room, RoomChange.ROOM_REMOVED, Set.of(leaver)),
+                new RoomChangedEvent(room, RoomChange.ROOM_UPDATED, Set.of(remaining)));
+        assertThat(members.findByRoomIdAndUserId(room, leaver)).isEmpty();
+        tx.executeWithoutResult(status -> assertThat(assignments.findByRoomMemberRoomId(room))
+                .noneMatch(a -> a.getRoomMember().getUserId().equals(leaver)));
+    }
+
+    @Test
+    void adminWinsOverEarlierRegularMemberAndLowestAdminIdWins() {
+        UUID regular = add(RoleName.MEMBER);
+        UUID firstAdmin = add(RoleName.ADMIN);
+        UUID secondAdmin = add(RoleName.ADMIN);
+        service.leaveRoom(room, owner);
+        assertOwner(firstAdmin);
+        assertDeparture(owner, regular, firstAdmin, secondAdmin);
+    }
+
+    @Test
+    void lowestMembershipIdWinsAmongRegularMembers() {
+        UUID first = add(RoleName.MEMBER);
+        UUID second = add(RoleName.MEMBER);
+        service.leaveRoom(room, owner);
+        assertOwner(first);
+        assertDeparture(owner, first, second);
+    }
+
+    @Test
+    void onlyOtherMemberBecomesOwner() {
+        UUID other = add(RoleName.MEMBER);
+        service.leaveRoom(room, owner);
+        assertOwner(other);
+        assertDeparture(owner, other);
+    }
+
+    @Test
+    void lastOwnerDeletesRoomRolesAndMembership() {
+        service.leaveRoom(room, owner);
+        assertThat(rooms.existsById(room)).isFalse();
+        assertThat(members.findByRoomId(room)).isEmpty();
+        assertThat(roles.findByRoomId(room)).isEmpty();
+        assertThat(assignments.findByRoomMemberRoomId(room)).isEmpty();
+        assertThat(delivered).containsExactly(
+                new RoomChangedEvent(room, RoomChange.ROOM_REMOVED, Set.of(owner)));
+    }
+
+    @Test
+    void adminCannotKickOwner() {
+        UUID admin = add(RoleName.ADMIN);
+        assertThatThrownBy(() -> service.removeMember(room, admin, owner))
+                .isInstanceOf(ForbiddenException.class);
+        assertOwner(owner);
+        assertThat(members.findByRoomId(room)).hasSize(2);
+        assertThat(delivered).isEmpty();
+    }
+
+    @Test
+    void ordinaryDepartureAndKickKeepOwnerAndNotificationRecipients() {
+        UUID leaver = add(RoleName.MEMBER);
+        UUID kicked = add(RoleName.MEMBER);
+        service.leaveRoom(room, leaver);
+        assertDeparture(leaver, owner, kicked);
+        assertOwner(owner);
+        delivered.clear();
+        service.removeMember(room, owner, kicked);
+        assertDeparture(kicked, owner);
+        assertOwner(owner);
+    }
+
+    @Test
+    void promotionAndRemovalRollbackTogetherAndSendNothing() {
+        UUID successor = add(RoleName.ADMIN);
+        tx.executeWithoutResult(status -> {
+            service.leaveRoom(room, owner);
+            assertThat(service.findRoleInRoom(room, successor)).contains(RoleName.OWNER);
+            assertThat(members.findByRoomIdAndUserId(room, owner)).isEmpty();
+            assertThat(delivered).isEmpty();
+            status.setRollbackOnly();
+        });
+        assertOwner(owner);
+        assertThat(service.findRoleInRoom(room, successor)).contains(RoleName.ADMIN);
+        assertThat(members.findByRoomIdAndUserId(room, owner)).isPresent();
+        assertThat(delivered).isEmpty();
+    }
+
+    @Test
+    void databaseFailureRollsBackPromotionAndRemoval() {
+        UUID successor = add(RoleName.MEMBER);
+        // A real database uniqueness failure after the service has promoted and removed
+        // the owner must roll back the whole surrounding transaction.
+        assertThatThrownBy(() -> tx.executeWithoutResult(status -> {
+            service.leaveRoom(room, owner);
+            Role invalid = new Role();
+            invalid.setName(RoleName.ADMIN);
+            invalid.setRoom(rooms.getReferenceById(room));
+            roles.saveAndFlush(invalid);
+        })).isInstanceOf(DataIntegrityViolationException.class);
+        assertOwner(owner);
+        assertThat(service.findRoleInRoom(room, successor)).contains(RoleName.MEMBER);
+        assertThat(delivered).isEmpty();
+    }
+
+    @Test
+    void notificationsWaitForCommit() {
+        UUID successor = add(RoleName.MEMBER);
+        tx.executeWithoutResult(status -> {
+            service.leaveRoom(room, owner);
+            assertThat(delivered).isEmpty();
+        });
+        assertDeparture(owner, successor);
+    }
+
+    /** Holds the first operation's transaction open while the second contends.
+     * The second must actually wait on the room lock, then reread committed state.
+     */
+    private void contend(Runnable first, Runnable second) throws Exception {
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            CountDownLatch changed = new CountDownLatch(1);
+            CountDownLatch release = new CountDownLatch(1);
+            CountDownLatch started = new CountDownLatch(1);
+            var firstResult = executor.submit(() -> tx.executeWithoutResult(status -> {
+                first.run();
+                changed.countDown();
+                await(release);
+            }));
+            try {
+                assertThat(changed.await(5, TimeUnit.SECONDS)).isTrue();
+                var secondResult = executor.submit(() -> {
+                    started.countDown();
+                    second.run();
+                });
+                assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThatThrownBy(() -> secondResult.get(200, TimeUnit.MILLISECONDS))
+                        .isInstanceOf(TimeoutException.class);
+                release.countDown();
+                firstResult.get(5, TimeUnit.SECONDS);
+                secondResult.get(5, TimeUnit.SECONDS);
+            } finally {
+                release.countDown();
+            }
+        }
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            if (!latch.await(5, TimeUnit.SECONDS)) throw new AssertionError("Timed out waiting for transaction");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(e);
+        }
+    }
+
+    @Test
+    void concurrentOwnerAndSuccessorDeparturesTransferAgain() throws Exception {
+        UUID admin = add(RoleName.ADMIN);
+        UUID regular = add(RoleName.MEMBER);
+        contend(() -> service.leaveRoom(room, owner), () -> service.leaveRoom(room, admin));
+        assertOwner(regular);
+        assertThat(members.findByRoomId(room)).extracting(RoomMember::getUserId).containsExactly(regular);
+    }
+
+    @Test
+    void concurrentLastTwoDeparturesDeleteRoom() throws Exception {
+        UUID other = add(RoleName.MEMBER);
+        contend(() -> service.leaveRoom(room, owner), () -> service.leaveRoom(room, other));
+        assertThat(rooms.existsById(room)).isFalse();
+        assertThat(assignments.findByRoomMemberRoomId(room)).isEmpty();
+    }
+
+    @Test
+    void concurrentCandidateDepartureIsExcludedFromSelection() throws Exception {
+        UUID admin = add(RoleName.ADMIN);
+        UUID regular = add(RoleName.MEMBER);
+        contend(() -> service.leaveRoom(room, admin), () -> service.leaveRoom(room, owner));
+        assertOwner(regular);
+    }
+
+    @Test
+    void concurrentKickOfCandidateIsExcludedFromSelection() throws Exception {
+        UUID admin = add(RoleName.ADMIN);
+        UUID regular = add(RoleName.MEMBER);
+        contend(() -> service.removeMember(room, owner, admin), () -> service.leaveRoom(room, owner));
+        assertOwner(regular);
+    }
+
+    @Test
+    void concurrentKickCannotRemoveNewOwner() throws Exception {
+        UUID admin = add(RoleName.ADMIN);
+        UUID otherAdmin = add(RoleName.ADMIN);
+        contend(() -> service.leaveRoom(room, owner), () ->
+                assertThatThrownBy(() -> service.removeMember(room, otherAdmin, admin))
+                        .isInstanceOf(ForbiddenException.class));
+        assertOwner(admin);
+    }
+
+    @Test
+    void concurrentDemotionChangesSuccessorPriority() throws Exception {
+        UUID regular = add(RoleName.MEMBER);
+        UUID admin = add(RoleName.ADMIN);
+        contend(() -> service.updateMemberRole(room, admin, RoleName.MEMBER, owner),
+                () -> service.leaveRoom(room, owner));
+        assertOwner(regular);
+    }
+
+    @Test
+    void oldOwnerCannotChangeRolesAfterTransfer() throws Exception {
+        UUID admin = add(RoleName.ADMIN);
+        UUID regular = add(RoleName.MEMBER);
+        contend(() -> service.leaveRoom(room, owner), () ->
+                assertThatThrownBy(() -> service.updateMemberRole(room, regular, RoleName.ADMIN, owner))
+                        .isInstanceOf(NotFoundException.class));
+        assertOwner(admin);
+        assertThat(service.findRoleInRoom(room, regular)).contains(RoleName.MEMBER);
+    }
+
+    @Test
+    void concurrentAddBeforeOwnerDepartureProvidesSuccessor() throws Exception {
+        UUID newcomer = UUID.randomUUID();
+        contend(() -> service.addMember(room, owner, newcomer), () -> service.leaveRoom(room, owner));
+        assertOwner(newcomer);
+    }
+
+    @Test
+    void concurrentAddCannotResurrectDeletedRoom() throws Exception {
+        contend(() -> service.leaveRoom(room, owner), () ->
+                assertThatThrownBy(() -> service.addMember(room, owner, UUID.randomUUID()))
+                        .isInstanceOf(NotFoundException.class));
+        assertThat(rooms.existsById(room)).isFalse();
+    }
+
+    @Test
+    void directMessageDepartureKeepsExistingMemberRules() {
+        UUID other = UUID.randomUUID();
+        long dm = tx.execute(status -> {
+            Room direct = new Room();
+            direct.setType(RoomType.DM);
+            rooms.save(direct);
+            Role memberRole = new Role();
+            memberRole.setRoom(direct);
+            memberRole.setName(RoleName.MEMBER);
+            roles.save(memberRole);
+            for (UUID user : List.of(owner, other)) {
+                RoomMember member = new RoomMember();
+                member.setRoom(direct);
+                member.setUserId(user);
+                members.save(member);
+                MemberRole assignment = new MemberRole();
+                assignment.setRoomMember(member);
+                assignment.setRole(memberRole);
+                assignments.save(assignment);
+            }
+            return direct.getId();
+        });
+        service.leaveRoom(dm, owner);
+        assertThat(rooms.existsById(dm)).isTrue();
+        assertThat(service.findRoleInRoom(dm, other)).contains(RoleName.MEMBER);
+        assertThat(delivered).containsExactly(
+                new RoomChangedEvent(dm, RoomChange.ROOM_REMOVED, Set.of(owner)),
+                new RoomChangedEvent(dm, RoomChange.ROOM_UPDATED, Set.of(other)));
+    }
+}
