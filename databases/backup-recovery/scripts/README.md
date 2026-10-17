@@ -19,7 +19,7 @@ This directory houses the operational scripts for database backup snapshots, poi
 ### How It Works
 1. **Dynamic Configuration Discovery**: Automatically loads database credentials from `.env` in the project root if environment variables are not already exported.
 2. **PostgreSQL Dump**:
-   - Executes `pg_dump` inside the corresponding `identity-service_postgres` or `org-service_postgres` container using Unix domain socket (`-h /var/run/postgresql`) to bypass network authentication issues.
+   - Executes `pg_dump` inside the shared `postgres_db` container using Unix domain socket (`-h /var/run/postgresql`) to bypass network authentication issues.
    - Generates full SQL dumps for both databases: `${IDENTITY_POSTGRES_DB}` (`transdb`) and `${ORG_POSTGRES_DB}` (`org_service_db`), including `--clean` and `--if-exists` flags.
    - Compresses the output on the fly with `gzip -9` into `backups/postgres_<TIMESTAMP>.sql.gz` and `backups/org_<TIMESTAMP>.sql.gz`.
    - Creates/overwrites `backups/postgres_latest.sql.gz` and `backups/org_latest.sql.gz` atomically once all dumps succeed.
@@ -39,6 +39,7 @@ This directory houses the operational scripts for database backup snapshots, poi
 2. **Connection Eviction**:
    - Runs `pg_terminate_backend` on PostgreSQL to terminate any active client connections on both `transdb` and `org_service_db`, ensuring clean restore without table lock deadlocks.
 3. **PostgreSQL Restoration**:
+   - Creates the organization database if missing, using the identity administrator and assigning ownership to `ORG_POSTGRES_USER`. That role must already exist in the shared instance.
    - Streams the decompressed dumps via `psql` with `-v ON_ERROR_STOP=1` into both `transdb` and `org_service_db` to recreate schema, tables, and records.
 4. **MongoDB Restoration**:
    - Executes `mongorestore` with `--drop` flag to clean existing collections before restoring all documents and indexes from the gzip archive.
@@ -62,3 +63,11 @@ Run with:
 ```bash
 make test-recovery
 ```
+
+### MongoDB credentials
+
+Full-instance MongoDB dumps and restores prefer `MONGO_INITDB_ROOT_USERNAME`
+and `MONGO_INITDB_ROOT_PASSWORD`, authenticating against `admin`. The chat
+account only needs `readWrite` on its application database. If root credentials
+are absent, scripts fall back to `CHAT_MONGO_*`; that fallback account must have
+the permissions needed for the full backup or restore operation.

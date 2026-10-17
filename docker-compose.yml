@@ -90,7 +90,7 @@ services:
       retries: 5
       start_period: 10s
     depends_on:
-      org-service_postgres:
+      postgres_db:
         condition: service_healthy
     restart: always
 
@@ -132,7 +132,7 @@ services:
     networks:
       - private
     depends_on:
-      identity-service_postgres:
+      postgres_db:
         condition: service_healthy
     restart: "no"
 
@@ -150,6 +150,10 @@ services:
       JWT_ISSUER: ${JWT_ISSUER}
       IDENTITY_HTTP_PORT: ${IDENTITY_HTTP_PORT}
       AVATAR_DIR: ${AVATAR_DIR}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID} 
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
+      R2_BUCKET: ${R2_BUCKET}
     volumes:
       - identity_avatars:/tmp/identity-avatars
     healthcheck:
@@ -161,7 +165,7 @@ services:
     depends_on:
       identity-migrate:
         condition: service_completed_successfully
-      identity-service_postgres:
+      postgres_db:
         condition: service_healthy
     restart: always
 
@@ -170,41 +174,24 @@ services:
   # DATABASES
   # ============================================================
 
-  identity-service_postgres:
+  postgres_db:
     mem_limit: 512m
     image: postgres:16-alpine
-    container_name: identity-service_postgres
+    container_name: postgres_db
     environment:
       POSTGRES_USER: ${IDENTITY_POSTGRES_USER}
       POSTGRES_PASSWORD: ${IDENTITY_POSTGRES_PASSWORD}
       POSTGRES_DB: ${IDENTITY_POSTGRES_DB}
+      ORG_POSTGRES_USER: ${ORG_POSTGRES_USER}
+      ORG_POSTGRES_PASSWORD: ${ORG_POSTGRES_PASSWORD}
+      ORG_POSTGRES_DB: ${ORG_POSTGRES_DB}
     volumes:
       - database:/var/lib/postgresql/data
+      - ./databases/postgres/init-org.sh:/docker-entrypoint-initdb.d/10-init-org.sh:ro
     expose:
       - "5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 15
-    restart: always
-    networks:
-      - private
-
-  org-service_postgres:
-    mem_limit: 512m
-    image: postgres:16-alpine
-    container_name: org-service_postgres
-    environment:
-      POSTGRES_USER: ${ORG_POSTGRES_USER}
-      POSTGRES_PASSWORD: ${ORG_POSTGRES_PASSWORD}
-      POSTGRES_DB: ${ORG_POSTGRES_DB}
-    volumes:
-      - org-service_postgres_data:/var/lib/postgresql/data
-    expose:
-      - "5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 15
@@ -219,8 +206,13 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      CHAT_MONGO_DB: ${CHAT_MONGO_DB}
+      CHAT_MONGO_USER: ${CHAT_MONGO_USER}
+      CHAT_MONGO_PASSWORD: ${CHAT_MONGO_PASSWORD}
+      CHAT_MONGO_AUTH_DB: ${CHAT_MONGO_AUTH_DB}
     volumes:
       - mongo_data:/data/db
+      - ./databases/mongodb/init-chat.js:/docker-entrypoint-initdb.d/10-init-chat.js:ro
     expose:
       - "27017"
     networks:
@@ -298,8 +290,8 @@ services:
       GF_USERS_ALLOW_SIGN_UP: ${GF_USERS_ALLOW_SIGN_UP}
       GF_PLUGINS_CHECK_FOR_UPDATES: ${GF_PLUGINS_CHECK_FOR_UPDATES}
       GF_AUTH_ANONYMOUS_ENABLED: ${GF_AUTH_ANONYMOUS_ENABLED}
-      GF_AUTH_ANONYMOUS_ORG_NAME: ${GF_AUTH_ANONYMOUS_ORG_NAME}
-      GF_AUTH_ANONYMOUS_ORG_ROLE: ${GF_AUTH_ANONYMOUS_ORG_ROLE}
+      GF_AUTH_ANONYMOUS_ORG_NAME: ${GF_AUTH_ANONYMOUS_ORG_NAME:-Main Org.}
+      GF_AUTH_ANONYMOUS_ORG_ROLE: ${GF_AUTH_ANONYMOUS_ORG_ROLE:-Viewer}
       GF_AUTH_DISABLE_LOGIN_FORM: ${GF_AUTH_DISABLE_LOGIN_FORM}
       GF_SECURITY_ALLOW_EMBEDDING: ${GF_SECURITY_ALLOW_EMBEDDING}
     restart: always
@@ -399,9 +391,7 @@ services:
     networks:
       - private
     depends_on:
-      identity-service_postgres:
-        condition: service_healthy
-      org-service_postgres:
+      postgres_db:
         condition: service_healthy
       mongodb:
         condition: service_healthy
@@ -415,10 +405,7 @@ services:
 volumes:
   nginx_tls:
   database:
-    # Identity storage: keep the existing volume and its Compose label.
     name: "database"
-  org-service_postgres_data:
-    name: "org-service_postgres_data"
   prometheus_data:
     name: "prometheus_data"
   grafana_data:

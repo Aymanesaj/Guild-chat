@@ -132,6 +132,11 @@ jobs:
       - name: Create mock .env from example
         run: cp .env.example .env
 
+      - name: Check deployment verification and diagnostics
+        run: |
+          bash -n deploy/deploy.sh
+          python3 deploy/test_deploy.py
+
       - name: Check Compose and monitoring
         run: bash monitoring/scripts/test-monitoring.sh
 

@@ -20,6 +20,7 @@ if [ -f "$ENV_FILE" ]; then
     [ -z "$MONGO_INITDB_ROOT_PASSWORD" ] && MONGO_INITDB_ROOT_PASSWORD=$(get_env_val "MONGO_INITDB_ROOT_PASSWORD")
     [ -z "$CHAT_MONGO_USER" ] && CHAT_MONGO_USER=$(get_env_val "CHAT_MONGO_USER")
     [ -z "$CHAT_MONGO_PASSWORD" ] && CHAT_MONGO_PASSWORD=$(get_env_val "CHAT_MONGO_PASSWORD")
+    [ -z "$CHAT_MONGO_AUTH_DB" ] && CHAT_MONGO_AUTH_DB=$(get_env_val "CHAT_MONGO_AUTH_DB")
 fi
 
 IDENTITY_POSTGRES_USER="${IDENTITY_POSTGRES_USER:-admin}"
@@ -63,27 +64,32 @@ echo " - MongoDB:                      $(basename "$MONGO_FILE")"
 echo ""
 
 echo ">>> Restoring PostgreSQL database '${IDENTITY_POSTGRES_DB}'..."
-docker exec -i -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" identity-service_postgres psql -h /var/run/postgresql -U "$IDENTITY_POSTGRES_USER" -d postgres -c "
+docker exec -i -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" postgres_db psql -h /var/run/postgresql -U "$IDENTITY_POSTGRES_USER" -d postgres -c "
 SELECT pg_terminate_backend(pid) FROM pg_stat_activity 
 WHERE datname = '${IDENTITY_POSTGRES_DB}' AND pid <> pg_backend_pid();
 " > /dev/null 2>&1 || true
 
-gunzip -c "$PG_FILE" | docker exec -i -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" identity-service_postgres psql -h /var/run/postgresql -U "$IDENTITY_POSTGRES_USER" -d "$IDENTITY_POSTGRES_DB" -v ON_ERROR_STOP=1 > /dev/null
+gunzip -c "$PG_FILE" | docker exec -i -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" postgres_db psql -h /var/run/postgresql -U "$IDENTITY_POSTGRES_USER" -d "$IDENTITY_POSTGRES_DB" -v ON_ERROR_STOP=1 > /dev/null
 echo ">>> PostgreSQL '${IDENTITY_POSTGRES_DB}' restored successfully!"
 
 if [ -f "$ORG_FILE" ]; then
     echo ">>> Restoring PostgreSQL database '${ORG_POSTGRES_DB}'..."
-    docker exec -i -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" org-service_postgres psql -h /var/run/postgresql -U "$ORG_POSTGRES_USER" -d postgres -c "
+    docker exec -i -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" postgres_db psql -h /var/run/postgresql -U "$ORG_POSTGRES_USER" -d postgres -c "
     SELECT pg_terminate_backend(pid) FROM pg_stat_activity 
     WHERE datname = '${ORG_POSTGRES_DB}' AND pid <> pg_backend_pid();
     " > /dev/null 2>&1 || true
 
-    # Ensure database exists before restoring into it
-    docker exec -i -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" org-service_postgres psql -h /var/run/postgresql -U "$ORG_POSTGRES_USER" -d postgres -c "
-    SELECT 'CREATE DATABASE ${ORG_POSTGRES_DB}' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${ORG_POSTGRES_DB}')\gexec
-    " > /dev/null 2>&1 || true
+    # Use the shared instance's administrator to create a missing database.
+    # psql meta-commands such as \gexec must be supplied via stdin, not SQL -c.
+    docker exec -i -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" postgres_db \
+        psql -X -h /var/run/postgresql -U "$IDENTITY_POSTGRES_USER" -d postgres \
+        -v ON_ERROR_STOP=1 -v org_db="$ORG_POSTGRES_DB" -v org_owner="$ORG_POSTGRES_USER" > /dev/null <<'SQL'
+SELECT format('CREATE DATABASE %I OWNER %I', :'org_db', :'org_owner')
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'org_db')
+\gexec
+SQL
 
-    gunzip -c "$ORG_FILE" | docker exec -i -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" org-service_postgres psql -h /var/run/postgresql -U "$ORG_POSTGRES_USER" -d "$ORG_POSTGRES_DB" -v ON_ERROR_STOP=1 > /dev/null
+    gunzip -c "$ORG_FILE" | docker exec -i -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" postgres_db psql -h /var/run/postgresql -U "$ORG_POSTGRES_USER" -d "$ORG_POSTGRES_DB" -v ON_ERROR_STOP=1 > /dev/null
     echo ">>> PostgreSQL '${ORG_POSTGRES_DB}' restored successfully!"
 else
     echo "Notice: Organization database backup '$ORG_FILE' not found, skipped."
@@ -91,13 +97,21 @@ fi
 
 if [ -f "$MONGO_FILE" ]; then
     echo ">>> Restoring MongoDB database..."
-    MONGO_AUTH=""
-    MONGO_AUTH_USER="${CHAT_MONGO_USER:-${MONGO_INITDB_ROOT_USERNAME}}"
-    MONGO_AUTH_PASS="${CHAT_MONGO_PASSWORD:-${MONGO_INITDB_ROOT_PASSWORD}}"
-    if [ -n "$MONGO_AUTH_USER" ] && [ -n "$MONGO_AUTH_PASS" ]; then
-        MONGO_AUTH="--username=${MONGO_AUTH_USER} --password=${MONGO_AUTH_PASS} --authenticationDatabase=admin"
+    # Full-instance dumps/restores need administrator privileges, not chat's readWrite role.
+    MONGO_AUTH=()
+    if [ -n "$MONGO_INITDB_ROOT_USERNAME" ]; then
+        MONGO_AUTH_USER="$MONGO_INITDB_ROOT_USERNAME"
+        MONGO_AUTH_PASS="${MONGO_INITDB_ROOT_PASSWORD:?MongoDB root password is required}"
+        MONGO_AUTH_DB=admin
+    else
+        MONGO_AUTH_USER="${CHAT_MONGO_USER:-}"
+        MONGO_AUTH_PASS="${CHAT_MONGO_PASSWORD:-}"
+        MONGO_AUTH_DB="${CHAT_MONGO_AUTH_DB:-admin}"
     fi
-    docker exec -i mongodb mongorestore $MONGO_AUTH --drop --archive --gzip < "$MONGO_FILE" > /dev/null
+    if [ -n "$MONGO_AUTH_USER" ] && [ -n "$MONGO_AUTH_PASS" ]; then
+        MONGO_AUTH=("--username=$MONGO_AUTH_USER" "--password=$MONGO_AUTH_PASS" "--authenticationDatabase=$MONGO_AUTH_DB")
+    fi
+    docker exec -i mongodb mongorestore "${MONGO_AUTH[@]}" --drop --archive --gzip < "$MONGO_FILE" > /dev/null
     echo ">>> MongoDB restored successfully!"
 else
     echo "Notice: MongoDB backup file '$MONGO_FILE' not found, skipped."
@@ -108,18 +122,18 @@ echo "=========================================="
 echo " Disaster Recovery Complete! Verifying..."
 echo "=========================================="
 echo "PostgreSQL Tables in '${IDENTITY_POSTGRES_DB}':"
-docker exec -i -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" identity-service_postgres psql -h /var/run/postgresql -U "$IDENTITY_POSTGRES_USER" -d "$IDENTITY_POSTGRES_DB" -c "\dt" || true
+docker exec -i -e PGPASSWORD="${IDENTITY_POSTGRES_PASSWORD}" postgres_db psql -h /var/run/postgresql -U "$IDENTITY_POSTGRES_USER" -d "$IDENTITY_POSTGRES_DB" -c "\dt" || true
 
 echo ""
 echo "PostgreSQL Tables in '${ORG_POSTGRES_DB}':"
-docker exec -i -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" org-service_postgres psql -h /var/run/postgresql -U "$ORG_POSTGRES_USER" -d "$ORG_POSTGRES_DB" -c "\dt" || true
+docker exec -i -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" postgres_db psql -h /var/run/postgresql -U "$ORG_POSTGRES_USER" -d "$ORG_POSTGRES_DB" -c "\dt" || true
 
 echo ""
 echo "MongoDB Collections in 'chatdb':"
 if [ -n "$MONGO_AUTH_USER" ] && [ -n "$MONGO_AUTH_PASS" ]; then
-    docker exec -i mongodb mongosh -u "$MONGO_AUTH_USER" -p "$MONGO_AUTH_PASS" --authenticationDatabase admin --eval "use chatdb; db.getCollectionNames();" --quiet || true
+    docker exec -i mongodb mongosh -u "$MONGO_AUTH_USER" -p "$MONGO_AUTH_PASS" --authenticationDatabase "$MONGO_AUTH_DB" --eval 'db.getSiblingDB("chatdb").getCollectionNames();' --quiet || true
 else
-    docker exec -i mongodb mongosh --eval "use chatdb; db.getCollectionNames();" --quiet || true
+    docker exec -i mongodb mongosh --eval 'db.getSiblingDB("chatdb").getCollectionNames();' --quiet || true
 fi
 
 echo ""

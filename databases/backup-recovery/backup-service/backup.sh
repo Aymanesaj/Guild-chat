@@ -5,14 +5,14 @@ BACKUP_DIR="/backups"
 BACKUP_INTERVAL="${BACKUP_INTERVAL:-43200}"
 RETENTION_DAYS="${RETENTION_DAYS:-7}"
 
-IDENTITY_POSTGRES_HOST="${IDENTITY_POSTGRES_HOST:-identity-service_postgres}"
+IDENTITY_POSTGRES_HOST="${IDENTITY_POSTGRES_HOST:-postgres_db}"
 IDENTITY_POSTGRES_PORT="${IDENTITY_POSTGRES_PORT:-5432}"
 IDENTITY_POSTGRES_USER="${IDENTITY_POSTGRES_USER:-admin}"
 IDENTITY_POSTGRES_PASSWORD="${IDENTITY_POSTGRES_PASSWORD:-admin}"
 IDENTITY_POSTGRES_DB="${IDENTITY_POSTGRES_DB:-transdb}"
 ORG_POSTGRES_DB="${ORG_POSTGRES_DB:-org_service_db}"
-ORG_POSTGRES_HOST="${ORG_POSTGRES_HOST:-org-service_postgres}"
-ORG_POSTGRES_PORT="${ORG_POSTGRES_PORT:-5432}"
+ORG_POSTGRES_HOST="${ORG_POSTGRES_HOST:-$IDENTITY_POSTGRES_HOST}"
+ORG_POSTGRES_PORT="${ORG_POSTGRES_PORT:-$IDENTITY_POSTGRES_PORT}"
 ORG_POSTGRES_USER="${ORG_POSTGRES_USER:-admin}"
 ORG_POSTGRES_PASSWORD="${ORG_POSTGRES_PASSWORD:-admin}"
 
@@ -61,17 +61,22 @@ perform_backup() {
     MONGO_FILE="${BACKUP_DIR}/mongo_${TIMESTAMP}.archive.gz"
     MONGO_LATEST="${BACKUP_DIR}/mongo_latest.archive.gz"
     echo "Dumping MongoDB from ${MONGO_HOST}:${MONGO_PORT}..."
-    MONGO_AUTH=""
-    MONGO_AUTH_USER="${CHAT_MONGO_USER:-${MONGO_INITDB_ROOT_USERNAME}}"
-    MONGO_AUTH_PASS="${CHAT_MONGO_PASSWORD:-${MONGO_INITDB_ROOT_PASSWORD}}"
-    MONGO_AUTH_DB="${CHAT_MONGO_AUTH_DB:-admin}"
-    MONGO_AUTH_USER=$(echo "$MONGO_AUTH_USER" | sed -E 's/^[=[:space:]]+//')
-    MONGO_AUTH_PASS=$(echo "$MONGO_AUTH_PASS" | sed -E 's/^[=[:space:]]+//')
+    # Full-instance dumps/restores need administrator privileges, not chat's readWrite role.
+    MONGO_AUTH=()
+    if [ -n "$MONGO_INITDB_ROOT_USERNAME" ]; then
+        MONGO_AUTH_USER="$MONGO_INITDB_ROOT_USERNAME"
+        MONGO_AUTH_PASS="${MONGO_INITDB_ROOT_PASSWORD:?MongoDB root password is required}"
+        MONGO_AUTH_DB=admin
+    else
+        MONGO_AUTH_USER="${CHAT_MONGO_USER:-}"
+        MONGO_AUTH_PASS="${CHAT_MONGO_PASSWORD:-}"
+        MONGO_AUTH_DB="${CHAT_MONGO_AUTH_DB:-admin}"
+    fi
     if [ -n "$MONGO_AUTH_USER" ] && [ -n "$MONGO_AUTH_PASS" ]; then
-        MONGO_AUTH="--username=${MONGO_AUTH_USER} --password=${MONGO_AUTH_PASS} --authenticationDatabase=${MONGO_AUTH_DB}"
+        MONGO_AUTH=("--username=$MONGO_AUTH_USER" "--password=$MONGO_AUTH_PASS" "--authenticationDatabase=$MONGO_AUTH_DB")
     fi
 
-    if mongodump --host="${MONGO_HOST}:${MONGO_PORT}" $MONGO_AUTH --archive="$MONGO_FILE" --gzip; then
+    if mongodump --host="${MONGO_HOST}:${MONGO_PORT}" "${MONGO_AUTH[@]}" --archive="$MONGO_FILE" --gzip; then
         echo "MongoDB backup completed: ${MONGO_FILE} ($(du -h "$MONGO_FILE" | cut -f1))"
 
         # Update latest copies atomically only when all databases have succeeded
