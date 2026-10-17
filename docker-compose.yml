@@ -206,8 +206,13 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      CHAT_MONGO_DB: ${CHAT_MONGO_DB}
+      CHAT_MONGO_USER: ${CHAT_MONGO_USER}
+      CHAT_MONGO_PASSWORD: ${CHAT_MONGO_PASSWORD}
+      CHAT_MONGO_AUTH_DB: ${CHAT_MONGO_AUTH_DB}
     volumes:
       - mongo_data:/data/db
+      - ./databases/mongodb/init-chat.js:/docker-entrypoint-initdb.d/10-init-chat.js:ro
     expose:
       - "27017"
     networks:

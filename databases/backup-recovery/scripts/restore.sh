@@ -20,6 +20,7 @@ if [ -f "$ENV_FILE" ]; then
     [ -z "$MONGO_INITDB_ROOT_PASSWORD" ] && MONGO_INITDB_ROOT_PASSWORD=$(get_env_val "MONGO_INITDB_ROOT_PASSWORD")
     [ -z "$CHAT_MONGO_USER" ] && CHAT_MONGO_USER=$(get_env_val "CHAT_MONGO_USER")
     [ -z "$CHAT_MONGO_PASSWORD" ] && CHAT_MONGO_PASSWORD=$(get_env_val "CHAT_MONGO_PASSWORD")
+    [ -z "$CHAT_MONGO_AUTH_DB" ] && CHAT_MONGO_AUTH_DB=$(get_env_val "CHAT_MONGO_AUTH_DB")
 fi
 
 IDENTITY_POSTGRES_USER="${IDENTITY_POSTGRES_USER:-admin}"
@@ -96,13 +97,21 @@ fi
 
 if [ -f "$MONGO_FILE" ]; then
     echo ">>> Restoring MongoDB database..."
-    MONGO_AUTH=""
-    MONGO_AUTH_USER="${CHAT_MONGO_USER:-${MONGO_INITDB_ROOT_USERNAME}}"
-    MONGO_AUTH_PASS="${CHAT_MONGO_PASSWORD:-${MONGO_INITDB_ROOT_PASSWORD}}"
-    if [ -n "$MONGO_AUTH_USER" ] && [ -n "$MONGO_AUTH_PASS" ]; then
-        MONGO_AUTH="--username=${MONGO_AUTH_USER} --password=${MONGO_AUTH_PASS} --authenticationDatabase=admin"
+    # Full-instance dumps/restores need administrator privileges, not chat's readWrite role.
+    MONGO_AUTH=()
+    if [ -n "$MONGO_INITDB_ROOT_USERNAME" ]; then
+        MONGO_AUTH_USER="$MONGO_INITDB_ROOT_USERNAME"
+        MONGO_AUTH_PASS="${MONGO_INITDB_ROOT_PASSWORD:?MongoDB root password is required}"
+        MONGO_AUTH_DB=admin
+    else
+        MONGO_AUTH_USER="${CHAT_MONGO_USER:-}"
+        MONGO_AUTH_PASS="${CHAT_MONGO_PASSWORD:-}"
+        MONGO_AUTH_DB="${CHAT_MONGO_AUTH_DB:-admin}"
     fi
-    docker exec -i mongodb mongorestore $MONGO_AUTH --drop --archive --gzip < "$MONGO_FILE" > /dev/null
+    if [ -n "$MONGO_AUTH_USER" ] && [ -n "$MONGO_AUTH_PASS" ]; then
+        MONGO_AUTH=("--username=$MONGO_AUTH_USER" "--password=$MONGO_AUTH_PASS" "--authenticationDatabase=$MONGO_AUTH_DB")
+    fi
+    docker exec -i mongodb mongorestore "${MONGO_AUTH[@]}" --drop --archive --gzip < "$MONGO_FILE" > /dev/null
     echo ">>> MongoDB restored successfully!"
 else
     echo "Notice: MongoDB backup file '$MONGO_FILE' not found, skipped."
@@ -122,9 +131,9 @@ docker exec -i -e PGPASSWORD="${ORG_POSTGRES_PASSWORD}" identity-service_postgre
 echo ""
 echo "MongoDB Collections in 'chatdb':"
 if [ -n "$MONGO_AUTH_USER" ] && [ -n "$MONGO_AUTH_PASS" ]; then
-    docker exec -i mongodb mongosh -u "$MONGO_AUTH_USER" -p "$MONGO_AUTH_PASS" --authenticationDatabase admin --eval "use chatdb; db.getCollectionNames();" --quiet || true
+    docker exec -i mongodb mongosh -u "$MONGO_AUTH_USER" -p "$MONGO_AUTH_PASS" --authenticationDatabase "$MONGO_AUTH_DB" --eval 'db.getSiblingDB("chatdb").getCollectionNames();' --quiet || true
 else
-    docker exec -i mongodb mongosh --eval "use chatdb; db.getCollectionNames();" --quiet || true
+    docker exec -i mongodb mongosh --eval 'db.getSiblingDB("chatdb").getCollectionNames();' --quiet || true
 fi
 
 echo ""

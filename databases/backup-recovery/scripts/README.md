@@ -63,3 +63,11 @@ Run with:
 ```bash
 make test-recovery
 ```
+
+### MongoDB credentials
+
+Full-instance MongoDB dumps and restores prefer `MONGO_INITDB_ROOT_USERNAME`
+and `MONGO_INITDB_ROOT_PASSWORD`, authenticating against `admin`. The chat
+account only needs `readWrite` on its application database. If root credentials
+are absent, scripts fall back to `CHAT_MONGO_*`; that fallback account must have
+the permissions needed for the full backup or restore operation.

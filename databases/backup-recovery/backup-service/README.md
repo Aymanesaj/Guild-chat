@@ -36,3 +36,11 @@ This directory provides the automated, continuous background backup daemon conta
 | `IDENTITY_POSTGRES_USER` / `IDENTITY_POSTGRES_PASSWORD` / `IDENTITY_POSTGRES_DB` | `admin` / `admin` / `transdb` | Identity credentials and database |
 | `ORG_POSTGRES_USER` / `ORG_POSTGRES_PASSWORD` / `ORG_POSTGRES_DB` | `admin` / `admin` / `org_service_db` | Organization credentials and database |
 | `MONGO_HOST` / `MONGO_PORT` | `mongodb` / `27017` | MongoDB network connection |
+
+### MongoDB credentials
+
+Full-instance MongoDB dumps and restores prefer `MONGO_INITDB_ROOT_USERNAME`
+and `MONGO_INITDB_ROOT_PASSWORD`, authenticating against `admin`. The chat
+account only needs `readWrite` on its application database. If root credentials
+are absent, scripts fall back to `CHAT_MONGO_*`; that fallback account must have
+the permissions needed for the full backup or restore operation.

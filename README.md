@@ -344,6 +344,28 @@ erDiagram
 
 ### MongoDB — `chatdb` (owned by chat-service)
 
+On a fresh `mongo_data` volume, [init-chat.js](databases/mongodb/init-chat.js)
+creates `CHAT_MONGO_USER` in `CHAT_MONGO_AUTH_DB` (default `admin`) with
+`readWrite` access to `CHAT_MONGO_DB`. Existing users are left unchanged;
+changing `.env` does not rotate their passwords. Backup and restore scripts
+use `MONGO_INITDB_ROOT_*`, so the chat user does not need backup privileges.
+
+For an existing volume missing the chat user, apply the updated Compose
+configuration, then run the initializer once with the existing administrator:
+
+```bash
+docker compose up -d --wait mongodb
+docker compose exec mongodb sh -c '
+  mongosh --quiet --username "$MONGO_INITDB_ROOT_USERNAME" \
+    --password "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin \
+    --file /docker-entrypoint-initdb.d/10-init-chat.js
+'
+docker compose up -d --build chat-service backup-service
+```
+
+The administrator credentials must match the existing database. This command
+creates a missing user without deleting data or modifying an existing user.
+
 Collection **`messages`**: `_id ObjectId`, `room_id Long`, `sender_id UUID`,
 `reply_to_id ObjectId?`, `content String`, `content_type String`, `created_at`,
 `edited_at?`, `deleted_at?`. A compound index on `(room_id, created_at)` is created
@@ -435,7 +457,7 @@ change the defaults before any deployment.
 | Org datasource | `ORG_DATASOURCE_URL`, `ORG_POSTGRES_USER`, `ORG_POSTGRES_PASSWORD` | Mapped to org's Spring datasource variables by Compose; connects to `identity-service_postgres:5432`. |
 | JWT | `JWT_SECRET`, `JWT_ISSUER`, optional `JWT_TTL_SECONDS`, `JWT_REFRESH_TTL_SECONDS` | Replace the placeholder secret. Identity defaults to issuer `ft-transcendence`, 900-second access tokens and 604800-second refresh tokens. |
 | Legacy OAuth variables | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_REDIRECT_URI` | Present in the template but unused by the current Node identity service. Setting them does not enable GitHub sign-in. |
-| MongoDB | `MONGO_INITDB_ROOT_USERNAME/PASSWORD`, `CHAT_MONGO_DB/USER/PASSWORD/AUTH_DB` | Match chat credentials to the configured MongoDB user. Initial root credentials apply on the first start only; an existing database needs an explicit credential update. |
+| MongoDB | `MONGO_INITDB_ROOT_USERNAME/PASSWORD`, `CHAT_MONGO_DB/USER/PASSWORD/AUTH_DB` | Fresh volumes initialize root and chat users automatically. Existing users retain their credentials; changing `.env` alone does not update them. |
 | Monitoring | `DS_PROMETHEUS`, `GF_SERVER_ROOT_URL`, `GF_SECURITY_ADMIN_USER/PASSWORD`, `GF_AUTH_*`, `GF_SECURITY_*` | Grafana is served under a subpath, so `GF_SERVER_ROOT_URL` must match your host. |
 | Alerting | `DISCORD_WEBHOOK_URL` | Optional webhook for Alertmanager notifications. |
 

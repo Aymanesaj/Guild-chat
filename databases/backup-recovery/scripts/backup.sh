@@ -22,6 +22,7 @@ if [ -f "$ENV_FILE" ]; then
     [ -z "$MONGO_INITDB_ROOT_PASSWORD" ] && MONGO_INITDB_ROOT_PASSWORD=$(get_env_val "MONGO_INITDB_ROOT_PASSWORD")
     [ -z "$CHAT_MONGO_USER" ] && CHAT_MONGO_USER=$(get_env_val "CHAT_MONGO_USER")
     [ -z "$CHAT_MONGO_PASSWORD" ] && CHAT_MONGO_PASSWORD=$(get_env_val "CHAT_MONGO_PASSWORD")
+    [ -z "$CHAT_MONGO_AUTH_DB" ] && CHAT_MONGO_AUTH_DB=$(get_env_val "CHAT_MONGO_AUTH_DB")
 fi
 
 IDENTITY_POSTGRES_USER="${IDENTITY_POSTGRES_USER:-admin}"
@@ -58,13 +59,21 @@ MONGO_FILE="${BACKUP_DIR}/mongo_${TIMESTAMP}.archive.gz"
 MONGO_LATEST="${BACKUP_DIR}/mongo_latest.archive.gz"
 
 echo "Dumping MongoDB ('chatdb')..."
-MONGO_AUTH=""
-MONGO_AUTH_USER="${CHAT_MONGO_USER:-${MONGO_INITDB_ROOT_USERNAME}}"
-MONGO_AUTH_PASS="${CHAT_MONGO_PASSWORD:-${MONGO_INITDB_ROOT_PASSWORD}}"
-if [ -n "$MONGO_AUTH_USER" ] && [ -n "$MONGO_AUTH_PASS" ]; then
-    MONGO_AUTH="--username=${MONGO_AUTH_USER} --password=${MONGO_AUTH_PASS} --authenticationDatabase=admin"
+# Full-instance dumps/restores need administrator privileges, not chat's readWrite role.
+MONGO_AUTH=()
+if [ -n "$MONGO_INITDB_ROOT_USERNAME" ]; then
+    MONGO_AUTH_USER="$MONGO_INITDB_ROOT_USERNAME"
+    MONGO_AUTH_PASS="${MONGO_INITDB_ROOT_PASSWORD:?MongoDB root password is required}"
+    MONGO_AUTH_DB=admin
+else
+    MONGO_AUTH_USER="${CHAT_MONGO_USER:-}"
+    MONGO_AUTH_PASS="${CHAT_MONGO_PASSWORD:-}"
+    MONGO_AUTH_DB="${CHAT_MONGO_AUTH_DB:-admin}"
 fi
-docker exec mongodb mongodump $MONGO_AUTH --archive --gzip > "$MONGO_FILE"
+if [ -n "$MONGO_AUTH_USER" ] && [ -n "$MONGO_AUTH_PASS" ]; then
+    MONGO_AUTH=("--username=$MONGO_AUTH_USER" "--password=$MONGO_AUTH_PASS" "--authenticationDatabase=$MONGO_AUTH_DB")
+fi
+docker exec mongodb mongodump "${MONGO_AUTH[@]}" --archive --gzip > "$MONGO_FILE"
 echo "  -> Created: ${MONGO_FILE} ($(du -h "$MONGO_FILE" | cut -f1))"
 
 # Update latest copies atomically only when all databases succeed
