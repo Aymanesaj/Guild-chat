@@ -141,8 +141,8 @@ repeat the copy and restart steps after renewal.
 ## 4. GitHub Actions CI/CD Integration
 
 CI runs on pushes and pull requests. The deployment job in
-`.github/workflows/ci-cd.yml` is commented out; uncomment it when ready to enable
-VM deployment after all CI jobs pass. It passes `${{ github.sha }}` to the VM,
+`.github/workflows/ci-cd.yml` deploys pushes to `main` after all CI jobs pass.
+It passes `${{ github.sha }}` to the VM,
 fetches that exact commit, and checks it out detached before running the deployment
 script. Deployments are serialized, and local checkout changes cause a failure
 instead of being discarded.
@@ -177,9 +177,60 @@ to be byte-for-byte identical; immutable image releases would be a separate step
 The frontend uses Node 22 in both CI and its Docker build. The root and frontend
 Docker contexts exclude environment files, certificates, private keys, and backups.
 
+### Deployment verification
+
+`deploy.sh` validates Compose and builds images before updating running containers.
+It waits for services to become running or healthy, restarts Nginx to refresh
+upstream addresses and mounted certificates, then verifies container readiness again.
+Jobs referenced by a `service_completed_successfully` dependency must exit with
+code `0`; other services must stay running. Services without health checks are
+checked for process state only.
+
+The script then requests these paths through the VM's published HTTPS port:
+
+- `/` must return HTTP 200.
+- `/api/users/health` must identify `identity-service` with status `ok`.
+- `/api/orgs/actuator/health` and `/api/chat/actuator/health` must report `UP`.
+
+API checks require HTTP 200 and the expected JSON, so redirects and frontend
+fallback pages do not count as healthy APIs. Requests connect to `127.0.0.1` using
+Compose's resolved `DOMAIN` for the Host header, SNI and certificate validation.
+They verify local ingress, TLS and proxy routing; public DNS, the OCI firewall,
+external reachability and authenticated user flows are outside these checks.
+
+TLS verification is enabled. Production certificates must be trusted and match
+`DOMAIN`. For a private CA or a development self-signed certificate, supply its
+PEM file using `DEPLOY_CA_CERT`; there is no automatic insecure fallback.
+
+Export these optional settings in the deployment shell (they are not loaded from
+the application's `.env`):
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `DEPLOY_WAIT_TIMEOUT` | `300` | Maximum seconds for each container readiness phase |
+| `DEPLOY_HTTP_TIMEOUT` | `30` | Maximum seconds per HTTPS request |
+| `DEPLOY_LOG_TAIL` | `80` | Maximum recent log lines per service on failure |
+| `DEPLOY_CA_CERT` | System trust store | Path to a custom CA certificate for curl |
+
+```bash
+DEPLOY_WAIT_TIMEOUT=420 bash deploy/deploy.sh "$DEPLOY_SHA"
+```
+
+Failures return a nonzero exit code and print all container statuses, state and
+health-check output for failing containers, and recent logs for affected services
+and their direct dependencies. If no affected service can be identified, the script
+shows recent logs for the whole stack. It does not print resolved Compose
+configuration or container environment variables. Container logs themselves may
+contain application-generated sensitive information.
+
+Image pruning runs only after container and HTTP checks pass. The script does not
+delete volumes or attempt automatic rollback. CI tests these decisions with fake
+Docker and curl commands; the actual deployment performs the live checks.
+
 ---
 
 ## 5. Scripts Overview
 
 - [`setup-vm.sh`](setup-vm.sh): Installs Docker, Compose, configures Docker log rotation, and opens local OS-level firewall ports.
-- [`deploy.sh`](deploy.sh): Verifies the supplied tested SHA and clean checkout, rebuilds containers, prunes dangling images, and checks status. Called over SSH when the deployment job is enabled.
+- [`deploy.sh`](deploy.sh): Verifies the tested SHA and clean checkout, builds images, checks container readiness and HTTPS APIs, reports failures, and prunes dangling images after successful verification.
+- [`test_deploy.py`](test_deploy.py): Tests deployment success and failure handling without starting containers or making network requests. Run with `python3 deploy/test_deploy.py`.
