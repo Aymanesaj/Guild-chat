@@ -98,6 +98,7 @@ class RoomServiceEventsTest {
         when(room.getId()).thenReturn(ROOM);
         when(room.getType()).thenReturn(RoomType.GROUP);
         when(roomRepository.findById(ROOM)).thenReturn(Optional.of(room));
+        when(roomRepository.findByIdForUpdate(ROOM)).thenReturn(Optional.of(room));
         return room;
     }
 
@@ -167,6 +168,7 @@ class RoomServiceEventsTest {
     @Test
     @DisplayName("leaveRoom: ROOM_REMOVED to the leaver, ROOM_UPDATED to those who stay")
     void leave() {
+        groupRoom();
         when(roomMemberRepository.findByRoomIdAndUserId(ROOM, BOB)).thenReturn(Optional.of(member(BOB)));
         membersAre(OWNER, CAROL); // as seen after the delete
 

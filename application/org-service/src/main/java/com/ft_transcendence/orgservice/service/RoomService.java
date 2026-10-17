@@ -1,6 +1,7 @@
 package com.ft_transcendence.orgservice.service;
 
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -109,6 +110,18 @@ public class RoomService {
         );
     }
 
+    /**
+     * Per-room mutation lock, held until commit/rollback. Membership, role,
+     * deletion and other room writes must take it BEFORE reading permissions
+     * or members, so a waiting operation authorizes against the committed
+     * successor and cannot remove/promote a stale membership. Different rooms
+     * remain independent. New rooms/DMs are not visible until creation commits.
+     */
+    private Room lockRoom(Long roomId) {
+        return roomRepository.findByIdForUpdate(roomId)
+                .orElseThrow(() -> new NotFoundException("Room not found with id: " + roomId));
+    }
+
     public List<RoleName> getRolesByRoomId(Long roomId, UUID userId) {
         if (roomRepository.findById(roomId).isEmpty() || !isUserInRoom(roomId, userId)) {
             throw new NotFoundException("Room not found with id: " + roomId);
@@ -121,6 +134,7 @@ public class RoomService {
 
     @Transactional
     public void markRoomAsRead(Long roomId, UUID userId) {
+        lockRoom(roomId);
         RoomMember roomMember = roomMemberRepository
                 .findByRoomIdAndUserId(roomId, userId)
                 .orElseThrow(() ->
@@ -135,7 +149,8 @@ public class RoomService {
 
     @Transactional
     public void updateMemberRole(Long roomId, UUID targetUserId, RoleName newRoleName, UUID actorId) {
-        if (roomRepository.findById(roomId).isEmpty() || !isUserInRoom(roomId, actorId)) {
+        lockRoom(roomId);
+        if (!isUserInRoom(roomId, actorId)) {
             throw new NotFoundException("Room not found with id: " + roomId);
         }
 
@@ -187,8 +202,7 @@ public class RoomService {
 
     @Transactional
     public RoomResponse updateRoom(Long roomId, UpdateRoomRequest request, UUID userId) {
-        Room room = roomRepository.findById(roomId)
-                .orElseThrow(() -> new NotFoundException("Room not found with id: " + roomId));
+        Room room = lockRoom(roomId);
 
         if (!isUserInRoom(roomId, userId)) {
             throw new NotFoundException("Room not found with id: " + roomId);
@@ -248,8 +262,7 @@ public class RoomService {
 
     @Transactional
     public void deleteRoom(Long roomId) {
-        Room room = roomRepository.findById(roomId)
-                .orElseThrow(() -> new NotFoundException("Room not found with id: " + roomId));
+        Room room = lockRoom(roomId);
 
         List<RoomMember> roomMembers = roomMemberRepository.findByRoomId(roomId);
         // Collected before the rows go: afterwards nobody is left to tell.
@@ -269,10 +282,7 @@ public class RoomService {
     @Transactional
     public void removeMember(Long roomId, UUID actorId, UUID targetUserId) {
 
-        roomRepository.findById(roomId)
-                .orElseThrow(() ->
-                        new NotFoundException("Room not found with id: " + roomId)
-                );
+        lockRoom(roomId);
 
         if (!isUserInRoom(roomId, actorId)) {
             throw new NotFoundException("Room not found with id: " + roomId);
@@ -284,11 +294,16 @@ public class RoomService {
             );
         }
 
+        if (!actorId.equals(targetUserId) && isOwner(roomId, targetUserId)) {
+            throw new ForbiddenException("Cannot remove the OWNER from the room");
+        }
+
         leaveRoom(roomId, targetUserId);
     }
 
     @Transactional
     public void leaveRoom(Long roomId, UUID userId) {
+        Room room = lockRoom(roomId);
         RoomMember roomMember = roomMemberRepository
                 .findByRoomIdAndUserId(roomId, userId)
                 .orElseThrow(() ->
@@ -305,10 +320,27 @@ public class RoomService {
                         userId,
                         RoleName.OWNER
                 )) {
-                        if (roomMemberRepository.countByRoomId(roomId) > 1) {
-                            throw new ForbiddenException("Owner cannot leave the room while there are other members.");
-                        }
-                        removeRoom = true;
+            if (roomMemberRepository.countByRoomId(roomId) > 1) {
+                if (room.getType() != RoomType.GROUP) {
+                    // Preserve the existing DM departure rules.
+                    throw new ForbiddenException("Owner cannot leave the room while there are other members.");
+                }
+                MemberRole successor = memberRoleRepository.findByRoomMemberRoomId(roomId).stream()
+                        .filter(assignment -> !assignment.getRoomMember().getUserId().equals(userId))
+                        .filter(assignment -> assignment.getRole().getName() == RoleName.ADMIN
+                                || assignment.getRole().getName() == RoleName.MEMBER)
+                        .min(Comparator
+                                .comparingInt((MemberRole assignment) ->
+                                        assignment.getRole().getName() == RoleName.ADMIN ? 0 : 1)
+                                .thenComparing(assignment -> assignment.getRoomMember().getId()))
+                        .orElseThrow(() -> new IllegalStateException("Room has no eligible successor"));
+                Role ownerRole = roleRepository.findByRoomIdAndName(roomId, RoleName.OWNER)
+                        .orElseThrow(() -> new IllegalStateException("OWNER role not found for room: " + roomId));
+                successor.setRole(ownerRole);
+                memberRoleRepository.save(successor);
+            } else {
+                removeRoom = true;
+            }
         }
         memberRoleRepository.deleteAllByRoomMember(roomMember);
         roomMemberRepository.delete(roomMember);
@@ -316,8 +348,7 @@ public class RoomService {
         publishRoomChange(roomId, RoomChange.ROOM_REMOVED, List.of(userId));
         if (removeRoom) {
             deleteRoom(roomId);
-		}
-        else {
+        } else {
             publishRoomChange(roomId, RoomChange.ROOM_UPDATED, memberIds(roomId));
         }
     }
@@ -325,10 +356,7 @@ public class RoomService {
     @Transactional
     public void addMember(Long roomId, UUID actorId, UUID targetUserId) {
 
-        Room room = roomRepository.findById(roomId)
-                .orElseThrow(() ->
-                        new NotFoundException("Room not found with id: " + roomId)
-                );
+        Room room = lockRoom(roomId);
 
         if (!isUserInRoom(roomId, actorId)) {
             throw new NotFoundException("Room not found with id: " + roomId);

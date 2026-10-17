@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.util.List;
 import java.util.Map;
@@ -89,6 +90,19 @@ class ChatNotifyGrpcServiceTest {
     }
 
     // RoomChanged tests
+
+    @Test
+    @DisplayName("Owner departure notifications preserve the room's message history")
+    void departureDoesNotDeleteHistory() {
+        // REMOVED is from ALICE's room-list perspective; BOB still has the room.
+        // Neither this event nor the subsequent role refresh proves room deletion.
+        stub.roomChanged(request("7", RoomChange.ROOM_REMOVED, ALICE));
+        stub.roomChanged(request("7", RoomChange.ROOM_UPDATED, BOB));
+
+        verifyNoInteractions(messageRepository);
+        verify(sockets).sendToUser(ALICE, WsEvents.ROOM_REMOVED, Map.of("room_id", 7L));
+        verify(sockets).sendToUser(BOB, WsEvents.ROOM_UPDATED, Map.of("room_id", 7L));
+    }
 
     @Test
     @DisplayName("ROOM_ADDED notifies every listed user")
