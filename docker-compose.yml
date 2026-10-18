@@ -169,6 +169,25 @@ services:
         condition: service_healthy
     restart: always
 
+  rabbitmq:
+    image: rabbitmq:management-alpine
+    container_name: rabbitmq
+    networks:
+      - private
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    expose:
+    - "5672"
+    restart: unless-stopped
+    volumes:
+    - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   # ============================================================
   # DATABASES
@@ -403,7 +422,10 @@ services:
 # ============================================================
 
 volumes:
+  rabbitmq_data:
+    name: "rabbitmq_data"
   nginx_tls:
+    name: "nginx_tls"
   database:
     name: "database"
   prometheus_data:
