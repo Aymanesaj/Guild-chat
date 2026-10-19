@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import styled from "styled-components";
+import { useToast } from "../ui/ToastProvider";
 import {
   TbAlertTriangle,
   TbArrowBackUp,
@@ -11,7 +12,7 @@ import {
 import { ProfileName } from "../layout/Sidebar";
 import { formatTimestamp } from "../../api/rooms";
 import { useOpenUserPreview } from "../../hooks/useOpenUserPreview";
-import { Button, ConfirmDialog, EmptyState, IconButton, InlineError, Input, Spinner } from "../ui";
+import { Button, ConfirmDialog, EmptyState, IconButton, Input, Spinner } from "../ui";
 import UserAvatar from "../profile/UserAvatar";
 
 const PanelCenter = styled.div`
@@ -165,22 +166,21 @@ function RoomContent({
   const [editingId, setEditingId] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState(null);
+  const toast = useToast();
 
   const closeDelete = () => {
     setPendingDelete(null);
-    setDeleteError(null);
   };
 
   const confirmDelete = async () => {
     if (!pendingDelete) return;
     setDeleting(true);
-    setDeleteError(null);
     try {
       await onDelete?.(pendingDelete.id);
+      toast.success("Message deleted.");
       setPendingDelete(null);
     } catch (failure) {
-      setDeleteError(failure?.message || "Couldn't delete this message.");
+      toast.error(failure?.message || "Couldn't delete this message.");
     } finally {
       setDeleting(false);
     }
@@ -245,7 +245,6 @@ function RoomContent({
             ? `Delete this message from ${pendingDelete.sender_username ?? "this user"}? Everyone in the room will see it as deleted.`
             : "Everyone in the room will see it as deleted."
         }
-        error={deleteError}
         confirmLabel="Delete"
         busyLabel="Deleting..."
         busy={deleting}
@@ -362,13 +361,11 @@ function replyPreview(repliedTo) {
 }
 
 /**
- * Inline edit. chat-service refuses edits past 15 minutes (EDIT_WINDOW_EXPIRED)
- * and from anyone but the sender, so the failure is shown on the row rather
- * than dropped — the old text is still on screen and needs an explanation.
+ * Inline edit. Keep the draft on failure and report the reason in a toast.
  */
 function MessageEditor({ message, onSave, onClose }) {
   const [text, setText] = useState(message.content ?? "");
-  const [error, setError] = useState(null);
+  const toast = useToast();
   const [saving, setSaving] = useState(false);
   const inputRef = useRef(null);
 
@@ -388,12 +385,12 @@ function MessageEditor({ message, onSave, onClose }) {
     }
 
     setSaving(true);
-    setError(null);
     try {
       await onSave?.(message.id, trimmed);
+      toast.success("Message updated.");
       onClose();
     } catch (failure) {
-      setError(failure?.message || "Couldn't edit this message.");
+      toast.error(failure?.message || "Couldn't edit this message.");
     } finally {
       setSaving(false);
     }
@@ -421,7 +418,7 @@ function MessageEditor({ message, onSave, onClose }) {
         </Button>
       </EditForm>
 
-      {error ? <InlineError role="alert">{error}</InlineError> : <EditHint>Escape to cancel</EditHint>}
+      <EditHint>Escape to cancel</EditHint>
     </>
   );
 }

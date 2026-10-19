@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import styled from "styled-components";
+import { useToast } from "../ui/ToastProvider";
 import {
   TbCheck,
   TbDoorExit,
@@ -124,6 +125,7 @@ function useUsernameAvailability(username, currentUsername) {
 // -----------------------------------------------------------------------------
 
 export default function ProfileOverlay({ user, onClose }) {
+  const toast = useToast();
   const {
     refreshProfile,
     loadingProfile,
@@ -138,7 +140,6 @@ export default function ProfileOverlay({ user, onClose }) {
 
   const avatarInputRef = useRef(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
-  const [avatarError, setAvatarError] = useState("");
 
   const handleAvatarButtonClick = () => {
     if (avatarUploading) {
@@ -157,7 +158,6 @@ export default function ProfileOverlay({ user, onClose }) {
     }
 
     setAvatarUploading(true);
-    setAvatarError("");
 
     try {
       // Drop the cached object URL first: identity can hand back the same
@@ -165,8 +165,9 @@ export default function ProfileOverlay({ user, onClose }) {
       forgetAvatar(user.avatar_file);
       await uploadAvatar(file);
       await refreshProfile();
+      toast.success("Avatar updated.");
     } catch (error) {
-      setAvatarError(
+      toast.error(
         error?.message || "Failed to upload avatar."
       );
     } finally {
@@ -193,7 +194,6 @@ export default function ProfileOverlay({ user, onClose }) {
 
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
 
   const [draft, setDraft] = useState({
     displayName: user.displayName ?? "",
@@ -237,14 +237,12 @@ export default function ProfileOverlay({ user, onClose }) {
 
   const [loadingSection, setLoadingSection] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [sectionError, setSectionError] = useState("");
 
   // The friend whose DM is being opened, so only that row's button is busy.
   const [openingDmId, setOpeningDmId] = useState(null);
 
   // Confirmation
   const [confirmAction, setConfirmAction] = useState(null);
-  const [confirmError, setConfirmError] = useState("");
   const [runningAction, setRunningAction] = useState(false);
 
 
@@ -254,7 +252,6 @@ export default function ProfileOverlay({ user, onClose }) {
 
   // Each section opens on its first sub-tab, which shares the section's name.
   const selectSection = (section) => {
-    setSectionError("");
     setManagementSection(section);
     setManagementTab(section);
   };
@@ -271,12 +268,10 @@ export default function ProfileOverlay({ user, onClose }) {
       bio: user.bio ?? "",
     });
 
-    setSaveError("");
     setIsEditing(true);
   };
 
   const cancelEditing = () => {
-    setSaveError("");
     setIsEditing(false);
   };
 
@@ -286,7 +281,6 @@ export default function ProfileOverlay({ user, onClose }) {
     }
 
     setSaving(true);
-    setSaveError("");
 
     try {
       await updateProfile({
@@ -298,8 +292,9 @@ export default function ProfileOverlay({ user, onClose }) {
       await refreshProfile();
 
       setIsEditing(false);
+      toast.success("Profile updated.");
     } catch (error) {
-      setSaveError(error?.message || "Failed to update profile.");
+      toast.error(error?.message || "Failed to update profile.");
     } finally {
       setSaving(false);
     }
@@ -314,7 +309,6 @@ export default function ProfileOverlay({ user, onClose }) {
     const nextOffset = reset ? 0 : friendsOffset;
 
     reset ? setLoadingSection(true) : setLoadingMore(true);
-    setSectionError("");
 
     try {
       const data = await getFriendsList({
@@ -328,7 +322,7 @@ export default function ProfileOverlay({ user, onClose }) {
       setFriendsOffset(nextOffset + batch.length);
       setFriendsHasMore(batch.length === MANAGEMENT_PAGE_SIZE);
     } catch (error) {
-      setSectionError(
+      toast.error(
         error?.message || "Failed to load friends."
       );
     } finally {
@@ -340,7 +334,6 @@ export default function ProfileOverlay({ user, onClose }) {
     const nextOffset = reset ? 0 : requestsOffset;
 
     reset ? setLoadingSection(true) : setLoadingMore(true);
-    setSectionError("");
 
     try {
       const data = await getFriendRequests({
@@ -356,7 +349,7 @@ export default function ProfileOverlay({ user, onClose }) {
       setRequestsOffset(nextOffset + batch.length);
       setRequestsHasMore(batch.length === MANAGEMENT_PAGE_SIZE);
     } catch (error) {
-      setSectionError(
+      toast.error(
         error?.message || "Failed to load requests."
       );
     } finally {
@@ -368,7 +361,6 @@ export default function ProfileOverlay({ user, onClose }) {
     const nextOffset = reset ? 0 : roomsOffset;
 
     reset ? setLoadingSection(true) : setLoadingMore(true);
-    setSectionError("");
 
     try {
       const data = await getRooms({
@@ -382,7 +374,7 @@ export default function ProfileOverlay({ user, onClose }) {
       setRoomsOffset(nextOffset + batch.length);
       setRoomsHasMore(batch.length === MANAGEMENT_PAGE_SIZE);
     } catch (error) {
-      setSectionError(
+      toast.error(
         error?.message || "Failed to load rooms."
       );
     } finally {
@@ -394,7 +386,6 @@ export default function ProfileOverlay({ user, onClose }) {
     const nextOffset = reset ? 0 : sentOffset;
 
     reset ? setLoadingSection(true) : setLoadingMore(true);
-    setSectionError("");
 
     try {
       const data = await getSentFriendRequests({
@@ -410,7 +401,7 @@ export default function ProfileOverlay({ user, onClose }) {
       setSentOffset(nextOffset + batch.length);
       setSentHasMore(batch.length === MANAGEMENT_PAGE_SIZE);
     } catch (error) {
-      setSectionError(
+      toast.error(
         error?.message || "Failed to load sent requests."
       );
     } finally {
@@ -442,8 +433,6 @@ export default function ProfileOverlay({ user, onClose }) {
   // ---------------------------------------------------------------------------
 
   const requestRemoveFriend = (friend) => {
-    setConfirmError("");
-
     setConfirmAction({
       type: "remove-friend",
       id: friend.id,
@@ -453,8 +442,6 @@ export default function ProfileOverlay({ user, onClose }) {
 
 
   const requestDeclineFriendRequest = (request) => {
-    setConfirmError("");
-
     setConfirmAction({
       type: "decline-friend-request",
       id: request.friendship_id,
@@ -464,8 +451,6 @@ export default function ProfileOverlay({ user, onClose }) {
 
 
   const requestLeaveRoom = (room) => {
-    setConfirmError("");
-
     setConfirmAction({
       type: "leave-room",
       id: room.id,
@@ -475,8 +460,6 @@ export default function ProfileOverlay({ user, onClose }) {
 
 
   const requestCancelSentRequest = (request) => {
-    setConfirmError("");
-
     setConfirmAction({
       type: "cancel-friend-request",
       id: request.receiver?.id,
@@ -490,7 +473,6 @@ export default function ProfileOverlay({ user, onClose }) {
       return;
     }
 
-    setConfirmError("");
     setConfirmAction(null);
   };
 
@@ -516,7 +498,6 @@ export default function ProfileOverlay({ user, onClose }) {
     }
 
     setRunningAction(true);
-    setConfirmError("");
 
     try {
       if (confirmAction.type === "remove-friend") {
@@ -539,9 +520,16 @@ export default function ProfileOverlay({ user, onClose }) {
       await refreshProfile();
       await reloadActiveManagementTab();
 
+      const messages = {
+        "remove-friend": "Friend removed.",
+        "decline-friend-request": "Friend request declined.",
+        "leave-room": `You left ${confirmAction.label}.`,
+        "cancel-friend-request": "Friend request cancelled.",
+      };
+      toast.success(messages[confirmAction.type]);
       setConfirmAction(null);
     } catch (error) {
-      setConfirmError(
+      toast.error(
         error?.message || "Failed to apply action."
       );
     } finally {
@@ -560,7 +548,6 @@ export default function ProfileOverlay({ user, onClose }) {
     if (openingDmId) return;
 
     setOpeningDmId(friend.id);
-    setSectionError("");
 
     try {
       const room = await getOrCreateDm(friend.id);
@@ -568,7 +555,7 @@ export default function ProfileOverlay({ user, onClose }) {
       navigateToRoom(room);
       onClose();
     } catch (error) {
-      setSectionError(
+      toast.error(
         error?.message || `Couldn't open a chat with ${friend.username}.`
       );
     } finally {
@@ -713,13 +700,14 @@ export default function ProfileOverlay({ user, onClose }) {
                         await acceptFriendRequest(
                           request.friendship_id
                         );
+                        toast.success("Friend request accepted.");
 
                         await Promise.all([
                           refreshProfile(),
                           loadRequestsPage(true),
                         ]);
                       } catch (error) {
-                        setSectionError(
+                        toast.error(
                           error?.message ||
                             "Failed to accept request."
                         );
@@ -889,12 +877,6 @@ export default function ProfileOverlay({ user, onClose }) {
             accept="image/*"
             onChange={handleAvatarFileChange}
           />
-
-          {avatarError && (
-            <AvatarErrorText>
-              {avatarError}
-            </AvatarErrorText>
-          )}
         </AvatarWrap>
 
         <Content>
@@ -1008,10 +990,6 @@ export default function ProfileOverlay({ user, onClose }) {
                 )}
               </HeaderRow>
 
-              {isEditing && saveError && (
-                <HelperText $error>{saveError}</HelperText>
-              )}
-
               <Divider />
 
               {isEditing ? (
@@ -1084,15 +1062,8 @@ export default function ProfileOverlay({ user, onClose }) {
 
                     <FriendInvite
                       onSent={() => setManagementTab("sent")}
-                      onError={setSectionError}
                     />
                   </SubTabs>
-                )}
-
-                {sectionError && (
-                  <InlineError>
-                    {sectionError}
-                  </InlineError>
                 )}
 
                 <ManagementContent>
@@ -1122,7 +1093,6 @@ export default function ProfileOverlay({ user, onClose }) {
               ? CONFIRM_TEXTS[confirmAction.type]?.(confirmAction.label)
               : ""
           }
-          error={confirmError}
           busy={runningAction}
           onConfirm={applyAction}
           onCancel={cancelConfirmAction}
@@ -1262,11 +1232,6 @@ const AvatarFallback = styled.span`
 
 const HiddenFileInput = styled.input`
   display: none;
-`;
-
-const AvatarErrorText = styled.span`
-  font-size: var(--text-xs);
-  color: var(--danger);
 `;
 
 const Content = styled.div`
@@ -1432,13 +1397,6 @@ const ManagementContent = styled.div`
   min-height: 0;
   display: flex;
   flex-direction: column;
-`;
-
-const InlineError = styled.div`
-  flex-shrink: 0;
-  margin-bottom: var(--space-3);
-  color: var(--danger);
-  font-size: var(--text-sm);
 `;
 
 const ExpandedListPanel = styled.div`

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
+import { useToast } from "../ui/ToastProvider";
 import { TbArrowLeft, TbUserPlus, TbUsersGroup, TbX } from "react-icons/tb";
 
 import MemberList from "./MemberList";
@@ -91,18 +92,17 @@ const ListArea = styled.div`
 `;
 
 function MembersSidebar({ roomId, onClose }) {
+  const toast = useToast();
   const { currentUser } = useProfileOverlay();
   const { isPhone } = useNavDrawer();
   const [view, setView] = useState("members");
 
   const [loading, setLoading] = useState("loading");
   const [members, setMembers] = useState([]);
-  const [kickError, setKickError] = useState(null);
   const [pendingKick, setPendingKick] = useState(null);
   const [kicking, setKicking] = useState(false);
   // Its own slot: ConfirmDialog shows one thing at a time.
   const [pendingRole, setPendingRole] = useState(null);
-  const [roleError, setRoleError] = useState(null);
   const [roleBusy, setRoleBusy] = useState(false);
 
   const presence = usePresence(members.map((member) => member.id));
@@ -110,7 +110,6 @@ function MembersSidebar({ roomId, onClose }) {
   const [friendsLoading, setFriendsLoading] = useState("idle");
   const [friends, setFriends] = useState([]);
   const [addingId, setAddingId] = useState(null);
-  const [addError, setAddError] = useState(null);
 
   useEffect(() => {
     const fetchMembers = async () => {
@@ -186,13 +185,13 @@ function MembersSidebar({ roomId, onClose }) {
     if (!pendingKick) return;
 
     setKicking(true);
-    setKickError(null);
     try {
       await removeMember(roomId, pendingKick.id);
+      toast.success(`${pendingKick.username} removed from the room.`);
       setMembers((prev) => prev.filter((item) => item.id !== pendingKick.id));
       setPendingKick(null);
     } catch {
-      setKickError(`Couldn't remove ${pendingKick.username}.`);
+      toast.error(`Couldn't remove ${pendingKick.username}.`);
     } finally {
       setKicking(false);
     }
@@ -204,9 +203,11 @@ function MembersSidebar({ roomId, onClose }) {
     const { member, nextRole } = pendingRole;
 
     setRoleBusy(true);
-    setRoleError(null);
     try {
       await assignRole(roomId, member.id, nextRole);
+      toast.success(nextRole === "admin"
+        ? `${member.username} is now an admin.`
+        : `${member.username} is now a member.`);
       // The endpoint answers 204 with no body, so the roster is updated here.
       setMembers((prev) =>
         prev.map((item) =>
@@ -215,7 +216,7 @@ function MembersSidebar({ roomId, onClose }) {
       );
       setPendingRole(null);
     } catch {
-      setRoleError(
+      toast.error(
         nextRole === "admin"
           ? `Couldn't make ${member.username} an admin.`
           : `Couldn't remove ${member.username}'s admin role.`
@@ -227,16 +228,16 @@ function MembersSidebar({ roomId, onClose }) {
 
   const handleAdd = async (friend) => {
     setAddingId(friend.id);
-    setAddError(null);
 
     try {
       await addMember(roomId, friend.id);
+      toast.success(`${friend.username} added to the room.`);
       setMembers((prev) => [
         ...prev,
         { ...friend, role: "member" },
       ]);
     } catch (error) {
-      setAddError(error?.message || `Couldn't add ${friend.username}.`);
+      toast.error(error?.message || `Couldn't add ${friend.username}.`);
     } finally {
       setAddingId(null);
     }
@@ -295,12 +296,6 @@ function MembersSidebar({ roomId, onClose }) {
           <>
             {loading === "loading" && <StatusText>Loading members...</StatusText>}
             {loading === "error" && <InlineError>Error loading members.</InlineError>}
-            {kickError && !pendingKick && (
-              <InlineError role="alert">{kickError}</InlineError>
-            )}
-            {roleError && !pendingRole && (
-              <InlineError role="alert">{roleError}</InlineError>
-            )}
             {loading === "success" && (
               <MemberList
                 members={members.map((member) => ({
@@ -323,7 +318,6 @@ function MembersSidebar({ roomId, onClose }) {
           <>
             {friendsLoading === "loading" && <StatusText>Loading friends...</StatusText>}
             {friendsLoading === "error" && <InlineError>Error loading friends.</InlineError>}
-            {addError && <InlineError role="alert">{addError}</InlineError>}
             {friendsLoading === "success" &&
               (invitableFriends.length > 0 ? (
                 invitableFriends.map((friend) => {
@@ -378,15 +372,11 @@ function MembersSidebar({ roomId, onClose }) {
             ? `Remove ${pendingKick.username} from this room?`
             : ""
         }
-        error={kickError}
         confirmLabel="Remove"
         busyLabel="Removing..."
         busy={kicking}
         onConfirm={confirmKick}
-        onCancel={() => {
-          setPendingKick(null);
-          setKickError(null);
-        }}
+        onCancel={() => setPendingKick(null)}
       />
 
       <ConfirmDialog
@@ -401,17 +391,13 @@ function MembersSidebar({ roomId, onClose }) {
               : `Take away ${pendingRole.member.username}'s admin rights?`
             : ""
         }
-        error={roleError}
         confirmLabel={
           pendingRole?.nextRole === "admin" ? "Make admin" : "Remove admin"
         }
         busyLabel="Saving..."
         busy={roleBusy}
         onConfirm={confirmRoleChange}
-        onCancel={() => {
-          setPendingRole(null);
-          setRoleError(null);
-        }}
+        onCancel={() => setPendingRole(null)}
       />
     </MembersSidebarRoot>
   );

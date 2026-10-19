@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
+import { useToast } from "../ui/ToastProvider";
 import { TbCheck, TbSend, TbUserCheck, TbUserPlus, TbX } from "react-icons/tb";
 
 import { useAvatarUrl } from "../../hooks/useAvatarUrl";
@@ -46,6 +47,7 @@ function clampPosition(anchorRect) {
 
 export default function ProfilePreviewPopover({ target, onClose }) {
   const { navigateToRoom } = useRoomNavigation();
+  const toast = useToast();
 
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -53,7 +55,6 @@ export default function ProfilePreviewPopover({ target, onClose }) {
 
   const [messageDraft, setMessageDraft] = useState("");
   const [sending, setSending] = useState(false);
-  const [actionError, setActionError] = useState("");
   const [runningAction, setRunningAction] = useState(false);
 
   const { avatarUrl, loading: avatarLoading } = useAvatarUrl(user?.avatar);
@@ -93,13 +94,13 @@ export default function ProfilePreviewPopover({ target, onClose }) {
 
   const handleAddFriend = async () => {
     setRunningAction(true);
-    setActionError("");
 
     try {
       const request = await sendFriendRequest(user.id);
+      toast.success(`Request sent to @${user.username}.`);
       setUser((u) => ({ ...u, friendship_status: "pending_outgoing", friendship_id: request?.id ?? null }));
     } catch (err) {
-      setActionError(err?.message || "Failed to send friend request.");
+      toast.error(err?.message || "Failed to send friend request.");
     } finally {
       setRunningAction(false);
     }
@@ -107,13 +108,13 @@ export default function ProfilePreviewPopover({ target, onClose }) {
 
   const handleCancelRequest = async () => {
     setRunningAction(true);
-    setActionError("");
 
     try {
       await cancelFriendRequest(user.id);
+      toast.success("Friend request cancelled.");
       setUser((u) => ({ ...u, friendship_status: "none", friendship_id: null }));
     } catch (err) {
-      setActionError(err?.message || "Failed to cancel friend request.");
+      toast.error(err?.message || "Failed to cancel friend request.");
     } finally {
       setRunningAction(false);
     }
@@ -121,13 +122,13 @@ export default function ProfilePreviewPopover({ target, onClose }) {
 
   const handleAccept = async () => {
     setRunningAction(true);
-    setActionError("");
 
     try {
       await acceptFriendRequest(user.friendship_id);
+      toast.success("Friend request accepted.");
       setUser((u) => ({ ...u, friendship_status: "friends" }));
     } catch (err) {
-      setActionError(err?.message || "Failed to accept friend request.");
+      toast.error(err?.message || "Failed to accept friend request.");
     } finally {
       setRunningAction(false);
     }
@@ -135,13 +136,13 @@ export default function ProfilePreviewPopover({ target, onClose }) {
 
   const handleDecline = async () => {
     setRunningAction(true);
-    setActionError("");
 
     try {
       await declineFriendRequest(user.friendship_id);
+      toast.success("Friend request declined.");
       setUser((u) => ({ ...u, friendship_status: "none", friendship_id: null }));
     } catch (err) {
-      setActionError(err?.message || "Failed to decline friend request.");
+      toast.error(err?.message || "Failed to decline friend request.");
     } finally {
       setRunningAction(false);
     }
@@ -154,7 +155,6 @@ export default function ProfilePreviewPopover({ target, onClose }) {
     if (!content || sending) return;
 
     setSending(true);
-    setActionError("");
 
     try {
       const room = await getOrCreateDm(user.id);
@@ -162,7 +162,7 @@ export default function ProfilePreviewPopover({ target, onClose }) {
       navigateToRoom(room);
       onClose();
     } catch (err) {
-      setActionError(err?.message || "Failed to send message.");
+      toast.error(err?.message || "Failed to send message.");
       setSending(false);
     }
   };
@@ -208,8 +208,6 @@ export default function ProfilePreviewPopover({ target, onClose }) {
               <Divider />
 
               <Bio>{user.bio || "No bio yet."}</Bio>
-
-              {actionError && <ActionErrorText>{actionError}</ActionErrorText>}
 
               {user.friendship_status === "none" && (
                 <ActionRow>
@@ -390,12 +388,6 @@ const Bio = styled.p`
   font-size: var(--text-sm);
   line-height: 1.5;
   color: var(--text-secondary);
-`;
-
-const ActionErrorText = styled.p`
-  margin: 10px 0 0;
-  font-size: var(--text-sm);
-  color: var(--danger);
 `;
 
 const ActionRow = styled.div`

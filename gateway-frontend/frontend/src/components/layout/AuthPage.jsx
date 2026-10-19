@@ -1,4 +1,5 @@
 import styled from "styled-components";
+import { useToast } from "../ui/ToastProvider";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { TbEye, TbEyeOff } from "react-icons/tb";
@@ -122,13 +123,6 @@ const SignupConsent = styled.p`
   }
 `;
 
-const ErrorText = styled.p`
-  margin: -2px 0 0;
-  min-height: 18px;
-  font-size: var(--text-sm);
-  color: var(--danger);
-`;
-
 const Accent = styled.span`
   margin-left: 6px;
   color: var(--accent-400);
@@ -167,12 +161,12 @@ function PasswordInput({ placeholder, value, onChange, ...rest }) {
   );
 }
 
-function LoginView({ setView, onLogin, values, onChange, error, loading }) {
+function LoginView({ setView, onLogin, values, onChange, loading }) {
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    // A failed sign-in is reported through `error`; stay on the form.
+    // A failed sign-in is reported by a toast; stay on the form.
     if (await onLogin(values.email, values.password)) {
       navigate("/app");
     }
@@ -200,8 +194,6 @@ function LoginView({ setView, onLogin, values, onChange, error, loading }) {
           onChange={(e) => onChange("password", e.target.value)}
         />
 
-        <ErrorText>{error}</ErrorText>
-
         <PrimaryButton type="submit" $full disabled={loading}>
           {loading ? "Logging in..." : "Login"}
         </PrimaryButton>
@@ -215,7 +207,7 @@ function LoginView({ setView, onLogin, values, onChange, error, loading }) {
   );
 }
 
-function SignupView({ setView, onSignup, values, onChange, error, loading }) {
+function SignupView({ setView, onSignup, values, onChange, loading }) {
   const navigate = useNavigate();
 
   const handleSignup = async (e) => {
@@ -263,8 +255,6 @@ function SignupView({ setView, onSignup, values, onChange, error, loading }) {
           onChange={(e) => onChange("confirmPassword", e.target.value)}
         />
 
-        <ErrorText>{error}</ErrorText>
-
         <PrimaryButton type="submit" $full disabled={loading}>
           {loading ? "Creating..." : "Create Account"}
         </PrimaryButton>
@@ -292,7 +282,7 @@ function AuthPage( { onLogin } ) {
     password: "",
     confirmPassword: "",
   });
-  const [error, setError] = useState("");
+  const toast = useToast();
   const [loading, setLoading] = useState(false);
 
   const updateField = (field, value) => {
@@ -305,21 +295,20 @@ function AuthPage( { onLogin } ) {
   /** Resolves to true when the session is established, so the view can navigate. */
   const handleLogin = async (email, password) => {
     if (!email.trim() || !password.length) {
-      setError(!email.trim() ? "Username or email is required" : "Password is required");
+      toast.error(!email.trim() ? "Username or email is required" : "Password is required");
       return false;
     }
 
     setLoading(true);
-    setError("");
 
     try {
       onLogin(await loginUser(email.trim(), password));
       return true;
     } catch (err) {
       if (err?.status >= 500) {
-        setError("Something went wrong. Please try again later.");
+        toast.error("Something went wrong. Please try again later.");
       } else {
-        setError(err.message);
+        toast.error(err?.message || "Unable to sign in. Please try again.");
       }
       return false;
     } finally {
@@ -352,21 +341,21 @@ function AuthPage( { onLogin } ) {
     }
 
     if (validationError) {
-      setError(validationError);
+      toast.error(validationError);
       return false;
     }
 
     setLoading(true);
-    setError("");
 
     try {
       onLogin(await registerUser(username.toLowerCase(), email.toLowerCase(), password));
+      toast.success("Your account has been created.");
       return true;
     } catch (err) {
       if (err?.status >= 500) {
-        setError("Something went wrong. Please try again later.");
+        toast.error("Something went wrong. Please try again later.");
       } else {
-        setError(err.message);
+        toast.error(err?.message || "Unable to create your account. Please try again.");
       }
       return false;
     } finally {
@@ -383,7 +372,6 @@ function AuthPage( { onLogin } ) {
             onSignup={handleSignup}
             values={form}
             onChange={updateField}
-            error={error}
             loading={loading}
           />
         );
@@ -394,7 +382,6 @@ function AuthPage( { onLogin } ) {
             onLogin={handleLogin}
             values={form}
             onChange={updateField}
-            error={error}
             loading={loading}
           />
         );

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import styled from "styled-components";
+import { useToast } from "../ui/ToastProvider";
 import { TbArrowBackUp, TbSend, TbX } from "react-icons/tb";
 import { Button, IconButton, Input } from "../ui";
 
@@ -61,6 +62,7 @@ const SendButton = styled(Button)`
 `;
 
 function MessageComposer({ roomName, isDm, onSend, disabled, replyingTo, onCancelReply }) {
+  const toast = useToast();
   const [text, setText] = useState("");
   const inputRef = useRef(null);
   const label = isDm ? `Message ${roomName}` : `Message #${roomName}`;
@@ -78,13 +80,13 @@ function MessageComposer({ roomName, isDm, onSend, disabled, replyingTo, onCance
     if (!trimmed || disabled) return;
 
     try {
-	  await onSend(trimmed, replyingTo?.id);
-	  setText("");
-	  onCancelReply?.();
-	  } catch {
-	  return;
-	  }
-	}
+      await onSend(trimmed, replyingTo?.id);
+      setText("");
+      onCancelReply?.();
+    } catch (error) {
+      toast.error(error?.message || "Couldn't send your message. Please try again.");
+    }
+  }
 
   return (
     <MessageComposerRoot>
