@@ -29,7 +29,7 @@ const suffix = randomUUID()
 const testUser = {
   username: `profile_${suffix}`,
   email: `profile_${suffix}@example.com`,
-  password: "strongpassword123",
+  password: "Strongpassword123",
   displayName: "Original Name",
 };
 
@@ -355,7 +355,7 @@ describe(
                 `other_${otherSuffix}@example.com`,
 
               password:
-                "strongpassword123",
+                "Strongpassword123",
 
               displayName:
                 "Other User",

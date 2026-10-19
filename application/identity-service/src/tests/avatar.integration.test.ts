@@ -43,7 +43,7 @@ const testUser = {
     `avatar_${suffix}@example.com`,
 
   password:
-    "strongpassword123",
+    "Strongpassword123",
 
   displayName:
     "Avatar Test",

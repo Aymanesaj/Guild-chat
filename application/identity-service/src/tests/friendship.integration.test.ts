@@ -71,7 +71,7 @@ async function createTestUser(
         email:
           `${username}@example.com`,
         password:
-          "strongpassword123",
+          "Strongpassword123",
         displayName:
           `Test ${name}`,
       },
