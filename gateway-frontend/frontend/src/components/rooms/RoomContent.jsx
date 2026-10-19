@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useRef, useState } from "react";
 import styled from "styled-components";
 import { useToast } from "../ui/ToastProvider";
 import {
   TbAlertTriangle,
   TbArrowBackUp,
+  TbArrowBarToDown,
+  TbArrowBarToUp,
   TbCornerDownRight,
   TbMessage2,
   TbPencil,
@@ -12,8 +14,21 @@ import {
 import { ProfileName } from "../layout/Sidebar";
 import { formatTimestamp } from "../../api/rooms";
 import { useOpenUserPreview } from "../../hooks/useOpenUserPreview";
+import { useChatScroll } from "../../hooks/useChatScroll";
 import { Button, ConfirmDialog, EmptyState, IconButton, Input, Spinner } from "../ui";
 import UserAvatar from "../profile/UserAvatar";
+import MessageByteCount from "../ui/MessageByteCount";
+import { MAX_MESSAGE_BYTES, MAX_MESSAGE_INPUT_BYTES, MESSAGE_SIZE_ERROR, limitMessageInput, messageByteLength } from "../../utils/messageContent";
+
+const dayFormatter = new Intl.DateTimeFormat(undefined, {
+  weekday: "long", day: "numeric", month: "short", year: "numeric",
+});
+
+function messageDate(timestamp) {
+  if (!timestamp) return null;
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
 
 const PanelCenter = styled.div`
   display: grid;
@@ -29,10 +44,57 @@ const RoomContentScroll = styled.div`
   padding: var(--space-4);
 `;
 
+const ConversationPane = styled.div`
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+`;
+
+const HistoryStart = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: 36px;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+`;
+
+const JumpButton = styled(IconButton)`
+  position: absolute;
+  ${({ $down }) => $down ? "bottom" : "top"}: var(--space-2);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+  border-color: var(--border-strong);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+`;
+
 const MessageList = styled.div`
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+`;
+
+const DayDivider = styled.div`
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-3) 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  text-align: center;
+
+  &::before,
+  &::after {
+    content: "";
+    height: 1px;
+    flex: 1;
+    background: var(--border-strong);
+  }
 `;
 
 const MessageItemRoot = styled.article`
@@ -158,6 +220,10 @@ function RoomContent({
   isDm,
   messagesById,
   currentUserId,
+  hasOlder,
+  loadingOlder,
+  olderError,
+  onLoadOlder,
   onReply,
   onEdit,
   canModerate,
@@ -167,6 +233,8 @@ function RoomContent({
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const toast = useToast();
+  const { scrollRef, contentRef, topRef, onScroll, scrollToTop, scrollToBottom, jumpDirection } =
+    useChatScroll(roomChat, state, currentUserId, { hasOlder, loadingOlder, olderError, onLoadOlder });
 
   const closeDelete = () => {
     setPendingDelete(null);
@@ -195,36 +263,77 @@ function RoomContent({
       )}
 
       {state === "success" && (
-        <RoomContentScroll>
-          {roomChat.length === 0 ? (
-            <EmptyState
-              icon={TbMessage2}
-              title={isDm ? `Say hello to ${roomName}!` : `Say hello to #${roomName}!`}
-              hint="No messages here yet — be the first to write one."
-            />
-          ) : (
-            <MessageList>
-              {roomChat.map((message) => {
-                const isOwn = Boolean(currentUserId) && message.sender_id === currentUserId;
-                return (
-                  <MessageItem
-                    key={message.id}
-                    message={message}
-                    repliedTo={message.reply_to_id ? messagesById?.get(message.reply_to_id) : null}
-                    isOwn={isOwn}
-                    canDelete={isOwn || Boolean(canModerate)}
-                    isEditing={editingId === message.id}
-                    onStartEdit={() => setEditingId(message.id)}
-                    onStopEdit={() => setEditingId(null)}
-                    onReply={onReply}
-                    onEdit={onEdit}
-                    onStartDelete={() => setPendingDelete(message)}
-                  />
-                );
-              })}
+        <ConversationPane>
+          <RoomContentScroll ref={scrollRef} onScroll={onScroll} role="region" aria-label="Messages">
+            <MessageList ref={contentRef}>
+              <HistoryStart ref={topRef}>
+                {loadingOlder ? (
+                  <Spinner $size={20} role="status" aria-label="Loading older messages" />
+                ) : olderError ? (
+                  <Button
+                    type="button"
+                    $variant="ghost"
+                    $size="sm"
+                    onClick={onLoadOlder}
+                    title={olderError}
+                  >
+                    Couldn't load older messages. Retry
+                  </Button>
+                ) : !hasOlder && roomChat.length > 0 ? "Beginning of conversation" : null}
+              </HistoryStart>
+              {roomChat.length === 0 ? (
+                <EmptyState
+                  icon={TbMessage2}
+                  title={isDm ? `Say hello to ${roomName}!` : `Say hello to #${roomName}!`}
+                  hint="No messages here yet — be the first to write one."
+                />
+              ) : (
+                roomChat.map((message, index) => {
+                  const isOwn = Boolean(currentUserId) && message.sender_id === currentUserId;
+                  const date = messageDate(message.sent_at);
+                  const previousDate = messageDate(roomChat[index - 1]?.sent_at);
+                  // Compare local calendar days, matching the displayed timestamps.
+                  // Deriving from the full list also joins days across page boundaries.
+                  const showDay = date && date.toDateString() !== previousDate?.toDateString();
+                  return (
+                    <Fragment key={message.id}>
+                      {showDay && (
+                        <DayDivider>
+                          <time dateTime={message.sent_at}>{dayFormatter.format(date)}</time>
+                        </DayDivider>
+                      )}
+                      <MessageItem
+                        message={message}
+                        repliedTo={message.reply_to_id ? messagesById?.get(message.reply_to_id) : null}
+                        isOwn={isOwn}
+                        canDelete={isOwn || Boolean(canModerate)}
+                        isEditing={editingId === message.id}
+                        onStartEdit={() => setEditingId(message.id)}
+                        onStopEdit={() => setEditingId(null)}
+                        onReply={onReply}
+                        onEdit={onEdit}
+                        onStartDelete={() => setPendingDelete(message)}
+                      />
+                    </Fragment>
+                  );
+                })
+              )}
             </MessageList>
+          </RoomContentScroll>
+          {jumpDirection && roomChat.length > 0 && (
+            <JumpButton
+              type="button"
+              $round
+              $size={30}
+              $down={jumpDirection === "down"}
+              onClick={jumpDirection === "down" ? scrollToBottom : scrollToTop}
+              aria-label={jumpDirection === "down" ? "Jump to latest messages" : "Jump to top of loaded messages"}
+              title={jumpDirection === "down" ? "Jump to latest messages" : "Jump to top of loaded messages"}
+            >
+              {jumpDirection === "down" ? <TbArrowBarToDown size={17} /> : <TbArrowBarToUp size={17} />}
+            </JumpButton>
           )}
-        </RoomContentScroll>
+        </ConversationPane>
       )}
 
       {state === "error" && (
@@ -273,7 +382,7 @@ function MessageItem({
   const canAct = !message.deleted;
 
   return (
-    <MessageItemRoot id={`message-${message.id}`}>
+    <MessageItemRoot id={`message-${message.id}`} data-message-id={message.id}>
       <MessageAvatarWrap onClick={canPreview ? openPreview(sender) : undefined}>
         <UserAvatar avatar={message.sender_avatar} name={message.sender_username} $size={36} />
       </MessageAvatarWrap>
@@ -365,6 +474,9 @@ function replyPreview(repliedTo) {
  */
 function MessageEditor({ message, onSave, onClose }) {
   const [text, setText] = useState(message.content ?? "");
+  const countId = useId();
+  const bytes = messageByteLength(text);
+  const overLimit = bytes > MAX_MESSAGE_BYTES;
   const toast = useToast();
   const [saving, setSaving] = useState(false);
   const inputRef = useRef(null);
@@ -379,6 +491,10 @@ function MessageEditor({ message, onSave, onClose }) {
 
     const trimmed = text.trim();
     if (!trimmed || saving) return;
+    if (overLimit) {
+      toast.error(MESSAGE_SIZE_ERROR);
+      return;
+    }
     if (trimmed === message.content) {
       onClose();
       return;
@@ -403,14 +519,18 @@ function MessageEditor({ message, onSave, onClose }) {
           ref={inputRef}
           type="text"
           value={text}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => setText(limitMessageInput(event.target.value))}
+          maxLength={MAX_MESSAGE_INPUT_BYTES}
           onKeyDown={(event) => {
             if (event.key === "Escape") onClose();
           }}
           aria-label="Edit message"
+          aria-describedby={countId}
+          aria-invalid={overLimit}
+          $invalid={overLimit}
           disabled={saving}
         />
-        <Button type="submit" $pill $size="sm" disabled={saving || !text.trim()}>
+        <Button type="submit" $pill $size="sm" disabled={saving || !text.trim() || overLimit}>
           Save
         </Button>
         <Button type="button" $pill $size="sm" $variant="ghost" onClick={onClose} disabled={saving}>
@@ -418,6 +538,7 @@ function MessageEditor({ message, onSave, onClose }) {
         </Button>
       </EditForm>
 
+      <MessageByteCount id={countId} bytes={bytes} />
       <EditHint>Escape to cancel</EditHint>
     </>
   );

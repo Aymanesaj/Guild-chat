@@ -26,14 +26,11 @@ const RoomMain = styled.div`
   min-width: 0;
 `;
 
-function RoomView({ roomId, roomName, isDm }) {
-  const { isPhone, closeNav } = useNavDrawer();
+function RoomView({ roomId, roomName, isDm, draft, onDraftChange }) {
+  const { isPhone, isNavOpen, closeNav } = useNavDrawer();
   const { profile, previewUser } = useProfileOverlay();
 
-  // Tagged with its room for the same reason as the reply draft below: this
-  // component is reused across room switches, so an untagged flag would leave
-  // the panel open over the room you just opened — and keep MembersSidebar
-  // mounted with a pending kick belonging to the room you just left.
+  // Keep the members panel associated with its room.
   const [membersPanel, setMembersPanel] = useState({ roomId, open: false });
   const isMembersOpen = membersPanel.roomId === roomId && membersPanel.open;
 
@@ -55,14 +52,15 @@ function RoomView({ roomId, roomName, isDm }) {
     if (open) closeNav();
   }
 
-  // Tagged with the room it belongs to and read back through that tag, so a
-  // half-written reply cannot follow the user into another room. Derived
-  // rather than reset in an effect, which would render the stale one once.
+  // Reply targets belong to the current room, just like the composer draft.
   const [reply, setReply] = useState({ roomId, message: null });
   const replyingTo = reply.roomId === roomId ? reply.message : null;
   const setReplyingTo = (message) => setReply({ roomId, message });
 
-  const { messages, messagesById, state, sending, send, edit, remove } = useRoomMessages(roomId);
+  const {
+    messages, messagesById, state, sending, send, edit, remove,
+    hasOlder, loadingOlder, olderError, loadOlder,
+  } = useRoomMessages(roomId);
 
   // Read once per view, not once per message row.
   const currentUserId = useMemo(() => getCurrentUserId(), []);
@@ -100,14 +98,22 @@ function RoomView({ roomId, roomName, isDm }) {
           isDm={isDm}
           messagesById={messagesById}
           currentUserId={currentUserId}
+          hasOlder={hasOlder}
+          loadingOlder={loadingOlder}
+          olderError={olderError}
+          onLoadOlder={loadOlder}
           onReply={setReplyingTo}
           onEdit={edit}
           canModerate={canModerate}
           onDelete={remove}
         />
         <MessageComposer
+          roomId={roomId}
           roomName={roomName}
           isDm={isDm}
+          text={draft}
+          onTextChange={onDraftChange}
+          focusEnabled={!profile && !previewUser && !isMembersOpen && !(isPhone && isNavOpen)}
           onSend={send}
           disabled={sending}
           replyingTo={replyingTo}

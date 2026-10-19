@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import styled from "styled-components";
 import { useToast } from "../ui/ToastProvider";
 import { TbCheck, TbSend, TbUserCheck, TbUserPlus, TbX } from "react-icons/tb";
@@ -18,6 +18,8 @@ import { getCurrentUserId } from "../../api/tokens";
 import { getOrCreateDm } from "../../api/rooms";
 import { sendMessage } from "../../api/messages";
 import { Avatar, Button, IconButton, Input, riseIn } from "../ui";
+import MessageByteCount from "../ui/MessageByteCount";
+import { MAX_MESSAGE_BYTES, MAX_MESSAGE_INPUT_BYTES, MESSAGE_SIZE_ERROR, limitMessageInput, messageByteLength } from "../../utils/messageContent";
 
 const POPOVER_WIDTH = 320;
 const POPOVER_MARGIN = 12;
@@ -54,6 +56,9 @@ export default function ProfilePreviewPopover({ target, onClose }) {
   const [error, setError] = useState("");
 
   const [messageDraft, setMessageDraft] = useState("");
+  const countId = useId();
+  const messageBytes = messageByteLength(messageDraft);
+  const messageTooLong = messageBytes > MAX_MESSAGE_BYTES;
   const [sending, setSending] = useState(false);
   const [runningAction, setRunningAction] = useState(false);
 
@@ -153,6 +158,10 @@ export default function ProfilePreviewPopover({ target, onClose }) {
 
     const content = messageDraft.trim();
     if (!content || sending) return;
+    if (messageTooLong) {
+      toast.error(MESSAGE_SIZE_ERROR);
+      return;
+    }
 
     setSending(true);
 
@@ -271,24 +280,32 @@ export default function ProfilePreviewPopover({ target, onClose }) {
               )}
 
               {user.friendship_status === "friends" && (
-                <MessageForm onSubmit={handleSendMessage}>
-                  <MessageInput
-                    value={messageDraft}
-                    onChange={(e) => setMessageDraft(e.target.value)}
-                    placeholder={`Message @${user.username}`}
-                    disabled={sending}
-                  />
+                <>
+                  <MessageForm onSubmit={handleSendMessage}>
+                    <MessageInput
+                      value={messageDraft}
+                      onChange={(e) => setMessageDraft(limitMessageInput(e.target.value))}
+                      maxLength={MAX_MESSAGE_INPUT_BYTES}
+                      placeholder={`Message @${user.username}`}
+                      aria-label={`Message @${user.username}`}
+                      aria-describedby={countId}
+                      aria-invalid={messageTooLong}
+                      $invalid={messageTooLong}
+                      disabled={sending}
+                    />
 
-                  <SendButton
-                    type="submit"
-                    $size="sm"
-                    disabled={sending || !messageDraft.trim()}
-                    aria-label="Send message"
-                    title="Send message"
-                  >
-                    <TbSend size={16} />
-                  </SendButton>
-                </MessageForm>
+                    <SendButton
+                      type="submit"
+                      $size="sm"
+                      disabled={sending || !messageDraft.trim() || messageTooLong}
+                      aria-label="Send message"
+                      title="Send message"
+                    >
+                      <TbSend size={16} />
+                    </SendButton>
+                  </MessageForm>
+                  <MessageByteCount id={countId} bytes={messageBytes} />
+                </>
               )}
             </Content>
           </>
