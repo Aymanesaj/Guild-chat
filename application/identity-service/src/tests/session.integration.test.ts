@@ -41,7 +41,7 @@ const testUser = {
     `session_test_${suffix}@example.com`,
 
   password:
-    "strongpassword123",
+    "Strongpassword123",
 
   displayName:
     "Session Test",

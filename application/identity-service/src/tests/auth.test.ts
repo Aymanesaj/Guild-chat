@@ -856,7 +856,7 @@ describe("POST /register", () => {
       payload: {
         username: "obendaou",
         email: "oumaima@example.com",
-        password: "strongpassword123",
+        password: "Strongpassword123",
         displayName: "Oumaima",
       },
     });
@@ -888,7 +888,71 @@ describe("POST /register", () => {
     ).toHaveBeenCalledOnce();
   });
 
+  it(
+    "should return 400 when password has no uppercase letter",
+    async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/register",
 
+        payload: {
+          username: "obendaou",
+          email: "oumaima@example.com",
+          password: "password123",
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      expect(
+        mockRegisterUser
+      ).not.toHaveBeenCalled();
+    }
+  );
+
+  it(
+    "should return 400 when password has no lowercase letter",
+    async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/register",
+
+        payload: {
+          username: "obendaou",
+          email: "oumaima@example.com",
+          password: "PASSWORD123",
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      expect(
+        mockRegisterUser
+      ).not.toHaveBeenCalled();
+    }
+  );
+
+  it(
+    "should return 400 when password has no number",
+    async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/register",
+
+        payload: {
+          username: "obendaou",
+          email: "oumaima@example.com",
+          password: "PasswordABC",
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      expect(
+        mockRegisterUser
+      ).not.toHaveBeenCalled();
+    }
+  );
   it("should return 400 when username is too short", async () => {
     const response = await app.inject({
       method: "POST",
@@ -897,7 +961,7 @@ describe("POST /register", () => {
       payload: {
         username: "ab",
         email: "oumaima@example.com",
-        password: "strongpassword123",
+        password: "Strongpassword123",
       },
     });
 
@@ -917,7 +981,7 @@ describe("POST /register", () => {
       payload: {
         username: "obendaou",
         email: "not-an-email",
-        password: "strongpassword123",
+        password: "Strongpassword123",
       },
     });
 
@@ -963,7 +1027,7 @@ describe("POST /register", () => {
       payload: {
         username: "obendaou",
         email: "oumaima@example.com",
-        password: "strongpassword123",
+        password: "Strongpassword123",
       },
     });
 
@@ -975,6 +1039,32 @@ describe("POST /register", () => {
       "Username is already taken"
     );
   });
+
+  it(
+    "should accept a password meeting all complexity requirements",
+    async () => {
+      mockRegisterUser.mockResolvedValue(
+        createAuthResponse()
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/register",
+
+        payload: {
+          username: "obendaou",
+          email: "oumaima@example.com",
+          password: "Password1",
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+
+      expect(
+        mockRegisterUser
+      ).toHaveBeenCalledOnce();
+    }
+  );
 
 
   it("should return 409 when email already exists", async () => {
@@ -991,7 +1081,7 @@ describe("POST /register", () => {
       payload: {
         username: "different_user",
         email: "oumaima@example.com",
-        password: "strongpassword123",
+        password: "Strongpassword123",
       },
     });
 
@@ -1017,7 +1107,7 @@ describe("POST /register", () => {
       payload: {
         username: "obendaou",
         email: "oumaima@example.com",
-        password: "strongpassword123",
+        password: "Strongpassword123",
       },
     });
 
@@ -1052,7 +1142,7 @@ describe("POST /login", () => {
 
       payload: {
         identifier: "obendaou",
-        password: "strongpassword123",
+        password: "Strongpassword123",
       },
     });
 
@@ -1082,7 +1172,7 @@ describe("POST /login", () => {
       mockLoginUser
     ).toHaveBeenCalledWith({
       identifier: "obendaou",
-      password: "strongpassword123",
+      password: "Strongpassword123",
     });
   });
 
@@ -1098,7 +1188,7 @@ describe("POST /login", () => {
 
       payload: {
         identifier: "oumaima@example.com",
-        password: "strongpassword123",
+        password: "Strongpassword123",
       },
     });
 
@@ -1108,7 +1198,7 @@ describe("POST /login", () => {
       mockLoginUser
     ).toHaveBeenCalledWith({
       identifier: "oumaima@example.com",
-      password: "strongpassword123",
+      password: "Strongpassword123",
     });
   });
 
@@ -1119,7 +1209,7 @@ describe("POST /login", () => {
       url: "/login",
 
       payload: {
-        password: "strongpassword123",
+        password: "Strongpassword123",
       },
     });
 
@@ -1187,7 +1277,7 @@ describe("POST /login", () => {
 
       payload: {
         identifier: "obendaou",
-        password: "strongpassword123",
+        password: "Strongpassword123",
       },
     });
 
@@ -2332,7 +2422,7 @@ describe("Global error handler", () => {
 
       payload: {
         identifier: "obendaou",
-        password: "strongpassword123",
+        password: "Strongpassword123",
       },
     });
 
