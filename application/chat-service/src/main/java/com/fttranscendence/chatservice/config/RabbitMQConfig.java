@@ -9,6 +9,7 @@ import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory.ConfirmType;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.retry.MessageRecoverer;
+import org.springframework.amqp.rabbit.retry.RepublishMessageRecovererWithConfirms;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -42,7 +43,7 @@ public class RabbitMQConfig {
     public MessageRecoverer roomEventRecoverer(RabbitTemplate rabbit) {
         // Built-in bounded-retry recovery, including conversion failures. Republishing avoids
         // changing arguments on the owner's existing queue (which RabbitMQ would reject).
-        var recoverer = new12345678med RepublishMessageRecovererWithConfirms(
+        var recoverer = new RepublishMessageRecovererWithConfirms(
                 rabbit, DEAD_EXCHANGE, ROOM_CHANGED_ROUTING_KEY,
                 ConfirmType.CORRELATED);
         recoverer.setConfirmTimeout(5000);
