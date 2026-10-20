@@ -33,6 +33,7 @@ function MainPanel({ activeView }) {
       roomId={activeView.id}
       roomName={roomName}
       isDm={isDm}
+      peer={activeView.peer}
       draft={drafts[roomKey] ?? ""}
       onDraftChange={updateDraft}
     />

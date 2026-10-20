@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useId, useRef, useState } from "react";
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 import { useToast } from "../ui/ToastProvider";
 import {
   TbAlertTriangle,
@@ -7,18 +7,20 @@ import {
   TbArrowBarToDown,
   TbArrowBarToUp,
   TbCornerDownRight,
-  TbMessage2,
   TbPencil,
   TbTrash,
 } from "react-icons/tb";
 import { ProfileName } from "../layout/Sidebar";
-import { formatTimestamp } from "../../api/rooms";
 import { useOpenUserPreview } from "../../hooks/useOpenUserPreview";
 import { useChatScroll } from "../../hooks/useChatScroll";
+import { useMessageEditWindow } from "../../hooks/useMessageEditWindow";
 import { Button, ConfirmDialog, EmptyState, IconButton, Input, Spinner } from "../ui";
-import UserAvatar from "../profile/UserAvatar";
 import MessageByteCount from "../ui/MessageByteCount";
+import ConversationIntro from "./ConversationIntro";
 import { MAX_MESSAGE_BYTES, MAX_MESSAGE_INPUT_BYTES, MESSAGE_SIZE_ERROR, limitMessageInput, messageByteLength } from "../../utils/messageContent";
+
+const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
+const MESSAGE_GROUP_GAP = 60 * 60 * 1000;
 
 const dayFormatter = new Intl.DateTimeFormat(undefined, {
   weekday: "long", day: "numeric", month: "short", year: "numeric",
@@ -28,6 +30,16 @@ function messageDate(timestamp) {
   if (!timestamp) return null;
   const date = new Date(timestamp);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+// A sender change, calendar-day change or hour-long pause ends a visual run.
+function sameMessageGroup(message, other) {
+  const date = messageDate(message?.sent_at);
+  const otherDate = messageDate(other?.sent_at);
+  return Boolean(date && otherDate && message?.sender_id &&
+    message.sender_id === other?.sender_id &&
+    date.toDateString() === otherDate.toDateString() &&
+    Math.abs(otherDate - date) < MESSAGE_GROUP_GAP);
 }
 
 const PanelCenter = styled.div`
@@ -56,7 +68,7 @@ const HistoryStart = styled.div`
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  height: 36px;
+  height: ${({ $active }) => $active ? "36px" : "1px"};
   flex-shrink: 0;
   color: var(--text-tertiary);
   font-size: var(--text-xs);
@@ -97,35 +109,76 @@ const DayDivider = styled.div`
   }
 `;
 
-const MessageItemRoot = styled.article`
-  position: relative;
-  display: flex;
-  gap: 10px;
-  padding: var(--space-2);
-  border-radius: var(--radius-md);
-  transition: background var(--dur-fast) var(--ease);
+const MessageItemWrap = styled.div`
+  align-self: ${({ $isOwn }) => $isOwn ? "flex-start" : "flex-end"};
+  width: fit-content;
+  min-width: min(220px, 78%);
+  max-width: min(78%, 640px);
+  margin-top: ${({ $startsTurn }) => $startsTurn ? "var(--space-3)" : "0"};
 
-  &:hover {
-    background: var(--bg-surface);
+  @media (max-width: 700px) {
+    min-width: min(220px, 92%);
+    max-width: 92%;
   }
 `;
 
-/**
- * Hidden with opacity, not display: none — the buttons stay in the tab order,
- * and :focus-within reveals them for anyone navigating by keyboard.
- */
-const MessageActions = styled.div`
-  position: absolute;
-  top: calc(var(--space-1) * -1);
-  right: var(--space-2);
+const MessageItemRoot = styled.article`
+  position: relative;
   display: flex;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--bg-base);
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--radius-lg);
+  ${({ $isOwn }) => $isOwn ? "border-top-left-radius" : "border-top-right-radius"}: 0;
+  background: ${({ $isOwn }) => $isOwn ? "var(--accent-soft)" : "var(--bg-elevated)"};
+
+  &::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    ${({ $isOwn }) => $isOwn ? "left" : "right"}: -8px;
+    width: 8px;
+    height: 12px;
+    background: inherit;
+    clip-path: ${({ $isOwn }) => $isOwn
+      ? "polygon(100% 0, 0 0, 100% 100%)"
+      : "polygon(0 0, 100% 0, 0 100%)"};
+    pointer-events: none;
+  }
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: inherit;
+    /* Leave the tail's join open instead of drawing a line across it. */
+    clip-path: ${({ $isOwn }) => $isOwn
+      ? "polygon(1px 0, 100% 0, 100% 100%, 0 100%, 0 12px, 1px 12px)"
+      : "polygon(0 0, calc(100% - 1px) 0, calc(100% - 1px) 12px, 100% 12px, 100% 100%, 0 100%)"};
+    opacity: 0;
+    transition: opacity var(--dur-fast) var(--ease);
+    pointer-events: none;
+  }
+
+  &:hover::after,
+  &:focus-within::after {
+    opacity: 1;
+  }
+`;
+
+const BubbleTailOutline = styled.svg`
+  position: absolute;
+  top: 0;
+  ${({ $isOwn }) => $isOwn ? "left" : "right"}: -8px;
+  width: 8px;
+  height: 12px;
+  overflow: visible;
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1px;
   opacity: 0;
   transition: opacity var(--dur-fast) var(--ease);
+  pointer-events: none;
 
   ${MessageItemRoot}:hover &,
   ${MessageItemRoot}:focus-within & {
@@ -133,31 +186,101 @@ const MessageActions = styled.div`
   }
 `;
 
-const MessageAvatarWrap = styled.div`
-  flex: 0 0 36px;
-  cursor: pointer;
+/**
+ * Hidden with opacity, not display: none — the buttons stay in the tab order,
+ * and visible keyboard focus reveals them without sticky touch focus.
+ */
+const MessageActions = styled.div`
+  position: absolute;
+  top: -26px;
+  right: 6px;
+  z-index: 2;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  opacity: ${({ $revealed }) => $revealed ? 1 : 0};
+  pointer-events: ${({ $revealed }) => $revealed ? "auto" : "none"};
+  transition: opacity var(--dur) var(--ease);
+
+  ${({ $timed }) => !$timed && css`
+    ${MessageItemRoot}:hover & {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  `}
+
+  ${MessageItemRoot}:focus-visible &,
+  ${MessageItemRoot}:has(:focus-visible) & {
+    opacity: 1;
+    pointer-events: auto;
+  }
 `;
 
 const MessageBody = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   min-width: 0;
   flex: 1;
 `;
 
 const MessageMeta = styled.div`
   display: flex;
-  gap: var(--space-2);
-  align-items: baseline;
+  min-width: 0;
 
-  time {
-    color: var(--text-tertiary);
-    font-size: var(--text-xs);
+  ${ProfileName} {
+    min-width: 0;
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+
+    &:hover {
+      color: var(--accent-400);
+    }
   }
 `;
 
-const MessageContent = styled.p`
+const MessageTimestamp = styled.time`
+  display: block;
   margin: var(--space-1) 0 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  text-align: ${({ $isOwn }) => $isOwn ? "left" : "right"};
+
+  ${({ $temporary }) => $temporary && css`
+    max-height: 0;
+    margin-top: 0;
+    overflow: hidden;
+    opacity: 0;
+    visibility: hidden;
+    /* Fade after the click's hold timer, then close the space below the bubble. */
+    transition:
+      opacity var(--dur) var(--ease),
+      max-height 0s 200ms,
+      margin-top 0s 200ms,
+      visibility 0s 200ms;
+
+    ${({ $revealed }) => $revealed && css`
+      max-height: 2em;
+      margin-top: var(--space-1);
+      opacity: 1;
+      visibility: visible;
+      transition-delay: 0s;
+    `}
+  `}
+`;
+
+const MessageContent = styled.p`
+  margin: 0;
+  line-height: 1.5;
   color: var(--text-primary);
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
 
   /* The "(edited)" marker is metadata, so it matches the timestamp. */
   small {
@@ -167,35 +290,61 @@ const MessageContent = styled.p`
 
 const ReplyQuote = styled.button`
   display: flex;
-  gap: var(--space-1);
+  gap: var(--space-2);
   align-items: center;
+  width: 100%;
   max-width: 100%;
-  margin-bottom: 2px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
+  margin: 0;
+  padding: var(--space-2) 10px;
+  border: 0;
+  border-left: 2px solid var(--accent-400);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
   text-align: left;
   cursor: pointer;
 
   span {
+    display: block;
     min-width: 0;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
 
-  &:hover span {
-    color: var(--text-secondary);
+  strong {
+    display: block;
+    overflow: hidden;
+    color: var(--accent-400);
+    font-size: var(--text-xs);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  svg {
+    flex-shrink: 0;
+  }
+
+  &:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-left-color: var(--accent-400);
   }
 `;
 
 const EditForm = styled.form`
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
   margin-top: var(--space-1);
+
+  input {
+    flex: 1 1 120px;
+    min-width: 0;
+  }
 `;
 
 const EditHint = styled.small`
@@ -205,19 +354,12 @@ const EditHint = styled.small`
   font-size: var(--text-xs);
 `;
 
-/** Scrolls the quoted message into view; it may have scrolled out, or never loaded. */
-function scrollToMessage(messageId) {
-  document.getElementById(`message-${messageId}`)?.scrollIntoView({
-    behavior: "smooth",
-    block: "center",
-  });
-}
-
 function RoomContent({
   roomChat,
   state,
   roomName,
   isDm,
+  peer,
   messagesById,
   currentUserId,
   hasOlder,
@@ -233,8 +375,14 @@ function RoomContent({
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const toast = useToast();
-  const { scrollRef, contentRef, topRef, onScroll, scrollToTop, scrollToBottom, jumpDirection } =
+  const { scrollRef, contentRef, topRef, onScroll, scrollToTop, scrollToBottom, scrollToMessage, jumpDirection } =
     useChatScroll(roomChat, state, currentUserId, { hasOlder, loadingOlder, olderError, onLoadOlder });
+
+  const jumpToReply = (messageId) => {
+    if (!scrollToMessage(messageId)) {
+      toast.error("That message isn't loaded yet. Scroll up to load older messages.");
+    }
+  };
 
   const closeDelete = () => {
     setPendingDelete(null);
@@ -266,7 +414,7 @@ function RoomContent({
         <ConversationPane>
           <RoomContentScroll ref={scrollRef} onScroll={onScroll} role="region" aria-label="Messages">
             <MessageList ref={contentRef}>
-              <HistoryStart ref={topRef}>
+              <HistoryStart ref={topRef} $active={hasOlder || loadingOlder || Boolean(olderError)}>
                 {loadingOlder ? (
                   <Spinner $size={20} role="status" aria-label="Loading older messages" />
                 ) : olderError ? (
@@ -279,45 +427,51 @@ function RoomContent({
                   >
                     Couldn't load older messages. Retry
                   </Button>
-                ) : !hasOlder && roomChat.length > 0 ? "Beginning of conversation" : null}
+                ) : null}
               </HistoryStart>
-              {roomChat.length === 0 ? (
-                <EmptyState
-                  icon={TbMessage2}
-                  title={isDm ? `Say hello to ${roomName}!` : `Say hello to #${roomName}!`}
-                  hint="No messages here yet — be the first to write one."
+              {!hasOlder && !loadingOlder && !olderError && (
+                <ConversationIntro
+                  roomName={roomName}
+                  isDm={isDm}
+                  peer={peer}
+                  isEmpty={roomChat.length === 0}
                 />
-              ) : (
-                roomChat.map((message, index) => {
-                  const isOwn = Boolean(currentUserId) && message.sender_id === currentUserId;
-                  const date = messageDate(message.sent_at);
-                  const previousDate = messageDate(roomChat[index - 1]?.sent_at);
-                  // Compare local calendar days, matching the displayed timestamps.
-                  // Deriving from the full list also joins days across page boundaries.
-                  const showDay = date && date.toDateString() !== previousDate?.toDateString();
-                  return (
-                    <Fragment key={message.id}>
-                      {showDay && (
-                        <DayDivider>
-                          <time dateTime={message.sent_at}>{dayFormatter.format(date)}</time>
-                        </DayDivider>
-                      )}
-                      <MessageItem
-                        message={message}
-                        repliedTo={message.reply_to_id ? messagesById?.get(message.reply_to_id) : null}
-                        isOwn={isOwn}
-                        canDelete={isOwn || Boolean(canModerate)}
-                        isEditing={editingId === message.id}
-                        onStartEdit={() => setEditingId(message.id)}
-                        onStopEdit={() => setEditingId(null)}
-                        onReply={onReply}
-                        onEdit={onEdit}
-                        onStartDelete={() => setPendingDelete(message)}
-                      />
-                    </Fragment>
-                  );
-                })
               )}
+              {roomChat.map((message, index) => {
+                const isOwn = Boolean(currentUserId) && message.sender_id === currentUserId;
+                const date = messageDate(message.sent_at);
+                const previousMessage = roomChat[index - 1];
+                const previousDate = messageDate(previousMessage?.sent_at);
+                // Compare local calendar days, matching the displayed timestamps.
+                // Deriving from the full list also joins days across page boundaries.
+                const showDay = date && date.toDateString() !== previousDate?.toDateString();
+                const startsTurn = Boolean(previousMessage) && !showDay && !sameMessageGroup(previousMessage, message);
+                const showTimestamp = !sameMessageGroup(message, roomChat[index + 1]);
+                return (
+                  <Fragment key={message.id}>
+                    {showDay && (
+                      <DayDivider>
+                        <time dateTime={message.sent_at}>{dayFormatter.format(date)}</time>
+                      </DayDivider>
+                    )}
+                    <MessageItem
+                      message={message}
+                      repliedTo={message.reply_to_id ? messagesById?.get(message.reply_to_id) : null}
+                      isOwn={isOwn}
+                      startsTurn={startsTurn}
+                      showTimestamp={showTimestamp}
+                      canDelete={isOwn || Boolean(canModerate)}
+                      isEditing={editingId === message.id}
+                      onStartEdit={() => setEditingId(message.id)}
+                      onStopEdit={() => setEditingId(null)}
+                      onReply={onReply}
+                      onJumpToReply={jumpToReply}
+                      onEdit={onEdit}
+                      onStartDelete={() => setPendingDelete(message)}
+                    />
+                  </Fragment>
+                );
+              })}
             </MessageList>
           </RoomContentScroll>
           {jumpDirection && roomChat.length > 0 && (
@@ -368,11 +522,14 @@ function MessageItem({
   message,
   repliedTo,
   isOwn,
+  startsTurn,
+  showTimestamp,
   canDelete,
   isEditing,
   onStartEdit,
   onStopEdit,
   onReply,
+  onJumpToReply,
   onEdit,
   onStartDelete,
 }) {
@@ -380,83 +537,128 @@ function MessageItem({
   const sender = { id: message.sender_id, username: message.sender_username };
   const canPreview = Boolean(sender.id);
   const canAct = !message.deleted;
+  const canEdit = useMessageEditWindow(message.sent_at, isOwn && canAct);
+  const sentAt = messageDate(message.sent_at);
+  // null keeps normal mouse-hover behavior; true/false track a timed reveal.
+  const [detailsRevealed, setDetailsRevealed] = useState(null);
+  const detailsTimer = useRef(null);
+
+  useEffect(() => () => window.clearTimeout(detailsTimer.current), []);
+
+  const revealDetails = (event) => {
+    if (isEditing ||
+      event.target.closest("button, a, input, textarea, select, form")) return;
+    window.clearTimeout(detailsTimer.current);
+    setDetailsRevealed(true);
+    detailsTimer.current = window.setTimeout(() => setDetailsRevealed(false), 2000);
+  };
 
   return (
-    <MessageItemRoot id={`message-${message.id}`} data-message-id={message.id}>
-      <MessageAvatarWrap onClick={canPreview ? openPreview(sender) : undefined}>
-        <UserAvatar avatar={message.sender_avatar} name={message.sender_username} $size={36} />
-      </MessageAvatarWrap>
+    <MessageItemWrap $isOwn={isOwn} $startsTurn={startsTurn}>
+      <MessageItemRoot
+        id={`message-${message.id}`}
+        data-message-id={message.id}
+        $isOwn={isOwn}
+        tabIndex={!isEditing && (canAct || (!showTimestamp && sentAt)) ? 0 : undefined}
+        onClick={revealDetails}
+        onMouseEnter={() => {
+          if (detailsRevealed === false) setDetailsRevealed(null);
+        }}
+        onKeyDown={(event) => {
+          if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+            event.preventDefault();
+            revealDetails(event);
+          }
+        }}
+      >
+        <MessageBody>
+          {!isOwn && (
+            <MessageMeta>
+              <ProfileName
+                onClick={canPreview ? openPreview(sender) : undefined}
+                style={canPreview ? { cursor: "pointer" } : undefined}
+              >
+                {message.sender_username ?? "Unknown user"}
+              </ProfileName>
+            </MessageMeta>
+          )}
 
-      <MessageBody>
-        {message.reply_to_id && (
-          <ReplyQuote
-            type="button"
-            onClick={() => scrollToMessage(message.reply_to_id)}
-            title="Jump to the replied-to message"
-          >
-            <TbCornerDownRight size={12} />
-            <span>{replyPreview(repliedTo)}</span>
-          </ReplyQuote>
-        )}
+          {message.reply_to_id && (
+            <ReplyQuote
+              type="button"
+              onClick={() => onJumpToReply(message.reply_to_id)}
+              title="Jump to the replied-to message"
+            >
+              <TbCornerDownRight size={16} aria-hidden="true" />
+              <span>
+                <strong>{repliedTo?.sender_username ?? "Unknown user"}</strong>
+                <span>{replyPreview(repliedTo)}</span>
+              </span>
+            </ReplyQuote>
+          )}
 
-        <MessageMeta>
-          <ProfileName
-            onClick={canPreview ? openPreview(sender) : undefined}
-            style={canPreview ? { cursor: "pointer" } : undefined}
-          >
-            {message.sender_username ?? "Unknown user"}
-          </ProfileName>
-          <time>{formatTimestamp(message.sent_at)}</time>
-        </MessageMeta>
-
-        {isEditing ? (
-          <MessageEditor message={message} onSave={onEdit} onClose={onStopEdit} />
-        ) : (
-          <MessageContent>
-            {message.deleted ? <em>Message deleted</em> : message.content}
-            {message.edited_at && !message.deleted && <small> (edited)</small>}
-          </MessageContent>
-        )}
-      </MessageBody>
-
-      {canAct && !isEditing && (
-        <MessageActions>
-          <IconButton
-            type="button"
-            $size={28}
-            onClick={() => onReply?.(message)}
-            aria-label="Reply to this message"
-            title="Reply"
-          >
-            <TbArrowBackUp size={16} />
-          </IconButton>
-
-          {isOwn && (
+          {isEditing ? (
+            <MessageEditor message={message} onSave={onEdit} onClose={onStopEdit} />
+          ) : (
+            <MessageContent>
+              {message.deleted ? <em>Message deleted</em> : message.content}
+              {message.edited_at && !message.deleted && <small> (edited)</small>}
+            </MessageContent>
+          )}
+        </MessageBody>
+        <BubbleTailOutline $isOwn={isOwn} viewBox="0 0 8 12" aria-hidden="true" focusable="false">
+          <path d={isOwn ? "M9 0.5 H1 L8.5 12" : "M-1 0.5 H7 L-0.5 12"} />
+        </BubbleTailOutline>
+        {canAct && !isEditing && (
+          <MessageActions $revealed={detailsRevealed === true} $timed={detailsRevealed !== null}>
             <IconButton
               type="button"
               $size={28}
-              onClick={onStartEdit}
-              aria-label="Edit this message"
-              title="Edit"
+              onClick={() => onReply?.(message)}
+              aria-label="Reply to this message"
+              title="Reply"
             >
-              <TbPencil size={16} />
+              <TbArrowBackUp size={16} />
             </IconButton>
-          )}
 
-          {canDelete && (
-            <IconButton
-              type="button"
-              $size={28}
-              onClick={onStartDelete}
-              aria-label="Delete this message"
-              title="Delete"
-            >
-              <TbTrash size={16} />
-            </IconButton>
-          )}
-        </MessageActions>
+            {canEdit && (
+              <IconButton
+                type="button"
+                $size={28}
+                onClick={onStartEdit}
+                aria-label="Edit this message"
+                title="Edit"
+              >
+                <TbPencil size={16} />
+              </IconButton>
+            )}
+
+            {canDelete && (
+              <IconButton
+                type="button"
+                $size={28}
+                onClick={onStartDelete}
+                aria-label="Delete this message"
+                title="Delete"
+              >
+                <TbTrash size={16} />
+              </IconButton>
+            )}
+          </MessageActions>
+        )}
+      </MessageItemRoot>
+      {sentAt && (
+        <MessageTimestamp
+          $isOwn={isOwn}
+          $temporary={!showTimestamp}
+          $revealed={detailsRevealed === true}
+          dateTime={message.sent_at}
+          title={sentAt.toLocaleString()}
+        >
+          {timeFormatter.format(sentAt)}
+        </MessageTimestamp>
       )}
-    </MessageItemRoot>
+    </MessageItemWrap>
   );
 }
 
@@ -465,8 +667,7 @@ function replyPreview(repliedTo) {
   if (!repliedTo) return "Original message";
   if (repliedTo.deleted) return "Replying to a deleted message";
 
-  const author = repliedTo.sender_username ?? "Unknown user";
-  return `${author}: ${repliedTo.content ?? ""}`;
+  return repliedTo.content ?? "";
 }
 
 /**

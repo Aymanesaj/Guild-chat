@@ -16,6 +16,8 @@ export function useChatScroll(messages, state, currentUserId, {
   const anchor = useRef(null);
   const lastScrollTop = useRef(0);
   const scrollDirection = useRef("up");
+  const replyJumpCleanup = useRef(null);
+  const replyHighlight = useRef(null);
   const [jumpDirection, setJumpDirection] = useState(null);
 
   const updateJumpVisibility = useCallback(() => {
@@ -63,6 +65,57 @@ export function useChatScroll(messages, state, currentUserId, {
     updateJumpVisibility();
     rememberAnchor();
   }, [rememberAnchor, updateJumpVisibility]);
+
+  const scrollToMessage = useCallback((messageId) => {
+    const node = scrollRef.current;
+    const target = document.getElementById(`message-${messageId}`);
+    if (!node || !target || !node.contains(target)) return false;
+
+    replyJumpCleanup.current?.();
+    replyHighlight.current?.cancel();
+    // Stop following before the first smooth-scroll frame, so a resize or a
+    // live message cannot pull the reader back to the bottom during the jump.
+    following.current = false;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const destination = node.scrollTop + target.getBoundingClientRect().top -
+      node.getBoundingClientRect().top - (node.clientHeight - target.offsetHeight) / 2;
+    const top = Math.max(0, Math.min(destination, node.scrollHeight - node.clientHeight));
+
+    let fallback;
+    const cleanup = () => {
+      node.removeEventListener("scrollend", highlight);
+      window.clearTimeout(fallback);
+      replyJumpCleanup.current = null;
+    };
+    const highlight = () => {
+      cleanup();
+      if (!target.isConnected) return;
+      // Web Animations lets repeated clicks restart the effect without
+      // remounting a row, and releases the normal hover styling on completion.
+      replyHighlight.current = target.animate([
+        { backgroundColor: "var(--bg-hover)" },
+        { backgroundColor: "var(--bg-hover)", offset: reducedMotion ? 0.999 : 0.3 },
+        { backgroundColor: "transparent" },
+      ], { duration: reducedMotion ? 1400 : 2000, easing: "ease-out" });
+    };
+
+    replyJumpCleanup.current = cleanup;
+    if (reducedMotion || Math.abs(node.scrollTop - top) < 1) {
+      node.scrollTo({ top, behavior: "instant" });
+      highlight();
+    } else {
+      node.addEventListener("scrollend", highlight, { once: true });
+      // Fallback for browsers without the scrollend event.
+      fallback = window.setTimeout(highlight, 900);
+      node.scrollTo({ top, behavior: "smooth" });
+    }
+    return true;
+  }, []);
+
+  useEffect(() => () => {
+    replyJumpCleanup.current?.();
+    replyHighlight.current?.cancel();
+  }, []);
 
   const onScroll = useCallback(() => {
     const node = scrollRef.current;
@@ -135,5 +188,5 @@ export function useChatScroll(messages, state, currentUserId, {
     return () => observer.disconnect();
   }, [state, hasOlder, loadingOlder, olderError, onLoadOlder]);
 
-  return { scrollRef, contentRef, topRef, onScroll, scrollToTop, scrollToBottom, jumpDirection };
+  return { scrollRef, contentRef, topRef, onScroll, scrollToTop, scrollToBottom, scrollToMessage, jumpDirection };
 }
