@@ -6,6 +6,9 @@ import multipart from "@fastify/multipart";
 import { MAX_AVATAR_SIZE } from "./constants/avatar.constants.js";
 import { avatarRoutes } from "./routes/avatar.routes.js";
 import { friendshipRoutes } from "./routes/friendship.routes.js";
+import * as fastifyMetricsModule from "fastify-metrics";
+
+const metricsPlugin = fastifyMetricsModule.default.default;
 
 export function buildApp() {
     const app = Fastify({
@@ -24,6 +27,24 @@ export function buildApp() {
             fileSize: MAX_AVATAR_SIZE,
         },
     });
+
+    app.register(metricsPlugin,{
+        endpoint: "/metrics",
+         defaultMetrics: {
+            enabled: true,
+        },
+
+        routeMetrics: {
+            enabled: {
+                histogram: true,
+                summary: false,
+            },
+
+            routeBlacklist: [
+                "/metrics",
+            ],
+        },
+    } )
     registerErrorHandler(app);
     app.register(authRoutes);
     app.register(userRoutes);
