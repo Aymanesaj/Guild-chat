@@ -15,7 +15,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import com.ft_transcendence.orgservice.client.ChatNotifyClient;
+import com.ft_transcendence.orgservice.messaging.RoomEventPublisher;
 import com.ft_transcendence.orgservice.client.IdentityGrpcClient;
 import com.ft_transcendence.orgservice.dto.CreateRoomRequest;
 import com.ft_transcendence.orgservice.exception.ForbiddenException;
@@ -59,9 +59,13 @@ class RoomOwnershipIntegrationTest {
     @EnableAutoConfiguration
     @EntityScan(basePackageClasses = Room.class)
     @EnableJpaRepositories(basePackageClasses = RoomRepository.class)
-    @Import({RoomService.class, ChatNotifyClient.class})
+    @Import({RoomService.class, DirectMessageCreationService.class, RoomEventPublisher.class})
     static class Config {}
 
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    org.springframework.amqp.rabbit.core.RabbitTemplate rabbit;
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    org.springframework.amqp.rabbit.core.RabbitAdmin admin;
     @Autowired RoomService service;
     @Autowired RoomRepository rooms;
     @Autowired RoomMemberRepository members;
@@ -69,8 +73,7 @@ class RoomOwnershipIntegrationTest {
     @Autowired MemberRoleRepository assignments;
     @Autowired PlatformTransactionManager transactionManager;
     @MockitoBean IdentityGrpcClient identity;
-    @MockitoBean DirectMessageCreationService dmCreation;
-    @MockitoSpyBean ChatNotifyClient notifications;
+    @MockitoSpyBean RoomEventPublisher notifications;
 
     private final List<RoomChangedEvent> delivered = new CopyOnWriteArrayList<>();
     private TransactionTemplate tx;
@@ -88,6 +91,31 @@ class RoomOwnershipIntegrationTest {
         owner = UUID.randomUUID();
         room = service.createRoom(new CreateRoomRequest("ownership"), owner).id();
         delivered.clear();
+    }
+
+    @Test
+    void newDmPublishesOnceAfterItsOwnTransactionAndExistingLookupPublishesNothing() {
+        UUID target = UUID.randomUUID();
+        long dm = service.createDirectMessageRoom(owner, target).id();
+        assertThat(delivered).containsExactly(
+                new RoomChangedEvent(dm, RoomChange.ROOM_ADDED, Set.of(owner, target)));
+        delivered.clear();
+        assertThat(service.createDirectMessageRoom(target, owner).id()).isEqualTo(dm);
+        assertThat(delivered).isEmpty();
+    }
+
+    @Test
+    void dmCreationInRolledBackTransactionPublishesNothing() {
+        UUID target = UUID.randomUUID();
+        tx.executeWithoutResult(status -> {
+            service.createDirectMessageRoom(owner, target);
+            assertThat(delivered).isEmpty();
+            status.setRollbackOnly();
+        });
+        assertThat(delivered).isEmpty();
+        long dm = service.createDirectMessageRoom(owner, target).id();
+        assertThat(delivered).containsExactly(
+                new RoomChangedEvent(dm, RoomChange.ROOM_ADDED, Set.of(owner, target)));
     }
 
     private UUID add(RoleName role) {
@@ -148,7 +176,8 @@ class RoomOwnershipIntegrationTest {
         assertThat(roles.findByRoomId(room)).isEmpty();
         assertThat(assignments.findByRoomMemberRoomId(room)).isEmpty();
         assertThat(delivered).containsExactly(
-                new RoomChangedEvent(room, RoomChange.ROOM_REMOVED, Set.of(owner)));
+                new RoomChangedEvent(room, RoomChange.ROOM_REMOVED, Set.of(owner)),
+                new RoomChangedEvent(room, RoomChange.ROOM_REMOVED, Set.of(), true));
     }
 
     @Test
