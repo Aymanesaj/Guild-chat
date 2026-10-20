@@ -72,7 +72,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             response.getWriter().write(
                     "{\"error\": \"Unable to validate JWT token\"}"
             );
-            return ; // forgot the return add the end of the catch block to prevent further processing
+            return ;  // Response already written; do not continue the chain
         }
         filterChain.doFilter(request, response);
     }
