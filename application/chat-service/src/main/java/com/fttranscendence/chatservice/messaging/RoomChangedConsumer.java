@@ -3,6 +3,8 @@ package com.fttranscendence.chatservice.messaging;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import com.fttranscendence.chatservice.websocket.WsEvents;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,26 +44,17 @@ public class RoomChangedConsumer {
     public void consume(RoomChangedMessage message) {
 
         validate(message);
-        Long roomId = message.roomId() == null ? null : Long.valueOf(message.roomId());
+        Long roomId = Long.valueOf(message.roomId());
         String event = eventFor(message.change());
 
 
-        ///Delete history only  when the entier room was deleted
+        // Permanent deletion is authorized only by an explicit committed room deletion.
         if (message.roomDeleted()) {
-            if (roomId == null || roomId <= 0) {
-                logger.warn("Attempted to delete messages for a null room");
-                return;
-            }
-            Long deleted = messageRepository.deleteByRoomId(roomId.toString());
-
-            logger.info(
-                "Deleted messages for room={} count={}",
-                roomId,
-                deleted
-            );
+            long deleted = messageRepository.deleteByRoomId(roomId);
+            logger.info("Deleted messages for room={} count={}", roomId, deleted);
         }
 
-        //Force the next memebership lookup to query org-service again.
+        // Force the next membership lookup to query org-service again.
         roomMembers.invalidate(roomId);
 
         Map<String , Object> data = Map.of("room_id" , roomId);
@@ -91,6 +84,19 @@ public class RoomChangedConsumer {
                 );
         }
 
+        if (!message.roomId().matches("[1-9][0-9]*") || Long.parseLong(message.roomId()) <= 0) {
+            throw new IllegalArgumentException("roomId must be a positive decimal Long string");
+        }
+        // Validate ALL recipients before invalidating caches, deleting history or sending frames.
+        for (String userId : message.userIds()) {
+            if (userId == null || !UUID.fromString(userId).toString().equalsIgnoreCase(userId)) {
+                throw new IllegalArgumentException("Recipients must be UUID strings");
+            }
+        }
+        if (message.userIds().isEmpty() && !message.roomDeleted()) {
+            throw new IllegalArgumentException("Only room deletion can have no recipients");
+        }
+
         if(eventFor(message.change()) == null) {
             throw new IllegalArgumentException(
                 "Unknown room-change type: " + message.change()
@@ -108,9 +114,9 @@ public class RoomChangedConsumer {
 
     private static String eventFor(String change) {
         return switch (change) {
-            case "ROOM_CREATED" -> "room.created";
-            case "ROOM_UPDATED" -> "room.updated";
-            case "ROOM_REMOVED" -> "room.removed";
+            case "ROOM_ADDED" -> WsEvents.ROOM_ADDED;
+            case "ROOM_UPDATED" -> WsEvents.ROOM_UPDATED;
+            case "ROOM_REMOVED" -> WsEvents.ROOM_REMOVED;
             default -> null;
         };
     }

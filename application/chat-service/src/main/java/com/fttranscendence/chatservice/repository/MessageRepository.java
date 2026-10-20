@@ -60,5 +60,5 @@ public interface MessageRepository extends MongoRepository<Message , String> {
     List<Message> findLatestMessagesByRoomIds(List<Long> roomIds);
 
 
-    long deleteByRoomId(String roomId);
+    long deleteByRoomId(Long roomId);
 }

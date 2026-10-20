@@ -53,8 +53,10 @@ public abstract class MongoTestSupport {
         registry.add("CHAT_MONGO_PASSWORD", () -> PASSWORD);
         registry.add("CHAT_MONGO_AUTH_DB", () -> "admin");
 
-        // Any free port: cached Spring contexts stay alive side by side in one
-        // JVM, and they cannot all bind 9090.
-        registry.add("chat.grpc.server.port", () -> 0);
+        registry.add("RABBITMQ_DEFAULT_USER", () -> "test");
+        registry.add("RABBITMQ_DEFAULT_PASS", () -> "test");
+        // These Mongo/WebSocket tests invoke the consumer directly; no application queue access.
+        registry.add("spring.rabbitmq.listener.simple.auto-startup", () -> false);
+        registry.add("spring.rabbitmq.dynamic", () -> false);
     }
 }

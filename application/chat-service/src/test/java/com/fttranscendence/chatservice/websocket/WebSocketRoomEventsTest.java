@@ -34,20 +34,16 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fttranscendence.chat.grpc.ChatNotifyServiceGrpc;
-import com.fttranscendence.chat.grpc.RoomChange;
-import com.fttranscendence.chat.grpc.RoomChangedRequest;
-import com.fttranscendence.chatservice.grpc.ChatGrpcServer;
+import com.fttranscendence.chatservice.messaging.RoomChangedConsumer;
+import com.fttranscendence.chatservice.messaging.RoomChangedMessage;
 import com.fttranscendence.chatservice.grpc.IdentityClient;
 import com.fttranscendence.chatservice.grpc.OrgClient;
 import com.fttranscendence.chatservice.support.MongoTestSupport;
 
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 
 /**
  * The whole path for user-level events, with no room subscription anywhere:
- *   - org's RoomChanged gRPC call (over real TCP) → room.added on every tab
+ *   - converted AMQP event (consumer invoked directly) → room.added on every tab
  *   - a REST POST → room.activity on a member who has no room open
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -66,7 +62,10 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
     private TestRestTemplate rest;
 
     @Autowired
-    private ChatGrpcServer grpcServer;
+    private RoomChangedConsumer consumer;
+
+    @Autowired
+    private org.springframework.amqp.support.converter.Jackson2JsonMessageConverter converter;
 
     @Autowired
     private ChatWebSocketHandler handler;
@@ -80,7 +79,6 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final StandardWebSocketClient client = new StandardWebSocketClient();
     private final List<WebSocketSession> opened = new ArrayList<>();
-    private ManagedChannel channel;
 
     private static final class RecordingClient extends TextWebSocketHandler {
         final BlockingQueue<String> frames = new LinkedBlockingQueue<>();
@@ -98,7 +96,6 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
         when(identityClient.validateToken(BOB + ".token")).thenReturn(Optional.of(BOB));
         when(orgClient.isMember(anyString(), anyLong())).thenReturn(true);
 
-        channel = ManagedChannelBuilder.forAddress("localhost", grpcServer.port()).usePlaintext().build();
     }
 
     @AfterEach
@@ -108,7 +105,6 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
                 session.close();
             }
         }
-        channel.shutdownNow();
         awaitConnections(ALICE, 0);
         awaitConnections(BOB, 0);
     }
@@ -148,11 +144,14 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
         awaitConnections(BOB, 2);
         awaitConnections(ALICE, 1);
 
-        ChatNotifyServiceGrpc.newBlockingStub(channel).roomChanged(RoomChangedRequest.newBuilder()
-                .setRoomId(String.valueOf(ROOM))
-                .setChange(RoomChange.ROOM_ADDED)
-                .addUserIds(BOB)
-                .build());
+        var properties = new org.springframework.amqp.core.MessageProperties();
+        properties.setInferredArgumentType(RoomChangedMessage.class);
+        properties.setContentType("application/json");
+        byte[] json = ("{\"roomId\":\"" + ROOM + "\",\"change\":\"ROOM_ADDED\","
+                + "\"userIds\":[\"" + BOB + "\"],\"roomDeleted\":false}")
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        consumer.consume((RoomChangedMessage) converter.fromMessage(
+                new org.springframework.amqp.core.Message(json, properties)));
 
         for (RecordingClient tab : List.of(bobTab1, bobTab2)) {
             JsonNode frame = nextFrame(tab);

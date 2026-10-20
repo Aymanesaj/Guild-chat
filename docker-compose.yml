@@ -78,6 +78,8 @@ services:
       SPRING_DATASOURCE_URL: ${ORG_DATASOURCE_URL}
       SPRING_DATASOURCE_USERNAME: ${ORG_POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${ORG_POSTGRES_PASSWORD}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
       PORT: 8082
     networks:
       - private
@@ -92,6 +94,8 @@ services:
     depends_on:
       postgres_db:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     restart: always
 
   chat-service:
@@ -101,6 +105,8 @@ services:
       dockerfile: ./chat-service/Dockerfile
     container_name: chat-service
     environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
       PORT: 8081
       CHAT_MONGO_DB: ${CHAT_MONGO_DB}
       CHAT_MONGO_USER: ${CHAT_MONGO_USER}
@@ -118,9 +124,10 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     expose:
       - "8081"
-      - "9090" # gRPC: org-service pushes room changes here (ChatNotifyService)
     restart: always
 
   identity-migrate:
@@ -181,7 +188,6 @@ services:
     - "5672"
 
     ports:
-      - "5672:5672" # AMQP
       - "127.0.0.1:15672:15672" # Management UI (localhost only)
     restart: unless-stopped
     volumes:
