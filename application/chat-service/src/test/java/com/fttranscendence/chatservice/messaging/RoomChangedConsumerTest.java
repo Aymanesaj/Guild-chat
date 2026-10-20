@@ -56,8 +56,29 @@ class RoomChangedConsumerTest {
             verify(sockets).sendToUser(BOB, "room." + change.toLowerCase(), Map.of("room_id", 42L));
         }
         verify(cache, times(3)).invalidate(42L);
+        // A removal also ends the live feed of the room for the removed users.
+        verify(sockets).revokeRoom(ALICE, 42L);
+        verify(sockets).revokeRoom(BOB, 42L);
         verifyNoMoreInteractions(sockets, cache);
         verifyNoInteractions(messages);
+    }
+
+    @Test
+    void addedAndUpdatedKeepSubscriptions() {
+        consumer.consume(new RoomChangedMessage("42", "ROOM_ADDED", List.of(ALICE), false));
+        consumer.consume(new RoomChangedMessage("42", "ROOM_UPDATED", List.of(BOB), false));
+        verify(sockets, never()).revokeRoom(anyString(), anyLong());
+        verify(sockets, never()).closeRoom(anyLong());
+    }
+
+    @Test
+    void removalRevokesBeforeTellingTheUser() {
+        consumer.consume(new RoomChangedMessage("42", "ROOM_REMOVED", List.of(ALICE), false));
+        // Unsubscribe first: once room.removed arrives, no message.new may follow.
+        var order = inOrder(sockets);
+        order.verify(sockets).revokeRoom(ALICE, 42L);
+        order.verify(sockets).sendToUser(ALICE, "room.removed", Map.of("room_id", 42L));
+        verify(sockets, never()).closeRoom(anyLong());
     }
 
     @Test
@@ -66,7 +87,9 @@ class RoomChangedConsumerTest {
         verify(messages).deleteByRoomId(42L);
         verifyNoMoreInteractions(messages);
         verify(cache).invalidate(42L);
-        verifyNoInteractions(sockets);
+        // The room is gone: every subscription to it ends, whoever holds it.
+        verify(sockets).closeRoom(42L);
+        verifyNoMoreInteractions(sockets);
     }
 
     @Test

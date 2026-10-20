@@ -24,14 +24,13 @@ class RoomEventBrokerTest {
         factory.setPublisherReturns(true);
         try (var context = new AnnotationConfigApplicationContext()) {
             context.registerBean("connectionFactory", CachingConnectionFactory.class, () -> factory);
+            // RabbitMQConfig's RabbitAdmin declares the topology on the first connection, as in production.
             context.register(RabbitMQConfig.class);
-            var admin = new RabbitAdmin(factory);
-            context.registerBean("rabbitAdmin", RabbitAdmin.class, () -> admin);
             context.refresh();
             var rabbit = new RabbitTemplate(factory);
             rabbit.setMessageConverter(context.getBean(RabbitMQConfig.class).roomEventMessageConverter());
             rabbit.setMandatory(true);
-            var publisher = new RoomEventPublisher(rabbit, admin, 5000);
+            var publisher = new RoomEventPublisher(rabbit, 5000);
             var alice = UUID.fromString("a215c5f8-d810-4518-ad4c-8d551eb6dfc4");
             var event = new RoomChangedEvent(4242L, RoomChange.ROOM_UPDATED, Set.of(alice));
             publisher.onRoomChanged(event);

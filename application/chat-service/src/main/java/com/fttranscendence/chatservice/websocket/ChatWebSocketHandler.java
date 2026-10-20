@@ -1,8 +1,8 @@
 package com.fttranscendence.chatservice.websocket;
 
 import java.io.IOException;
-import java.util.Map;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -174,6 +174,14 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         Set<WebSocketSession> sessions = sessionsByUser.getOrDefault(userId, Set.of());
         sessions.forEach(session -> frameSender.send(session, event, data));
         log.debug("{} user={} sockets={}", event, userId, sessions.size());
+    }
+
+    public void revokeRoom(String userId, Long roomId) {
+        sessionsByUser.getOrDefault(userId, Set.of()).forEach(session -> subscriptionRegistry.unsubscribe(roomId, session));
+    }
+
+    public void closeRoom(Long roomId) {
+        subscriptionRegistry.removeRoom(roomId);
     }
 
     /** For tests. */

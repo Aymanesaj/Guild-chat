@@ -15,8 +15,7 @@ import com.fttranscendence.chat.grpc.RoomChange;
 
 class RoomEventPublisherTest {
     final RabbitTemplate rabbit = mock(RabbitTemplate.class);
-    final RabbitAdmin admin = mock(RabbitAdmin.class);
-    final RoomEventPublisher publisher = new RoomEventPublisher(rabbit, admin, 10);
+    final RoomEventPublisher publisher = new RoomEventPublisher(rabbit, 10);
     final RoomChangedEvent event = new RoomChangedEvent(42L, RoomChange.ROOM_UPDATED, Set.of(UUID.randomUUID()));
 
     @Test
@@ -37,14 +36,12 @@ class RoomEventPublisherTest {
         }).when(rabbit).convertAndSend(eq(RabbitMQConfig.ROOM_EVENTS_EXCHANGE), eq("room.changed"),
                 any(Object.class), any(MessagePostProcessor.class), any(CorrelationData.class));
         publisher.onRoomChanged(event);
-        var order = inOrder(admin, rabbit);
-        order.verify(admin).initialize();
-        order.verify(rabbit).convertAndSend(eq(RabbitMQConfig.ROOM_EVENTS_EXCHANGE), eq("room.changed"),
+        verify(rabbit).convertAndSend(eq(RabbitMQConfig.ROOM_EVENTS_EXCHANGE), eq("room.changed"),
                 any(Object.class), any(MessagePostProcessor.class), any(CorrelationData.class));
     }
 
     @Test
-    void failuresAreLoggedWithoutFailingTheAlreadyCommittedOperation() {
+    void failuresAreLoggedWithoutFailingTheAlreadyCommittedOperation() throws Exception {
         var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(RoomEventPublisher.class);
         var logs = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
         logs.start(); logger.addAppender(logs);
@@ -63,6 +60,8 @@ class RoomEventPublisherTest {
                         any(MessagePostProcessor.class), any(CorrelationData.class));
                 assertThatCode(() -> publisher.onRoomChanged(event)).doesNotThrowAnyException();
             }
+            // The missing confirm is reported asynchronously, after the 10 ms timeout.
+            for (int i = 0; i < 100 && logs.list.size() < 4; i++) Thread.sleep(20);
             assertThat(logs.list).hasSize(4).allSatisfy(entry -> {
                 assertThat(entry.getFormattedMessage()).contains("already committed", "may be lost", "no outbox");
                 assertThat(entry.getLevel()).isEqualTo(ch.qos.logback.classic.Level.ERROR);
@@ -70,5 +69,16 @@ class RoomEventPublisherTest {
             });
             assertThat(logs.list.get(1).getThrowableProxy().getMessage()).contains("Unroutable", "NO_ROUTE");
         } finally { logger.detachAppender(logs); }
+    }
+
+    @Test
+    void publishingDoesNotWaitForTheBrokerConfirm() {
+        // A confirm that never arrives must not hold the request thread for the timeout.
+        var slow = new RoomEventPublisher(rabbit, 5_000);
+        long started = System.nanoTime();
+        slow.onRoomChanged(event);
+        assertThat(java.time.Duration.ofNanos(System.nanoTime() - started)).isLessThan(java.time.Duration.ofSeconds(1));
+        verify(rabbit).convertAndSend(eq(RabbitMQConfig.ROOM_EVENTS_EXCHANGE), eq("room.changed"),
+                any(Object.class), any(MessagePostProcessor.class), any(CorrelationData.class));
     }
 }

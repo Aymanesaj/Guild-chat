@@ -4,7 +4,6 @@ package com.fttranscendence.chatservice.messaging;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import com.fttranscendence.chatservice.websocket.WsEvents;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +14,7 @@ import com.fttranscendence.chatservice.config.RabbitMQConfig;
 import com.fttranscendence.chatservice.grpc.RoomMembersCache;
 import com.fttranscendence.chatservice.repository.MessageRepository;
 import com.fttranscendence.chatservice.websocket.ChatWebSocketHandler;
+import com.fttranscendence.chatservice.websocket.WsEvents;
 
 
 @Component
@@ -56,7 +56,12 @@ public class RoomChangedConsumer {
 
         // Force the next membership lookup to query org-service again.
         roomMembers.invalidate(roomId);
+        if(message.roomDeleted()) {
+            sockets.closeRoom(roomId);
+        }else  if("ROOM_REMOVED".equals(message.change())) {
+            message.userIds().forEach(userId -> sockets.revokeRoom(userId, roomId));
 
+        }
         Map<String , Object> data = Map.of("room_id" , roomId);
         List<String> userIds = message.userIds() == null
             ? List.of()
