@@ -36,6 +36,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fttranscendence.chatservice.messaging.RoomChangedConsumer;
 import com.fttranscendence.chatservice.messaging.RoomChangedMessage;
+import com.fttranscendence.chatservice.messaging.RoomChange;
 import com.fttranscendence.chatservice.grpc.IdentityClient;
 import com.fttranscendence.chatservice.grpc.OrgClient;
 import com.fttranscendence.chatservice.support.MongoTestSupport;
@@ -54,6 +55,7 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
     /** Rooms no other test class uses: cached contexts share RoomMembersCache. */
     private static final long ROOM = 720L;
     private static final long ACTIVITY_ROOM = 721L;
+    private static final long KICK_ROOM = 722L;
 
     @LocalServerPort
     private int port;
@@ -69,6 +71,9 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
 
     @Autowired
     private ChatWebSocketHandler handler;
+
+    @Autowired
+    private SubscriptionRegistry subscriptions;
 
     @MockBean
     private IdentityClient identityClient;
@@ -159,6 +164,38 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
             assertThat(frame.path("data").path("room_id").asLong()).isEqualTo(ROOM);
         }
         assertThat(receivesNothing(alice)).isTrue();
+    }
+
+    @Test
+    @DisplayName("a removed user's open socket stops receiving the room's messages")
+    void removalEndsTheLiveFeed() throws Exception {
+        RecordingClient bob = connect(BOB);
+        awaitConnections(BOB, 1);
+        opened.get(opened.size() - 1).sendMessage(new TextMessage(
+                "{\"event\":\"subscribe\",\"data\":{\"room_id\":" + KICK_ROOM + "}}"));
+        awaitSubscribers(KICK_ROOM, 1);
+
+        consumer.consume(new RoomChangedMessage(String.valueOf(KICK_ROOM), RoomChange.ROOM_REMOVED, List.of(BOB), false));
+
+        JsonNode removed = nextFrame(bob);
+        assertThat(removed.path("event").asText()).isEqualTo("room.removed");
+        assertThat(subscriptions.sessionsIn(KICK_ROOM)).as("subscription revoked").isEmpty();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(ALICE + ".token");
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        ResponseEntity<String> response = rest.postForEntity("/rooms/" + KICK_ROOM + "/messages",
+                new HttpEntity<>("{\"content\":\"after the kick\"}", headers), String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        assertThat(receivesNothing(bob)).as("no message.new after removal").isTrue();
+    }
+
+    private void awaitSubscribers(long roomId, int expected) throws Exception {
+        for (int attempt = 0; attempt < 50 && subscriptions.subscriberCount(roomId) != expected; attempt++) {
+            Thread.sleep(100);
+        }
+        assertThat(subscriptions.subscriberCount(roomId)).as("subscribers of %s", roomId).isEqualTo(expected);
     }
 
     @Test

@@ -7,6 +7,8 @@ spring:
     port: 5672
     username: ${RABBITMQ_DEFAULT_USER}
     password: ${RABBITMQ_DEFAULT_PASS}
+    # Fail fast when the broker is down: publishing runs on the request thread.
+    connection-timeout: 2s
     publisher-confirm-type: correlated
     publisher-returns: true
     template:

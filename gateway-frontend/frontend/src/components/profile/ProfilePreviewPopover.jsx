@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import styled from "styled-components";
+import { useToast } from "../ui/ToastProvider";
 import { TbCheck, TbSend, TbUserCheck, TbUserPlus, TbX } from "react-icons/tb";
 
 import { useAvatarUrl } from "../../hooks/useAvatarUrl";
@@ -17,6 +18,8 @@ import { getCurrentUserId } from "../../api/tokens";
 import { getOrCreateDm } from "../../api/rooms";
 import { sendMessage } from "../../api/messages";
 import { Avatar, Button, IconButton, Input, riseIn } from "../ui";
+import MessageByteCount from "../ui/MessageByteCount";
+import { MAX_MESSAGE_BYTES, MAX_MESSAGE_INPUT_BYTES, MESSAGE_SIZE_ERROR, limitMessageInput, messageByteLength } from "../../utils/messageContent";
 
 const POPOVER_WIDTH = 320;
 const POPOVER_MARGIN = 12;
@@ -46,14 +49,17 @@ function clampPosition(anchorRect) {
 
 export default function ProfilePreviewPopover({ target, onClose }) {
   const { navigateToRoom } = useRoomNavigation();
+  const toast = useToast();
 
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const [messageDraft, setMessageDraft] = useState("");
+  const countId = useId();
+  const messageBytes = messageByteLength(messageDraft);
+  const messageTooLong = messageBytes > MAX_MESSAGE_BYTES;
   const [sending, setSending] = useState(false);
-  const [actionError, setActionError] = useState("");
   const [runningAction, setRunningAction] = useState(false);
 
   const { avatarUrl, loading: avatarLoading } = useAvatarUrl(user?.avatar);
@@ -93,13 +99,13 @@ export default function ProfilePreviewPopover({ target, onClose }) {
 
   const handleAddFriend = async () => {
     setRunningAction(true);
-    setActionError("");
 
     try {
       const request = await sendFriendRequest(user.id);
+      toast.success(`Request sent to @${user.username}.`);
       setUser((u) => ({ ...u, friendship_status: "pending_outgoing", friendship_id: request?.id ?? null }));
     } catch (err) {
-      setActionError(err?.message || "Failed to send friend request.");
+      toast.error(err?.message || "Failed to send friend request.");
     } finally {
       setRunningAction(false);
     }
@@ -107,13 +113,13 @@ export default function ProfilePreviewPopover({ target, onClose }) {
 
   const handleCancelRequest = async () => {
     setRunningAction(true);
-    setActionError("");
 
     try {
       await cancelFriendRequest(user.id);
+      toast.success("Friend request cancelled.");
       setUser((u) => ({ ...u, friendship_status: "none", friendship_id: null }));
     } catch (err) {
-      setActionError(err?.message || "Failed to cancel friend request.");
+      toast.error(err?.message || "Failed to cancel friend request.");
     } finally {
       setRunningAction(false);
     }
@@ -121,13 +127,13 @@ export default function ProfilePreviewPopover({ target, onClose }) {
 
   const handleAccept = async () => {
     setRunningAction(true);
-    setActionError("");
 
     try {
       await acceptFriendRequest(user.friendship_id);
+      toast.success("Friend request accepted.");
       setUser((u) => ({ ...u, friendship_status: "friends" }));
     } catch (err) {
-      setActionError(err?.message || "Failed to accept friend request.");
+      toast.error(err?.message || "Failed to accept friend request.");
     } finally {
       setRunningAction(false);
     }
@@ -135,13 +141,13 @@ export default function ProfilePreviewPopover({ target, onClose }) {
 
   const handleDecline = async () => {
     setRunningAction(true);
-    setActionError("");
 
     try {
       await declineFriendRequest(user.friendship_id);
+      toast.success("Friend request declined.");
       setUser((u) => ({ ...u, friendship_status: "none", friendship_id: null }));
     } catch (err) {
-      setActionError(err?.message || "Failed to decline friend request.");
+      toast.error(err?.message || "Failed to decline friend request.");
     } finally {
       setRunningAction(false);
     }
@@ -152,9 +158,12 @@ export default function ProfilePreviewPopover({ target, onClose }) {
 
     const content = messageDraft.trim();
     if (!content || sending) return;
+    if (messageTooLong) {
+      toast.error(MESSAGE_SIZE_ERROR);
+      return;
+    }
 
     setSending(true);
-    setActionError("");
 
     try {
       const room = await getOrCreateDm(user.id);
@@ -162,7 +171,7 @@ export default function ProfilePreviewPopover({ target, onClose }) {
       navigateToRoom(room);
       onClose();
     } catch (err) {
-      setActionError(err?.message || "Failed to send message.");
+      toast.error(err?.message || "Failed to send message.");
       setSending(false);
     }
   };
@@ -208,8 +217,6 @@ export default function ProfilePreviewPopover({ target, onClose }) {
               <Divider />
 
               <Bio>{user.bio || "No bio yet."}</Bio>
-
-              {actionError && <ActionErrorText>{actionError}</ActionErrorText>}
 
               {user.friendship_status === "none" && (
                 <ActionRow>
@@ -273,24 +280,32 @@ export default function ProfilePreviewPopover({ target, onClose }) {
               )}
 
               {user.friendship_status === "friends" && (
-                <MessageForm onSubmit={handleSendMessage}>
-                  <MessageInput
-                    value={messageDraft}
-                    onChange={(e) => setMessageDraft(e.target.value)}
-                    placeholder={`Message @${user.username}`}
-                    disabled={sending}
-                  />
+                <>
+                  <MessageForm onSubmit={handleSendMessage}>
+                    <MessageInput
+                      value={messageDraft}
+                      onChange={(e) => setMessageDraft(limitMessageInput(e.target.value))}
+                      maxLength={MAX_MESSAGE_INPUT_BYTES}
+                      placeholder={`Message @${user.username}`}
+                      aria-label={`Message @${user.username}`}
+                      aria-describedby={countId}
+                      aria-invalid={messageTooLong}
+                      $invalid={messageTooLong}
+                      disabled={sending}
+                    />
 
-                  <SendButton
-                    type="submit"
-                    $size="sm"
-                    disabled={sending || !messageDraft.trim()}
-                    aria-label="Send message"
-                    title="Send message"
-                  >
-                    <TbSend size={16} />
-                  </SendButton>
-                </MessageForm>
+                    <SendButton
+                      type="submit"
+                      $size="sm"
+                      disabled={sending || !messageDraft.trim() || messageTooLong}
+                      aria-label="Send message"
+                      title="Send message"
+                    >
+                      <TbSend size={16} />
+                    </SendButton>
+                  </MessageForm>
+                  <MessageByteCount id={countId} bytes={messageBytes} />
+                </>
               )}
             </Content>
           </>
@@ -390,12 +405,6 @@ const Bio = styled.p`
   font-size: var(--text-sm);
   line-height: 1.5;
   color: var(--text-secondary);
-`;
-
-const ActionErrorText = styled.p`
-  margin: 10px 0 0;
-  font-size: var(--text-sm);
-  color: var(--danger);
 `;
 
 const ActionRow = styled.div`

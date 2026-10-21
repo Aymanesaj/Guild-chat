@@ -9,9 +9,7 @@ const fieldStyles = css`
   border-radius: var(--radius-md);
   background: var(--bg-base);
   color: var(--text-primary);
-  transition:
-    border-color var(--dur-fast) var(--ease),
-    box-shadow var(--dur-fast) var(--ease);
+  transition: border-color var(--dur-fast) var(--ease);
 
   &::placeholder {
     color: var(--text-tertiary);
@@ -24,7 +22,6 @@ const fieldStyles = css`
   &:focus {
     outline: none;
     border-color: var(--accent-500);
-    box-shadow: 0 0 0 3px var(--accent-ring);
   }
 
   &:disabled {

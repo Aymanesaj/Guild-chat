@@ -4,7 +4,6 @@ package com.fttranscendence.chatservice.messaging;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import com.fttranscendence.chatservice.websocket.WsEvents;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +14,7 @@ import com.fttranscendence.chatservice.config.RabbitMQConfig;
 import com.fttranscendence.chatservice.grpc.RoomMembersCache;
 import com.fttranscendence.chatservice.repository.MessageRepository;
 import com.fttranscendence.chatservice.websocket.ChatWebSocketHandler;
+import com.fttranscendence.chatservice.websocket.WsEvents;
 
 
 @Component
@@ -56,7 +56,12 @@ public class RoomChangedConsumer {
 
         // Force the next membership lookup to query org-service again.
         roomMembers.invalidate(roomId);
+        if(message.roomDeleted()) {
+            sockets.closeRoom(roomId);
+        }else  if(message.change() == RoomChange.ROOM_REMOVED) {
+            message.userIds().forEach(userId -> sockets.revokeRoom(userId, roomId));
 
+        }
         Map<String , Object> data = Map.of("room_id" , roomId);
         List<String> userIds = message.userIds() == null
             ? List.of()
@@ -97,27 +102,19 @@ public class RoomChangedConsumer {
             throw new IllegalArgumentException("Only room deletion can have no recipients");
         }
 
-        if(eventFor(message.change()) == null) {
-            throw new IllegalArgumentException(
-                "Unknown room-change type: " + message.change()
-            );
-        }
-
-
         if(message.roomDeleted()
-            && !"ROOM_REMOVED".equals(message.change())) {
+            && message.change() != RoomChange.ROOM_REMOVED) {
             throw new  IllegalArgumentException(
                 "A deleted room must use ROOM_REMOVED"
             );
         }
     }
 
-    private static String eventFor(String change) {
+    private static String eventFor(RoomChange change) {
         return switch (change) {
-            case "ROOM_ADDED" -> WsEvents.ROOM_ADDED;
-            case "ROOM_UPDATED" -> WsEvents.ROOM_UPDATED;
-            case "ROOM_REMOVED" -> WsEvents.ROOM_REMOVED;
-            default -> null;
+            case ROOM_ADDED -> WsEvents.ROOM_ADDED;
+            case ROOM_UPDATED -> WsEvents.ROOM_UPDATED;
+            case ROOM_REMOVED -> WsEvents.ROOM_REMOVED;
         };
     }
 }

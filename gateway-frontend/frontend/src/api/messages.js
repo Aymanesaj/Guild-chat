@@ -1,6 +1,7 @@
 import { buildQuery, ensureFreshToken, jsonBody, LOGOUT_EVENT, refreshSession, request } from "./http";
 import { getAccessToken, getRefreshToken, isAccessTokenExpired } from "./tokens";
 import { resolveUsers } from "./users";
+import { assertMessageSize } from "../utils/messageContent";
 
 /**
  * Messages. History, sending, editing and deleting over REST; live updates
@@ -62,6 +63,7 @@ export async function listMessages(roomId, { before, limit = 50 } = {}) {
 
 /** The stored message, as the server returned it (201). */
 export async function sendMessage(roomId, content, replyToId) {
+  assertMessageSize(content);
   const saved = await request(
     `${CHAT}/rooms/${roomId}/messages`,
     { method: "POST", ...jsonBody({ content, reply_to_id: replyToId }) },
@@ -73,6 +75,7 @@ export async function sendMessage(roomId, content, replyToId) {
 
 /** Sender only, within 15 minutes of sending. */
 export async function editMessage(messageId, content) {
+  assertMessageSize(content);
   const message = await request(
     `${CHAT}/messages/${messageId}`,
     { method: "PATCH", ...jsonBody({ content }) },
@@ -218,10 +221,6 @@ async function handleFrame(frame) {
       });
       break;
     case "error":
-      // e.g. NOT_A_MEMBER after being removed from a room; the socket stays
-      // open and the room view reflects the state, so this is a debug-level
-      // note rather than a console warning.
-      console.debug(`chat socket: ${data.code}: ${data.message}`);
       break;
     default:
       break; // unknown events are ignored so the server can add new ones

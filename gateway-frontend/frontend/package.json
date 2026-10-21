@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test:messages": "node tests/messageContent.test.mjs",
     "test:presence": "node --experimental-vm-modules tests/presence.test.mjs",
     "preview": "vite preview"
   },

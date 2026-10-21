@@ -1,5 +1,6 @@
 import { useState } from "react";
 import styled from "styled-components";
+import { useToast } from "../ui/ToastProvider";
 import { Link } from "react-router-dom";
 import { TbHash, TbLogout, TbMessageCircle, TbPlus } from "react-icons/tb";
 import { useProfileOverlay } from "./ProfileOverlayContext";
@@ -188,11 +189,9 @@ function Sidebar({
   onLogout
 }) {
   const [createOpen, setCreateOpen] = useState(false);
-  const [createError, setCreateError] = useState(null);
+  const toast = useToast();
 
   async function handleCreateRoom(name) {
-    setCreateError(null);
-
     try {
       const newRoom = await createRoom(name);
       // Shown straight away rather than waiting for a refetch, which also stops the
@@ -200,8 +199,9 @@ function Sidebar({
       onRoomCreated(newRoom);
       setCreateOpen(false);
       onRoomChange(newRoom);
+      toast.success(`Room #${newRoom.name} created.`);
     } catch (err) {
-      setCreateError(err?.message || "Failed to create room");
+      toast.error(err?.message || "Failed to create room");
     }
   }
 
@@ -220,17 +220,10 @@ function Sidebar({
         activeRoomId={activeRoomId}
         onRoomChange={onRoomChange}
         state={roomsState}
-        onCreate={() => {
-          setCreateError(null);
-          setCreateOpen((s) => !s);
-        }}
+        onCreate={() => setCreateOpen((s) => !s)}
         createOpen={createOpen}
         onSubmitCreate={handleCreateRoom}
-        onCancelCreate={() => {
-          setCreateOpen(false);
-          setCreateError(null);
-        }}
-        createError={createError}
+        onCancelCreate={() => setCreateOpen(false)}
       />
 
       <ProfilePreview onLogout={onLogout} />
@@ -247,14 +240,14 @@ function Sidebar({
 function SidebarHeader() {
   return (
     <SidebarHeaderBox>
-      <SidebarTitle>FT_TRANSCENDENCE</SidebarTitle>
+      <SidebarTitle>GuildChat</SidebarTitle>
     </SidebarHeaderBox>
   );
 }
 
 function RoomsSection({
   rooms, isDirectMessages, activeRoomId, onRoomChange, state,
-  onCreate, createOpen, onSubmitCreate, onCancelCreate, createError,
+  onCreate, createOpen, onSubmitCreate, onCancelCreate,
 }) {
   return (
     <SidebarSection>
@@ -270,8 +263,6 @@ function RoomsSection({
           onCancel={onCancelCreate}
         />
       )}
-
-      {createError && <InlineError role="alert">{createError}</InlineError>}
 
       {state === "loading" && (
         <StatusText>Loading rooms...</StatusText>
@@ -346,11 +337,12 @@ function DirectMessagesButton({ isDirectMessages, onDirectMessages }) {
 
 function ProfilePreview({ onLogout }) {
   const { currentUser, openProfile } = useProfileOverlay();
+  const toast = useToast();
   const { avatarUrl } = useAvatarUrl(currentUser?.avatar);
   const name = currentUser?.display_name || currentUser?.username;
 
   function handleOpenProfile() {
-    openProfile().catch(() => {});
+    openProfile().catch((error) => toast.error(error?.message || "Failed to load profile."));
   }
 
   return (

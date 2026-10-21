@@ -35,7 +35,7 @@ import com.ft_transcendence.orgservice.repository.MemberRoleRepository;
 import com.ft_transcendence.orgservice.repository.RoleRepository;
 import com.ft_transcendence.orgservice.repository.RoomMemberRepository;
 import com.ft_transcendence.orgservice.repository.RoomRepository;
-import com.fttranscendence.chat.grpc.RoomChange;
+import com.ft_transcendence.orgservice.messaging.RoomChange;
 
 /**
  * Which RoomChangedEvents RoomService publishes, and to whom. Mocked

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   deleteMessage,
   editMessage,
@@ -7,6 +7,8 @@ import {
   sendMessage,
   subscribeToRoom,
 } from "../api/messages";
+
+const HISTORY_PAGE_SIZE = 50;
 
 /**
  * One room's messages: REST history on mount, the shared chat socket for
@@ -20,6 +22,10 @@ export function useRoomMessages(roomId) {
   const [state, setState] = useState("loading");
   const [connection, setConnection] = useState("connecting");
   const [sending, setSending] = useState(false);
+  const [hasOlder, setHasOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [olderError, setOlderError] = useState(null);
+  const pagingRef = useRef(null);
 
   const appendMessage = useCallback((message) => {
     if (!message?.id) return;
@@ -70,16 +76,24 @@ export function useRoomMessages(roomId) {
     if (!roomId) return undefined;
 
     let cancelled = false;
+    const paging = { roomId, active: true, cursor: null, hasOlder: false, loading: false };
+    pagingRef.current = paging;
     setState("loading");
     setMessages([]);
+    setHasOlder(false);
+    setLoadingOlder(false);
+    setOlderError(null);
 
     // Subscribe first so nothing sent while history loads is lost; the merge
     // below keeps anything that arrived live and dedupes by id.
     const unsubscribe = subscribeToRoom(roomId, applyUpdate);
 
-    listMessages(roomId)
+    listMessages(roomId, { limit: HISTORY_PAGE_SIZE })
       .then((history) => {
         if (cancelled) return;
+        paging.cursor = history[0]?.id ?? null;
+        paging.hasOlder = history.length === HISTORY_PAGE_SIZE;
+        setHasOlder(paging.hasOlder);
         setMessages((live) => {
           const known = new Set(history.map((item) => item.id));
           return [...history, ...live.filter((item) => !known.has(item.id))];
@@ -92,9 +106,44 @@ export function useRoomMessages(roomId) {
 
     return () => {
       cancelled = true;
+      paging.active = false;
       unsubscribe();
     };
   }, [roomId, applyUpdate]);
+
+  const loadOlder = useCallback(async () => {
+    const paging = pagingRef.current;
+    // The ref closes the gap before React renders the loading flag, preventing
+    // overlapping requests when multiple top/scroll events fire together.
+    if (!paging?.active || paging.roomId !== roomId || !paging.hasOlder || paging.loading) return;
+
+    paging.loading = true;
+    setLoadingOlder(true);
+    setOlderError(null);
+    try {
+      const page = await listMessages(roomId, { before: paging.cursor, limit: HISTORY_PAGE_SIZE });
+      if (!paging.active) return;
+
+      const nextCursor = page[0]?.id ?? paging.cursor;
+      paging.hasOlder = page.length === HISTORY_PAGE_SIZE && nextCursor !== paging.cursor;
+      paging.cursor = nextCursor;
+      setHasOlder(paging.hasOlder);
+      setMessages((current) => {
+        const known = new Set(current.map((message) => message.id));
+        const older = page.filter((message) => {
+          if (known.has(message.id)) return false;
+          known.add(message.id);
+          return true;
+        });
+        return older.length ? [...older, ...current] : current;
+      });
+    } catch (error) {
+      if (paging.active) setOlderError(error?.message || "Couldn't load older messages.");
+    } finally {
+      paging.loading = false;
+      if (paging.active) setLoadingOlder(false);
+    }
+  }, [roomId]);
 
   const send = useCallback(
     async (content, replyToId) => {
@@ -144,5 +193,8 @@ export function useRoomMessages(roomId) {
     [messages],
   );
 
-  return { messages, messagesById, state, connection, sending, send, edit, remove };
+  return {
+    messages, messagesById, state, connection, sending, send, edit, remove,
+    hasOlder, loadingOlder, olderError, loadOlder,
+  };
 }

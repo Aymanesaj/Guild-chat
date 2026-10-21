@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
+import { useToast } from "../ui/ToastProvider";
 import { TbSend, TbUsersGroup, TbX } from "react-icons/tb";
 
 import { getFriendsList } from "../../api/friends";
@@ -106,7 +107,7 @@ function FriendsSidebar({ onClose }) {
   const [loading, setLoading] = useState("loading");
   const [friends, setFriends] = useState([]);
   const [openingId, setOpeningId] = useState(null);
-  const [openError, setOpenError] = useState(null);
+  const toast = useToast();
 
   const presence = usePresence(friends.map((friend) => friend.id));
 
@@ -132,13 +133,12 @@ function FriendsSidebar({ onClose }) {
     if (openingId) return;
 
     setOpeningId(friend.id);
-    setOpenError(null);
 
     try {
       const room = await getOrCreateDm(friend.id);
       navigateToRoom(room);
     } catch (error) {
-      setOpenError(error?.message || `Couldn't open a chat with ${friend.username}.`);
+      toast.error(error?.message || `Couldn't open a chat with ${friend.username}.`);
       setOpeningId(null);
     }
   };
@@ -166,7 +166,6 @@ function FriendsSidebar({ onClose }) {
       <ListArea>
         {loading === "loading" && <StatusText>Loading friends...</StatusText>}
         {loading === "error" && <InlineError>Error loading friends.</InlineError>}
-        {openError && <InlineError role="alert">{openError}</InlineError>}
         {loading === "success" &&
           (friends.length > 0 ? (
             friends.map((friend) => {

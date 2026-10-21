@@ -2,7 +2,7 @@ package com.ft_transcendence.orgservice.service;
 
 import java.util.Set;
 import java.util.UUID;
-import com.fttranscendence.chat.grpc.RoomChange;
+import com.ft_transcendence.orgservice.messaging.RoomChange;
 
 /** Internal transaction event. roomDeleted is explicit; a departure is not a deletion. */
 public record RoomChangedEvent(Long roomId, RoomChange change, Set<UUID> userIds, boolean roomDeleted) {

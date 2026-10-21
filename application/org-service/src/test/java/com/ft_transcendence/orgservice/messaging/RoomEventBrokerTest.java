@@ -11,7 +11,6 @@ import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.rabbit.core.*;
 import com.ft_transcendence.orgservice.config.RabbitMQConfig;
 import com.ft_transcendence.orgservice.service.RoomChangedEvent;
-import com.fttranscendence.chat.grpc.RoomChange;
 
 /** Run before Chat's RoomEventsBrokerTest against the SAME disposable broker. */
 @EnabledIfEnvironmentVariable(named = "ROOM_EVENTS_TEST_PORT", matches = "[0-9]+")
@@ -24,14 +23,13 @@ class RoomEventBrokerTest {
         factory.setPublisherReturns(true);
         try (var context = new AnnotationConfigApplicationContext()) {
             context.registerBean("connectionFactory", CachingConnectionFactory.class, () -> factory);
+            // RabbitMQConfig's RabbitAdmin declares the topology on the first connection, as in production.
             context.register(RabbitMQConfig.class);
-            var admin = new RabbitAdmin(factory);
-            context.registerBean("rabbitAdmin", RabbitAdmin.class, () -> admin);
             context.refresh();
             var rabbit = new RabbitTemplate(factory);
             rabbit.setMessageConverter(context.getBean(RabbitMQConfig.class).roomEventMessageConverter());
             rabbit.setMandatory(true);
-            var publisher = new RoomEventPublisher(rabbit, admin, 5000);
+            var publisher = new RoomEventPublisher(rabbit, 5000);
             var alice = UUID.fromString("a215c5f8-d810-4518-ad4c-8d551eb6dfc4");
             var event = new RoomChangedEvent(4242L, RoomChange.ROOM_UPDATED, Set.of(alice));
             publisher.onRoomChanged(event);
@@ -39,12 +37,15 @@ class RoomEventBrokerTest {
             assertThat(wire).isNotNull();
             assertThat(wire.getMessageProperties().getReceivedDeliveryMode()).isEqualTo(MessageDeliveryMode.PERSISTENT);
             assertThat(wire.getMessageProperties().getHeaders()).doesNotContainKey("__TypeId__");
-            // Leave an actual Org/Jackson 3 publication for Chat/Jackson 2 to consume next.
-            publisher.onRoomChanged(event);
+            // Leave all three actual Org/Jackson 3 enum publications for Chat/Jackson 2.
+            // The publisher strips type headers; the two services share no Java packages.
+            for (RoomChange change : RoomChange.values()) {
+                publisher.onRoomChanged(new RoomChangedEvent(4242L + change.ordinal(), change, Set.of(alice)));
+            }
 
             var returned = new org.springframework.amqp.rabbit.connection.CorrelationData("unroutable-test");
             rabbit.convertAndSend(RabbitMQConfig.ROOM_EVENTS_EXCHANGE, "no-such-route",
-                    new RoomChangedMessage("42", "ROOM_UPDATED", java.util.List.of(alice.toString()), false), returned);
+                    new RoomChangedMessage("42", RoomChange.ROOM_UPDATED, java.util.List.of(alice.toString()), false), returned);
             assertThat(returned.getFuture().get(5, java.util.concurrent.TimeUnit.SECONDS).ack()).isTrue();
             assertThat(returned.getReturned()).isNotNull();
             assertThat(returned.getReturned().getReplyText()).isEqualTo("NO_ROUTE");

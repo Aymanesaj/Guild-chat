@@ -71,6 +71,7 @@
   --z-drawer: 61;
   --z-popover: 9998;
   --z-overlay: 9999;
+  --z-toast: 10000;
 }
 
 html,

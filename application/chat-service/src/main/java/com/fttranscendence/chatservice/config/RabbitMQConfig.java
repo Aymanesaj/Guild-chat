@@ -11,6 +11,11 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.retry.MessageRecoverer;
 import org.springframework.amqp.rabbit.retry.RepublishMessageRecovererWithConfirms;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.JacksonUtils;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.cfg.CoercionAction;
+import com.fasterxml.jackson.databind.cfg.CoercionInputShape;
+import com.fasterxml.jackson.databind.type.LogicalType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -36,7 +41,12 @@ public class RabbitMQConfig {
     @Bean
     public Jackson2JsonMessageConverter roomEventMessageConverter() {
         // Dedicated mapper: independent of HTTP naming rules and inferred from the listener record.
-        return new Jackson2JsonMessageConverter();
+        var mapper = JacksonUtils.enhancedObjectMapper();
+        // The contract uses enum names only; never interpret ordinal numbers or blanks as changes.
+        mapper.enable(DeserializationFeature.FAIL_ON_NUMBERS_FOR_ENUMS);
+        mapper.coercionConfigFor(LogicalType.Enum)
+                .setCoercion(CoercionInputShape.EmptyString, CoercionAction.Fail);
+        return new Jackson2JsonMessageConverter(mapper);
     }
 
     @Bean
