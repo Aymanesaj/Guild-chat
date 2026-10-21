@@ -38,10 +38,10 @@ logs:
 .PHONY: logs-app logs-microservices logs-proxy
 
 logs-app:
-	docker compose --ansi always logs -f chat-service identity-service org-service nginx
+	docker compose --ansi always logs -f chat-service identity-service org-service media-service nginx
 
 logs-microservices:
-	docker compose --ansi always logs -f chat-service identity-service org-service
+	docker compose --ansi always logs -f chat-service identity-service org-service media-service
 
 logs-proxy:
 	docker compose --ansi always logs -f nginx
@@ -57,7 +57,7 @@ monitoring: run
 	DOCKER_SOCK=$(DOCKER_SOCK) docker compose up --build -d grafana prometheus docker-exporter alertmanager
 
 microservices: run
-	DOCKER_SOCK=$(DOCKER_SOCK) docker compose up --build -d chat-service identity-service org-service
+	DOCKER_SOCK=$(DOCKER_SOCK) docker compose up --build -d chat-service identity-service org-service media-service
 
 proxy: run
 	DOCKER_SOCK=$(DOCKER_SOCK) docker compose up --build -d nginx

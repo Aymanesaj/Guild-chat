@@ -178,11 +178,26 @@ services:
         condition: service_healthy
     restart: always
 
+  media-migrate:
+    build:
+      context: ./application/media-service
+      target: migration
+    environment:
+      MEDIA_DATABASE_URL: ${MEDIA_DATABASE_URL:-}
+    networks:
+      - private
+    depends_on:
+      media-postgres:
+        condition: service_healthy
+    restart: "no"
+
   media-service:
     build: ./application/media-service
     environment:
       PORT: 8084
       MEDIA_DATABASE_URL: ${MEDIA_DATABASE_URL:-}
+      MEDIA_IDENTITY_TOKEN: ${MEDIA_IDENTITY_TOKEN:-}
+      MEDIA_CHAT_TOKEN: ${MEDIA_CHAT_TOKEN:-}
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
       R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
@@ -194,6 +209,8 @@ services:
     networks:
       - private
     depends_on:
+      media-migrate:
+        condition: service_completed_successfully
       media-postgres:
         condition: service_healthy
     healthcheck:

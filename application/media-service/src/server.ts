@@ -52,5 +52,3 @@ try {
 
   process.exitCode = 1;
 }
-
-stopCleanupWorker = startCleanupWorker();
