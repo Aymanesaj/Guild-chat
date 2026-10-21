@@ -27,12 +27,14 @@ Prometheus operates inside the private container network and scrapes the followi
 | :--- | :--- | :--- | :--- |
 | `prometheus` | `localhost:9090` | 15s | Internal Prometheus performance metrics |
 | `docker-exporter` | `docker-exporter:8090/metrics.prom` | 15s | Docker container metrics and system uptime |
+| `identity-service` | `identity-service:8083/metrics` | 10s | Identity service HTTP and Node.js runtime metrics |
 | `chat-service`    | `chat-service:8081/actuator/prometheus` | 10s | Chat microservice JVM and socket metrics |
 | `org-service`     | `org-service:8082/actuator/prometheus` | 10s | Organization service JVM and database metrics |
 | `nginx-gateway`   | `nginx-exporter:9113` | 15s | Nginx connection status and request throughput |
 
-Identity uses Fastify. Docker and Gatus monitor `identity-service:8083/health`;
-its Prometheus metrics endpoint and related alerts will be agreed separately.
+Identity uses Fastify and exposes HTTP and Node.js runtime metrics at `/metrics`.
+Docker and Gatus also monitor `identity-service:8083/health`. The scrape target
+assumes `IDENTITY_HTTP_PORT=8083`; update it if the service port changes.
 Identity container resource metrics remain available through docker-exporter.
 
 ---

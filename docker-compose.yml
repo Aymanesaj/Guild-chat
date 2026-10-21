@@ -215,7 +215,7 @@ services:
     - "5672"
 
     ports:
-      - "127.0.0.1:15672:15672" # Management UI (localhost only)
+      - "127.0.0.1:15672:15672"
     restart: unless-stopped
     volumes:
     - rabbitmq_data:/var/lib/rabbitmq

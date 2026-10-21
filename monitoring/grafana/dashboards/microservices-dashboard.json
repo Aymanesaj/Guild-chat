@@ -40,7 +40,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "up{job=~\"chat-service|org-service|prometheus|docker-exporter\"}",
+          "expr": "up{job=~\"identity-service|chat-service|org-service|prometheus|docker-exporter\"}",
           "legendFormat": "{{job}}",
           "range": true,
           "refId": "A"
@@ -302,6 +302,15 @@
           "expr": "sum(rate(http_server_requests_seconds_count[1m])) by (job)",
           "legendFormat": "{{job}}",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(http_request_duration_seconds_count{job=\"identity-service\"}[1m])) by (job)",
+          "legendFormat": "{{job}}",
+          "refId": "B"
         }
       ],
       "fieldConfig": {
@@ -336,10 +345,18 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[1m])) by (job)",
           "expr": "sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[1m])) by (job) or (0 * sum(rate(http_server_requests_seconds_count[1m])) by (job))",
           "legendFormat": "{{job}} - 5xx",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(http_request_duration_seconds_count{job=\"identity-service\",status_code=~\"5..\"}[1m])) by (job) or (0 * sum(rate(http_request_duration_seconds_count{job=\"identity-service\"}[1m])) by (job))",
+          "legendFormat": "{{job}} - 5xx",
+          "refId": "B"
         }
       ],
       "fieldConfig": {
@@ -363,7 +380,7 @@
         "y": 20
       },
       "id": 4,
-      "title": "JVM Heap Memory Usage (MB)",
+      "title": "JVM & Node.js Heap Memory Usage (MB)",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -378,6 +395,15 @@
           "expr": "jvm_memory_used_bytes{area=\"heap\"} / 1024 / 1024",
           "legendFormat": "{{job}} Heap Used",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "nodejs_heap_size_used_bytes{job=\"identity-service\"} / 1024 / 1024",
+          "legendFormat": "{{job}} Heap Used",
+          "refId": "B"
         }
       ],
       "fieldConfig": {
