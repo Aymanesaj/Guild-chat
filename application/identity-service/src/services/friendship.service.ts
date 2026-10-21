@@ -14,6 +14,7 @@ import {
   deleteFriendshipById,
   findAcceptedFriendships,
   findPendingFriendRequests,
+  declinePendingFriendRequest,
 } from "../repositories/friendship.repository.js";
 
 import { toFriendRequestResponse } from "../mappers/friendship.mapper.js";
@@ -196,7 +197,7 @@ export async function declineFriendRequest(
     throw new ConflictError("Friend request is not pending");
   }
 
-  await deleteFriendshipById(requestId);
+  await declinePendingFriendRequest(requestId, userId);
 }
 
 export async function removeFriend(
