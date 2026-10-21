@@ -1,31 +1,12 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
-import vm from "node:vm";
-import { transformWithOxc } from "vite";
+import { loadModule as load } from "./helpers/loadModule.mjs";
 import * as messageContent from "../src/utils/messageContent.js";
 
 const peer = { id: "peer", username: "alice", avatar: "avatar.png" };
 const draft = { id: "draft-dm:peer", type: "dm", isDraft: true, peer_id: peer.id, peer };
 const persisted = { id: 42, type: "dm", peer_id: peer.id, peer };
 const tick = () => new Promise((resolve) => setImmediate(resolve));
-
-async function load(file, mocks) {
-  const path = new URL(`../src/${file}`, import.meta.url);
-  let code = await readFile(path, "utf8");
-  if (file.endsWith(".jsx")) code = (await transformWithOxc(code, path.pathname)).code;
-  const context = vm.createContext({ TextEncoder, console });
-  const source = new vm.SourceTextModule(code, { context, identifier: path.pathname });
-  await source.link((specifier) => {
-    assert.ok(specifier in mocks, `Missing mock for ${specifier}`);
-    const exports = mocks[specifier];
-    return new vm.SyntheticModule(Object.keys(exports), function () {
-      for (const [name, value] of Object.entries(exports)) this.setExport(name, value);
-    }, { context });
-  });
-  await source.evaluate();
-  return source.namespace;
-}
 
 // Keep hook state across renders while inspecting the component's real props
 // and running its effects explicitly, without a browser or extra dependencies.
@@ -204,7 +185,6 @@ test("a temporary conversation has no history fetch or room subscription", async
       deleteMessage: () => {}, editMessage: () => {}, sendMessage: () => {},
       listMessages: () => { calls.push("history"); return Promise.resolve([]); },
       subscribeToRoom: () => { calls.push("subscribe"); return () => {}; },
-      onConnectionStatus: () => () => {},
     },
   });
   const temporary = harness.render(module.useRoomMessages, null);

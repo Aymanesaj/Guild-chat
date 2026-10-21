@@ -13,7 +13,6 @@
   --bg-surface: #16191b;
   --bg-elevated: #1d2124;
   --bg-hover: #24292d;
-  --bg-active: #2c3238;
 
   /* Accent (crimson) */
   --accent-400: #e85a6b;
@@ -31,7 +30,6 @@
   /* Semantic */
   --success: #2fa968;
   --danger: #e5484d;
-  --warning: #e0a12c;
   --online: #2fa968;
   --offline: #71787e;
 

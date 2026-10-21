@@ -8,7 +8,6 @@ export function ProfileOverlayProvider({ user, children }) {
   const [currentUser, setCurrentUser] = useState(user);
   const [profile, setProfile] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
-  const [roomsRefreshTick, setRoomsRefreshTick] = useState(0);
   const [previewUser, setPreviewUser] = useState(null);
 
   async function fetchCurrentUser() {
@@ -37,10 +36,6 @@ export function ProfileOverlayProvider({ user, children }) {
     setProfile(null);
   }
 
-  function notifyRoomsChanged() {
-    setRoomsRefreshTick((tick) => tick + 1);
-  }
-
   function openUserPreview({ id, username }, anchorRect) {
     setPreviewUser({ id, username, anchorRect });
   }
@@ -58,8 +53,6 @@ export function ProfileOverlayProvider({ user, children }) {
         openProfile,
         closeProfile,
         refreshProfile,
-        roomsRefreshTick,
-        notifyRoomsChanged,
         previewUser,
         openUserPreview,
         closeUserPreview,

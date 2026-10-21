@@ -37,12 +37,6 @@ const Text = styled.p`
   line-height: 1.5;
 `;
 
-const ErrorText = styled.p`
-  margin: 0 0 var(--space-4);
-  color: var(--danger);
-  font-size: var(--text-sm);
-`;
-
 const Actions = styled.div`
   display: flex;
   justify-content: flex-end;
@@ -57,7 +51,6 @@ function ConfirmDialog({
   open,
   title,
   text,
-  error,
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   busyLabel = "Applying...",
@@ -78,7 +71,6 @@ function ConfirmDialog({
       >
         <Title>{title}</Title>
         {text && <Text>{text}</Text>}
-        {error && <ErrorText>{error}</ErrorText>}
 
         <Actions>
           <Button

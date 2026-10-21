@@ -3,7 +3,6 @@ import {
   deleteMessage,
   editMessage,
   listMessages,
-  onConnectionStatus,
   sendMessage,
   subscribeToRoom,
 } from "../api/messages";
@@ -21,7 +20,6 @@ export function useRoomMessages(roomId) {
   const [messages, setMessages] = useState([]);
   // A local DM draft has no history or room subscription until its first send.
   const [state, setState] = useState(roomId ? "loading" : "success");
-  const [connection, setConnection] = useState("connecting");
   const [sending, setSending] = useState(false);
   const [hasOlder, setHasOlder] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -70,8 +68,6 @@ export function useRoomMessages(roomId) {
     },
     [appendMessage, applyEdit, applyDelete],
   );
-
-  useEffect(() => onConnectionStatus(setConnection), []);
 
   useEffect(() => {
     if (!roomId) return undefined;
@@ -195,7 +191,7 @@ export function useRoomMessages(roomId) {
   );
 
   return {
-    messages, messagesById, state, connection, sending, send, edit, remove,
+    messages, messagesById, state, sending, send, edit, remove,
     hasOlder, loadingOlder, olderError, loadOlder,
   };
 }

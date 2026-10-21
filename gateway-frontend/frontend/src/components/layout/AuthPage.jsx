@@ -4,18 +4,13 @@ import { useId, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { TbEye, TbEyeOff } from "react-icons/tb";
 import { loginUser, registerUser } from "../../api/authentication.js";
-import {
-  getRegistrationPasswordError,
-  PASSWORD_MIN_LENGTH,
-  PASSWORD_MAX_LENGTH,
-} from "../../utils/passwordValidation.js";
+import { getRegistrationPasswordError } from "../../utils/passwordValidation.js";
 import {
   Button,
   Card as UICard,
   IconButton,
   Input as UIInput,
   InlineError,
-  StatusText,
 } from "../ui";
 
 const Container = styled.div`

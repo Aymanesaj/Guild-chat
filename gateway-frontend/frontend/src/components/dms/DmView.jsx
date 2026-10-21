@@ -92,12 +92,12 @@ function DmView() {
   }
 
   // syncDmRooms needs the current list to know which previews it can keep, and
-  // reading it from state would either stale the closure or restart the polling
-  // interval on every tick.
+  // reading it from state would stale the event callback or resubscribe on
+  // every preview update.
   const knownRooms = useRef([]);
 
-  // Loads can overlap now that socket events trigger them too, not just the
-  // poll. Only the newest one's result is kept: an older one could still list
+  // Socket events can trigger overlapping loads. Only the newest result is
+  // kept: an older one could still list
   // a conversation that has gone away.
   const loadSeq = useRef(0);
   const loadsInFlight = useRef(0);
@@ -118,7 +118,7 @@ function DmView() {
       setRooms(next);
       setLoading("success");
     } catch {
-      // A failed tick leaves the conversations already on screen; only a first
+      // A failed refresh leaves the conversations already on screen; only a first
       // load with nothing to show is an error worth rendering.
       setLoading((state) => (state === "loading" ? "error" : state));
     } finally {

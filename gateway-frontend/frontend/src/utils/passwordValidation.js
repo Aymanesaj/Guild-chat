@@ -1,6 +1,6 @@
 // Keep these rules aligned with identity-service/src/schemas/auth.schema.ts.
-export const PASSWORD_MIN_LENGTH = 8;
-export const PASSWORD_MAX_LENGTH = 128;
+const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_MAX_LENGTH = 128;
 
 export function getRegistrationPasswordError(password) {
   if (password.length < PASSWORD_MIN_LENGTH) {
