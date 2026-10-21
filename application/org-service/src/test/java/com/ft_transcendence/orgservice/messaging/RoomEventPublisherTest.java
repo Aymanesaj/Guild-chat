@@ -11,12 +11,28 @@ import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.*;
 import com.ft_transcendence.orgservice.config.RabbitMQConfig;
 import com.ft_transcendence.orgservice.service.RoomChangedEvent;
-import com.fttranscendence.chat.grpc.RoomChange;
 
 class RoomEventPublisherTest {
     final RabbitTemplate rabbit = mock(RabbitTemplate.class);
     final RoomEventPublisher publisher = new RoomEventPublisher(rabbit, 10);
     final RoomChangedEvent event = new RoomChangedEvent(42L, RoomChange.ROOM_UPDATED, Set.of(UUID.randomUUID()));
+
+    @Test
+    void allLocalEnumValuesKeepTheExistingJsonStrings() {
+        var expected = java.util.Map.of(
+                RoomChange.ROOM_ADDED, "ROOM_ADDED",
+                RoomChange.ROOM_UPDATED, "ROOM_UPDATED",
+                RoomChange.ROOM_REMOVED, "ROOM_REMOVED");
+        var converter = new RabbitMQConfig().roomEventMessageConverter();
+        var mapper = new tools.jackson.databind.json.JsonMapper();
+        expected.forEach((change, wireValue) -> {
+            var payload = new RoomChangedMessage("42", change, java.util.List.of(), false);
+            var message = converter.toMessage(payload, new MessageProperties());
+            var json = mapper.readTree(message.getBody());
+            assertThat(json.propertyNames()).containsExactlyInAnyOrder("roomId", "change", "userIds", "roomDeleted");
+            assertThat(json.path("change").asString()).isEqualTo(wireValue);
+        });
+    }
 
     @Test
     void jsonContractAndPersistentMessageHaveNoPackageDependency() {

@@ -31,7 +31,7 @@ public class RoomEventPublisher {
         try {
             // Topology is declared by the RabbitAdmin bean on every (re)connect, not per publication.
             RoomChangedMessage payload = new RoomChangedMessage(event.roomId().toString(),
-                    event.change().name(), event.userIds().stream().map(UUID::toString).toList(),
+                    event.change(), event.userIds().stream().map(UUID::toString).toList(),
                     event.roomDeleted());
             CorrelationData correlation = new CorrelationData(UUID.randomUUID().toString());
             rabbit.convertAndSend(RabbitMQConfig.ROOM_EVENTS_EXCHANGE,

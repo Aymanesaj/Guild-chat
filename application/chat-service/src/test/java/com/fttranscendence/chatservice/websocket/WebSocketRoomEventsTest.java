@@ -36,6 +36,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fttranscendence.chatservice.messaging.RoomChangedConsumer;
 import com.fttranscendence.chatservice.messaging.RoomChangedMessage;
+import com.fttranscendence.chatservice.messaging.RoomChange;
 import com.fttranscendence.chatservice.grpc.IdentityClient;
 import com.fttranscendence.chatservice.grpc.OrgClient;
 import com.fttranscendence.chatservice.support.MongoTestSupport;
@@ -174,7 +175,7 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
                 "{\"event\":\"subscribe\",\"data\":{\"room_id\":" + KICK_ROOM + "}}"));
         awaitSubscribers(KICK_ROOM, 1);
 
-        consumer.consume(new RoomChangedMessage(String.valueOf(KICK_ROOM), "ROOM_REMOVED", List.of(BOB), false));
+        consumer.consume(new RoomChangedMessage(String.valueOf(KICK_ROOM), RoomChange.ROOM_REMOVED, List.of(BOB), false));
 
         JsonNode removed = nextFrame(bob);
         assertThat(removed.path("event").asText()).isEqualTo("room.removed");

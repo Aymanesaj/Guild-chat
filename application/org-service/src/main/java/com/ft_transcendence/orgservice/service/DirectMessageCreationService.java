@@ -15,7 +15,7 @@ import jakarta.transaction.Transactional;
 import java.util.UUID;
 import java.util.Set;
 import org.springframework.context.ApplicationEventPublisher;
-import com.fttranscendence.chat.grpc.RoomChange;
+import com.ft_transcendence.orgservice.messaging.RoomChange;
 import org.springframework.stereotype.Service;
 
 @Service
