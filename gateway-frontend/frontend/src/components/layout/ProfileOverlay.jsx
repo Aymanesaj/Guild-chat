@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import styled from "styled-components";
 import { useToast } from "../ui/ToastProvider";
 import {
   TbCheck,
-  TbDoorExit,
   TbPencil,
   TbSend,
   TbUserMinus,
@@ -13,8 +12,12 @@ import {
 import { useProfileOverlay } from "./ProfileOverlayContext";
 import { useRoomNavigation } from "./RoomNavigationContext";
 import { useAvatarUrl } from "../../hooks/useAvatarUrl";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { PHONE_QUERY } from "../../constants/breakpoints";
 import UserAvatar from "../profile/UserAvatar";
 import FriendRequestForm from "../profile/FriendRequestForm";
+import MessageByteCount from "../ui/MessageByteCount";
+import { limitMessageInput, messageByteLength } from "../../utils/messageContent";
 
 import {
   checkUsernameAvailability,
@@ -33,7 +36,7 @@ import {
   removeFriend,
 } from "../../api/friends";
 
-import { getOrCreateDm, getRooms, leaveRoom } from "../../api/rooms";
+import { getOrCreateDm } from "../../api/rooms";
 
 import {
   Button as KitButton,
@@ -51,14 +54,12 @@ import {
 const CONFIRM_TITLES = {
   "remove-friend": "Remove friend?",
   "decline-friend-request": "Decline request?",
-  "leave-room": "Leave room?",
   "cancel-friend-request": "Cancel request?",
 };
 
 const CONFIRM_TEXTS = {
   "remove-friend": (label) => `Remove @${label} from your friends?`,
   "decline-friend-request": (label) => `Decline the request from @${label}?`,
-  "leave-room": (label) => `Leave ${label}?`,
   "cancel-friend-request": (label) =>
     `Cancel your friend request to @${label}?`,
 };
@@ -66,6 +67,9 @@ const CONFIRM_TEXTS = {
 const DEBOUNCE_MS = 400;
 const MANAGEMENT_PAGE_SIZE = 50;
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
+const MAX_DISPLAY_NAME_BYTES = 80;
+const MAX_BIO_BYTES = 280;
+const MAX_BIO_INPUT_BYTES = 500;
 
 
 // -----------------------------------------------------------------------------
@@ -102,9 +106,11 @@ function useUsernameAvailability(username, currentUsername) {
           signal: controller.signal,
         });
 
-        setStatus(available ? "available" : "taken");
+        if (!controller.signal.aborted) {
+          setStatus(available ? "available" : "taken");
+        }
       } catch (err) {
-        if (err.name !== "AbortError") {
+        if (!controller.signal.aborted && err.name !== "AbortError") {
           setStatus("error");
         }
       }
@@ -126,10 +132,10 @@ function useUsernameAvailability(username, currentUsername) {
 
 export default function ProfileOverlay({ user, onClose }) {
   const toast = useToast();
+  const isPhone = useMediaQuery(PHONE_QUERY);
   const {
     refreshProfile,
     loadingProfile,
-    notifyRoomsChanged,
   } = useProfileOverlay();
 
   const { navigateToRoom } = useRoomNavigation();
@@ -180,10 +186,8 @@ export default function ProfileOverlay({ user, onClose }) {
   // Section state
   // ---------------------------------------------------------------------------
 
-  // Friends | Rooms, and the sub-tab under it (friends/requests/sent | rooms).
-  const [managementSection, setManagementSection] =
-    useState("friends");
-
+  // Main section and friends sub-tabs.
+  const [managementSection, setManagementSection] = useState("friends");
   const [managementTab, setManagementTab] =
     useState("friends");
 
@@ -201,14 +205,26 @@ export default function ProfileOverlay({ user, onClose }) {
     bio: user.bio ?? "",
   });
 
-  const usernameStatus = useUsernameAvailability(
-    draft.username,
+  const nextUsername = draft.username.trim();
+  const checkedUsernameStatus = useUsernameAvailability(
+    nextUsername,
     user.username
   );
+  const usernameStatus = nextUsername ? checkedUsernameStatus : "idle";
+
+  const displayNameCountId = useId();
+  const displayNameBytes = messageByteLength(draft.displayName);
+  const displayNameOverLimit = displayNameBytes > MAX_DISPLAY_NAME_BYTES;
+  const bioCountId = useId();
+  const bioBytes = messageByteLength(draft.bio);
+  const bioOverLimit = bioBytes > MAX_BIO_BYTES;
 
   const canSave =
     !saving &&
+    !displayNameOverLimit &&
+    !bioOverLimit &&
     draft.displayName.trim().length > 0 &&
+    nextUsername.length > 0 &&
     usernameStatus !== "checking" &&
     usernameStatus !== "taken" &&
     usernameStatus !== "invalid" &&
@@ -216,7 +232,7 @@ export default function ProfileOverlay({ user, onClose }) {
 
 
   // ---------------------------------------------------------------------------
-  // Friends / rooms data
+  // Friends data
   // ---------------------------------------------------------------------------
 
   const [friends, setFriends] = useState([]);
@@ -226,10 +242,6 @@ export default function ProfileOverlay({ user, onClose }) {
   const [friendRequests, setFriendRequests] = useState([]);
   const [requestsOffset, setRequestsOffset] = useState(0);
   const [requestsHasMore, setRequestsHasMore] = useState(false);
-
-  const [rooms, setRooms] = useState([]);
-  const [roomsOffset, setRoomsOffset] = useState(0);
-  const [roomsHasMore, setRoomsHasMore] = useState(false);
 
   const [sentRequests, setSentRequests] = useState([]);
   const [sentOffset, setSentOffset] = useState(0);
@@ -244,17 +256,6 @@ export default function ProfileOverlay({ user, onClose }) {
   // Confirmation
   const [confirmAction, setConfirmAction] = useState(null);
   const [runningAction, setRunningAction] = useState(false);
-
-
-  // ---------------------------------------------------------------------------
-  // Navigation
-  // ---------------------------------------------------------------------------
-
-  // Each section opens on its first sub-tab, which shares the section's name.
-  const selectSection = (section) => {
-    setManagementSection(section);
-    setManagementTab(section);
-  };
 
 
   // ---------------------------------------------------------------------------
@@ -285,7 +286,7 @@ export default function ProfileOverlay({ user, onClose }) {
     try {
       await updateProfile({
         display_name: draft.displayName,
-        username: draft.username,
+        username: nextUsername,
         bio: draft.bio,
       });
 
@@ -357,31 +358,6 @@ export default function ProfileOverlay({ user, onClose }) {
     }
   };
 
-  const loadRoomsPage = async (reset = false) => {
-    const nextOffset = reset ? 0 : roomsOffset;
-
-    reset ? setLoadingSection(true) : setLoadingMore(true);
-
-    try {
-      const data = await getRooms({
-        limit: MANAGEMENT_PAGE_SIZE,
-        offset: nextOffset,
-      });
-
-      const batch = Array.isArray(data) ? data : [];
-
-      setRooms((prev) => (reset ? batch : [...prev, ...batch]));
-      setRoomsOffset(nextOffset + batch.length);
-      setRoomsHasMore(batch.length === MANAGEMENT_PAGE_SIZE);
-    } catch (error) {
-      toast.error(
-        error?.message || "Failed to load rooms."
-      );
-    } finally {
-      reset ? setLoadingSection(false) : setLoadingMore(false);
-    }
-  };
-
   const loadSentPage = async (reset = false) => {
     const nextOffset = reset ? 0 : sentOffset;
 
@@ -413,19 +389,15 @@ export default function ProfileOverlay({ user, onClose }) {
   // Whichever sub-tab is active loads from page 1.
 
   useEffect(() => {
-    if (managementSection === "friends") {
-      if (managementTab === "friends") {
-        loadFriendsPage(true);
-      } else if (managementTab === "requests") {
-        loadRequestsPage(true);
-      } else if (managementTab === "sent") {
-        loadSentPage(true);
-      }
-    } else {
-      loadRoomsPage(true);
+    if (managementTab === "friends") {
+      loadFriendsPage(true);
+    } else if (managementTab === "requests") {
+      loadRequestsPage(true);
+    } else if (managementTab === "sent") {
+      loadSentPage(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [managementSection, managementTab, user.id]);
+  }, [managementTab, user.id]);
 
 
   // ---------------------------------------------------------------------------
@@ -450,15 +422,6 @@ export default function ProfileOverlay({ user, onClose }) {
   };
 
 
-  const requestLeaveRoom = (room) => {
-    setConfirmAction({
-      type: "leave-room",
-      id: room.id,
-      label: room.name || "Direct message",
-    });
-  };
-
-
   const requestCancelSentRequest = (request) => {
     setConfirmAction({
       type: "cancel-friend-request",
@@ -478,16 +441,12 @@ export default function ProfileOverlay({ user, onClose }) {
 
 
   const reloadActiveManagementTab = async () => {
-    if (managementSection === "friends") {
-      if (managementTab === "friends") {
-        await loadFriendsPage(true);
-      } else if (managementTab === "requests") {
-        await loadRequestsPage(true);
-      } else if (managementTab === "sent") {
-        await loadSentPage(true);
-      }
-    } else {
-      await loadRoomsPage(true);
+    if (managementTab === "friends") {
+      await loadFriendsPage(true);
+    } else if (managementTab === "requests") {
+      await loadRequestsPage(true);
+    } else if (managementTab === "sent") {
+      await loadSentPage(true);
     }
   };
 
@@ -508,11 +467,6 @@ export default function ProfileOverlay({ user, onClose }) {
         await declineFriendRequest(confirmAction.id);
       }
 
-      if (confirmAction.type === "leave-room") {
-        await leaveRoom(confirmAction.id);
-        notifyRoomsChanged();
-      }
-
       if (confirmAction.type === "cancel-friend-request") {
         await cancelFriendRequest(confirmAction.id);
       }
@@ -523,7 +477,6 @@ export default function ProfileOverlay({ user, onClose }) {
       const messages = {
         "remove-friend": "Friend removed.",
         "decline-friend-request": "Friend request declined.",
-        "leave-room": `You left ${confirmAction.label}.`,
         "cancel-friend-request": "Friend request cancelled.",
       };
       toast.success(messages[confirmAction.type]);
@@ -606,45 +559,6 @@ export default function ProfileOverlay({ user, onClose }) {
         ) : (
           <EmptyState>
             No friends yet
-          </EmptyState>
-        )}
-      </>
-    );
-  };
-
-
-  const renderRoomRows = (items) => {
-    return (
-      <>
-        {items.length > 0 ? (
-          items.map((room) => (
-            <ListRow key={room.id}>
-              {/* A DM shows the peer; a group room has no image, so the initial stands. */}
-              <RowAvatar
-                avatar={room.peer?.avatar}
-                name={room.name || room.peer?.username || "DM"}
-              />
-
-              <RowName>
-                {room.name || room.peer?.username || "Direct message"}
-              </RowName>
-
-              <ActionButton
-                type="button"
-                onClick={() =>
-                  requestLeaveRoom(room)
-                }
-                aria-label={`Leave ${
-                  room.name || "direct message"
-                }`}
-              >
-                <TbDoorExit size={16} />
-              </ActionButton>
-            </ListRow>
-          ))
-        ) : (
-          <EmptyState>
-            No rooms yet
           </EmptyState>
         )}
       </>
@@ -808,27 +722,6 @@ export default function ProfileOverlay({ user, onClose }) {
   };
 
 
-  const renderRoomsManagement = () => {
-    return (
-      <ExpandedListPanel>
-        {renderRoomRows(rooms)}
-
-        {roomsHasMore && (
-          <CenteredButtonWrap>
-            <PillButton
-              type="button"
-              onClick={() => loadRoomsPage(false)}
-              disabled={loadingMore}
-            >
-              {loadingMore ? "Loading..." : "Load more"}
-            </PillButton>
-          </CenteredButtonWrap>
-        )}
-      </ExpandedListPanel>
-    );
-  };
-
-
   // ---------------------------------------------------------------------------
   // JSX
   // ---------------------------------------------------------------------------
@@ -904,6 +797,16 @@ export default function ProfileOverlay({ user, onClose }) {
                           }))
                         }
                         placeholder="Display name"
+                        aria-label="Display name"
+                        aria-describedby={displayNameCountId}
+                        aria-invalid={displayNameOverLimit}
+                        $invalid={displayNameOverLimit}
+                      />
+                      <DisplayNameByteCount
+                        id={displayNameCountId}
+                        bytes={displayNameBytes}
+                        maxBytes={MAX_DISPLAY_NAME_BYTES}
+                        aria-label={`${displayNameBytes} of ${MAX_DISPLAY_NAME_BYTES} bytes`}
                       />
 
                       <HandleInput
@@ -916,6 +819,7 @@ export default function ProfileOverlay({ user, onClose }) {
                           }))
                         }
                         placeholder="username"
+                        required
                         $status={usernameStatus}
                       />
 
@@ -993,17 +897,30 @@ export default function ProfileOverlay({ user, onClose }) {
               <Divider />
 
               {isEditing ? (
-                <BioInput
-                  value={draft.bio}
-                  onChange={(e) =>
-                    setDraft((d) => ({
-                      ...d,
-                      bio: e.target.value,
-                    }))
-                  }
-                  placeholder="Write something about yourself..."
-                  rows={3}
-                />
+                <BioEditor>
+                  <BioInput
+                    value={draft.bio}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        bio: limitMessageInput(e.target.value, MAX_BIO_INPUT_BYTES),
+                      }))
+                    }
+                    maxLength={MAX_BIO_INPUT_BYTES}
+                    aria-label="Bio"
+                    aria-describedby={bioCountId}
+                    aria-invalid={bioOverLimit}
+                    $invalid={bioOverLimit}
+                    placeholder="Write something about yourself..."
+                    rows={3}
+                  />
+                  <BioByteCount
+                    id={bioCountId}
+                    bytes={bioBytes}
+                    maxBytes={MAX_BIO_BYTES}
+                    aria-label={`${bioBytes} of ${MAX_BIO_BYTES} bytes`}
+                  />
+                </BioEditor>
               ) : (
                 <Bio>
                   {user.bio}
@@ -1011,34 +928,35 @@ export default function ProfileOverlay({ user, onClose }) {
               )}
 
               {/* ------------------------------------------------------------- */}
-              {/* FRIENDS / ROOMS                                                */}
+              {/* FRIENDS / NOTIFICATIONS                                        */}
               {/* ------------------------------------------------------------- */}
 
               <SectionPanel>
-                <SectionTabs>
+                <SectionTabs role="group" aria-label="Profile sections">
                   <SectionTab
                     type="button"
                     $active={managementSection === "friends"}
-                    onClick={() => selectSection("friends")}
+                    aria-pressed={managementSection === "friends"}
+                    onClick={() => setManagementSection("friends")}
                   >
                     Friends
                   </SectionTab>
-
                   <SectionTab
                     type="button"
-                    $active={managementSection === "rooms"}
-                    onClick={() => selectSection("rooms")}
+                    $active={managementSection === "notifications"}
+                    aria-pressed={managementSection === "notifications"}
+                    onClick={() => setManagementSection("notifications")}
                   >
-                    Rooms
+                    Notifications
                   </SectionTab>
                 </SectionTabs>
 
-                {/* Rooms has a single list, so only friends gets sub-tabs. */}
                 {managementSection === "friends" && (
                   <SubTabs>
                     <SubTab
                       type="button"
                       $active={managementTab === "friends"}
+                      aria-pressed={managementTab === "friends"}
                       onClick={() => setManagementTab("friends")}
                     >
                       Friends
@@ -1047,6 +965,7 @@ export default function ProfileOverlay({ user, onClose }) {
                     <SubTab
                       type="button"
                       $active={managementTab === "requests"}
+                      aria-pressed={managementTab === "requests"}
                       onClick={() => setManagementTab("requests")}
                     >
                       Incoming
@@ -1055,6 +974,7 @@ export default function ProfileOverlay({ user, onClose }) {
                     <SubTab
                       type="button"
                       $active={managementTab === "sent"}
+                      aria-pressed={managementTab === "sent"}
                       onClick={() => setManagementTab("sent")}
                     >
                       Sent
@@ -1067,14 +987,14 @@ export default function ProfileOverlay({ user, onClose }) {
                 )}
 
                 <ManagementContent>
-                  {loadingSection ? (
-                    <EmptyState>
-                      Loading...
-                    </EmptyState>
-                  ) : managementSection === "friends" ? (
-                    renderFriendsManagement()
-                  ) : (
-                    renderRoomsManagement()
+                  {managementSection === "friends" && (
+                    loadingSection ? (
+                      <EmptyState>
+                        Loading...
+                      </EmptyState>
+                    ) : (
+                      renderFriendsManagement()
+                    )
                   )}
                 </ManagementContent>
               </SectionPanel>
@@ -1086,7 +1006,7 @@ export default function ProfileOverlay({ user, onClose }) {
 
         <ConfirmDialog
           open={Boolean(confirmAction)}
-          position="absolute"
+          position={isPhone ? "fixed" : "absolute"}
           title={confirmAction ? CONFIRM_TITLES[confirmAction.type] : ""}
           text={
             confirmAction
@@ -1119,10 +1039,15 @@ const Overlay = styled.div`
   backdrop-filter: blur(8px);
   animation: ${fadeIn} var(--dur) var(--ease);
   z-index: var(--z-overlay);
+
+  @media ${PHONE_QUERY} {
+    overscroll-behavior-y: contain;
+  }
 `;
 
 const Card = styled.div`
   position: relative;
+  margin-block: auto;
   width: 640px;
   max-width: 90vw;
   height: 85vh;
@@ -1135,16 +1060,22 @@ const Card = styled.div`
   color: var(--text-secondary);
   box-shadow: var(--shadow-lg);
   animation: ${riseIn} var(--dur) var(--ease);
+
+  @media ${PHONE_QUERY} {
+    flex-shrink: 0;
+    height: auto;
+    min-height: 85vh;
+  }
 `;
 
 const Banner = styled.div`
   flex-shrink: 0;
-  height: 160px;
+  height: 100px;
   border-bottom: 1px solid var(--border-subtle);
   background: linear-gradient(
     135deg,
-    var(--accent-600),
-    color-mix(in srgb, var(--accent-600) 30%, var(--bg-base))
+    color-mix(in srgb, var(--accent-600) 55%, var(--bg-base)),
+    color-mix(in srgb, var(--accent-600) 12%, var(--bg-base))
   );
 `;
 
@@ -1241,6 +1172,11 @@ const Content = styled.div`
   display: flex;
   flex-direction: column;
   overflow: hidden;
+
+  @media ${PHONE_QUERY} {
+    flex: none;
+    overflow: visible;
+  }
 `;
 
 const LoadingHint = styled.p`
@@ -1289,6 +1225,10 @@ const NameInput = styled(KitInput)`
   font-weight: 600;
 `;
 
+const DisplayNameByteCount = styled(MessageByteCount)`
+  text-align: right;
+`;
+
 const HandleInput = styled(KitInput)`
   font-size: var(--text-sm);
 
@@ -1307,8 +1247,16 @@ const HelperText = styled.span`
     $error ? "var(--danger)" : $ok ? "var(--success)" : "var(--text-tertiary)"};
 `;
 
-const BioInput = styled(KitTextArea)`
+const BioEditor = styled.div`
+  flex-shrink: 0;
   margin-top: var(--space-5);
+`;
+
+const BioInput = KitTextArea;
+
+const BioByteCount = styled(MessageByteCount)`
+  margin-top: var(--space-1);
+  text-align: right;
 `;
 
 const EditActions = styled.div`
@@ -1338,11 +1286,12 @@ const Bio = styled.p`
   padding-top: var(--space-5);
   line-height: 1.5;
   color: var(--text-secondary);
+  overflow-wrap: anywhere;
 `;
 
 // =============================================================================
-// Friends / Rooms — section tabs, then (friends only) a row of sub-tab chips,
-// then the list itself (the only part that scrolls).
+// Friends / Notifications — section tabs, then friends sub-tabs,
+// then the list itself. Phones scroll the whole overlay.
 // =============================================================================
 
 const SectionPanel = styled.div`
@@ -1351,16 +1300,23 @@ const SectionPanel = styled.div`
   margin-top: var(--space-5);
   display: flex;
   flex-direction: column;
+
+  @media ${PHONE_QUERY} {
+    flex: none;
+  }
 `;
 
 const SectionTabs = styled(TabList)`
   flex-shrink: 0;
-  justify-content: flex-start;
-  gap: var(--space-5);
+  gap: 0;
   margin-bottom: var(--space-3);
 `;
 
-const SectionTab = Tab;
+const SectionTab = styled(Tab)`
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+`;
 
 const SubTabs = styled.div`
   flex-shrink: 0;
@@ -1368,27 +1324,21 @@ const SubTabs = styled.div`
   align-items: center;
   gap: var(--space-2);
   padding-bottom: var(--space-3);
-  /* The chips and the request box together are wider than the card gets on a
+  /* The tabs and the request box together are wider than the card gets on a
      phone, so let the box drop to a line of its own. */
   flex-wrap: wrap;
 `;
 
-const SubTab = styled.button`
-  padding: 4px 12px;
-  border: 1px solid
-    ${({ $active }) => ($active ? "var(--accent-500)" : "var(--border-strong)")};
-  border-radius: var(--radius-pill);
-  background: ${({ $active }) => ($active ? "var(--accent-ring)" : "transparent")};
-  color: ${({ $active }) => ($active ? "var(--text-primary)" : "var(--text-secondary)")};
+const SubTab = styled(Tab)`
+  padding: var(--space-2) 12px;
+  border-radius: 0;
   font-size: var(--text-sm);
-  font-weight: ${({ $active }) => ($active ? 600 : 500)};
   transition:
     color var(--dur-fast) var(--ease),
-    border-color var(--dur-fast) var(--ease),
     background var(--dur-fast) var(--ease);
 
   &:hover {
-    color: var(--text-primary);
+    background: var(--bg-hover);
   }
 `;
 
@@ -1397,6 +1347,10 @@ const ManagementContent = styled.div`
   min-height: 0;
   display: flex;
   flex-direction: column;
+
+  @media ${PHONE_QUERY} {
+    flex: none;
+  }
 `;
 
 const ExpandedListPanel = styled.div`
@@ -1406,6 +1360,11 @@ const ExpandedListPanel = styled.div`
   display: flex;
   flex-direction: column;
   gap: 2px;
+
+  @media ${PHONE_QUERY} {
+    flex: none;
+    overflow-y: visible;
+  }
 `;
 
 // =============================================================================
