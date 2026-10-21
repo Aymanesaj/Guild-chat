@@ -37,6 +37,31 @@ export function declinePendingFriendRequest(
   });
 }
 
+
+export function deleteFriendshipConditionally(
+  id: string,
+  userId: string,
+  expectedStatus: "PENDING" | "ACCEPTED",
+) {
+  return prisma.friendship.deleteMany({
+    where: {
+      id,
+      status: expectedStatus,
+      ...(expectedStatus === "PENDING"
+        ? {
+            requesterId: userId,
+          }
+        : {
+            OR: [
+              { requesterId: userId },
+              { addresseeId: userId },
+            ],
+          }),
+    },
+  });
+}
+
+
 export function findFriendRequestById(id: string) {
   return prisma.friendship.findUnique({
     where: {
