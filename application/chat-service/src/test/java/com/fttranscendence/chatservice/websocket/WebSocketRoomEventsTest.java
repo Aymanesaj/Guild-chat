@@ -34,6 +34,10 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fttranscendence.chatservice.config.RabbitMQConfig;
+import com.fttranscendence.chatservice.messaging.FriendshipEvent;
+import com.fttranscendence.chatservice.messaging.FriendshipEventConsumer;
+import com.fttranscendence.chatservice.messaging.FriendshipEventType;
 import com.fttranscendence.chatservice.messaging.RoomChangedConsumer;
 import com.fttranscendence.chatservice.messaging.RoomChangedMessage;
 import com.fttranscendence.chatservice.messaging.RoomChange;
@@ -65,6 +69,12 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
 
     @Autowired
     private RoomChangedConsumer consumer;
+
+    @Autowired
+    private FriendshipEventConsumer friendships;
+
+    @Autowired
+    private org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry listeners;
 
     @Autowired
     private org.springframework.amqp.support.converter.Jackson2JsonMessageConverter converter;
@@ -196,6 +206,38 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
             Thread.sleep(100);
         }
         assertThat(subscriptions.subscriberCount(roomId)).as("subscribers of %s", roomId).isEqualTo(expected);
+    }
+
+    @Test
+    @DisplayName("a friend request reaches the addressee's tabs and the requester's other tabs")
+    void friendRequestReachesBothUsers() throws Exception {
+        RecordingClient alice = connect(ALICE);
+        RecordingClient bob = connect(BOB);
+        awaitConnections(ALICE, 1);
+        awaitConnections(BOB, 1);
+        String friendship = "0f8fad5b-d9cb-469f-a165-70867728950e";
+
+        friendships.consume(new FriendshipEvent("7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                FriendshipEventType.FRIEND_REQUEST_SENT, 1, friendship, ALICE, BOB, "2026-10-21T10:00:00.000Z"));
+
+        JsonNode received = nextFrame(bob);
+        assertThat(received.path("event").asText()).isEqualTo("friend.request.received");
+        assertThat(received.path("data").path("friendship_id").asText()).isEqualTo(friendship);
+        assertThat(received.path("data").path("user_id").asText()).isEqualTo(ALICE);
+
+        JsonNode sent = nextFrame(alice);
+        assertThat(sent.path("event").asText()).isEqualTo("friend.request.sent");
+        assertThat(sent.path("data").path("user_id").asText()).isEqualTo(BOB);
+    }
+
+    @Test
+    @DisplayName("the friendship queue has a registered listener, not just a declared queue")
+    void friendshipQueueIsConsumed() {
+        assertThat(listeners.getListenerContainers())
+                .flatExtracting(container -> List.of(
+                        ((org.springframework.amqp.rabbit.listener.AbstractMessageListenerContainer) container)
+                                .getQueueNames()))
+                .contains(RabbitMQConfig.CHAT_FRIENDSHIP_EVENTS_QUEUE, RabbitMQConfig.CHAT_ROOM_EVENTS_QUEUE);
     }
 
     @Test
