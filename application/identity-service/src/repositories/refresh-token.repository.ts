@@ -29,20 +29,6 @@ export function revokeRefreshToken(id: string) {
   });
 }
 
-export function setReplacement(
-  id: string,
-  replacementId: string
-) {
-  return prisma.refreshToken.update({
-    where: {
-      id,
-    },
-    data: {
-      replacedBy: replacementId,
-    },
-  });
-}
-
 export function revokeAllRefreshTokens(userId: string) {
   return prisma.refreshToken.updateMany({
     where: {
@@ -52,5 +38,52 @@ export function revokeAllRefreshTokens(userId: string) {
     data: {
       revoked: true,
     },
+  });
+}
+
+
+export async function rotateRefreshTokenInDb(
+  tokenId: string,
+  userId: string,
+  newTokenHash: string,
+  expiresAt: Date,
+): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    const result = await tx.refreshToken.updateMany({
+      where: {
+        id: tokenId,
+        userId,
+        revoked: false,
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+      data: {
+        revoked: true,
+      },
+    });
+
+    if (result.count !== 1) {
+      return false;
+    }
+
+    const replacement = await tx.refreshToken.create({
+      data: {
+        userId,
+        tokenHash: newTokenHash,
+        expiresAt,
+      },
+    });
+
+    await tx.refreshToken.update({
+      where: {
+        id: tokenId,
+      },
+      data: {
+        replacedBy: replacement.id,
+      },
+    });
+
+    return true;
   });
 }

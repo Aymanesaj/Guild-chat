@@ -12,6 +12,8 @@ import { randomUUID } from "node:crypto";
 import { buildApp } from "../app.js";
 import { prisma } from "../database/prisma.js";
 import { publishFriendshipEvent } from "../messaging/friendship.publisher.js";
+import { declinePendingFriendRequest } from
+  "../repositories/friendship.repository.js";
 
 // Keep the real Fastify and PostgreSQL integration, but avoid opening
 // a real RabbitMQ connection in friendship endpoint tests.
@@ -207,6 +209,35 @@ describe("Friendship endpoints integration", () => {
     expect(publishFriendshipEvent).not.toHaveBeenCalled();
   });
 
+
+  it("a stale decline cannot delete an accepted friendship", async () => {
+    // Alice's request has already been accepted by Bob.
+    // Simulate the delete step of a decline operation
+    // that began before the acceptance completed.
+
+    const result = await declinePendingFriendRequest(
+      aliceBobRequestId,
+      bob.id,
+    );
+
+    // An accepted friendship must not match
+    // the conditional PENDING deletion.
+    expect(result.count).toBe(0);
+
+    // Verify the friendship still exists.
+    const friendship = await prisma.friendship.findUnique({
+      where: {
+        id: aliceBobRequestId,
+      },
+    });
+
+    expect(friendship).not.toBeNull();
+    expect(friendship?.status).toBe("ACCEPTED");
+
+    // No new friendship event should be published.
+    expect(publishFriendshipEvent).not.toHaveBeenCalled();
+  });
+
   it("Alice sees Bob in her friends list", async () => {
     const response = await app.inject({
       method: "GET",
@@ -301,6 +332,61 @@ describe("Friendship endpoints integration", () => {
 
     expect(response.statusCode).toBe(403);
     expect(publishFriendshipEvent).not.toHaveBeenCalled();
+  });
+
+
+  it("Charlie cannot cancel Alice's outgoing request", async () => {
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/friends/${alice.id}`,
+      headers: authorization(charlie),
+    });
+
+    expect(response.statusCode).toBe(403);
+
+    const friendship = await prisma.friendship.findUnique({
+      where: {
+        id: aliceCharlieRequestId,
+      },
+    });
+
+    expect(friendship).not.toBeNull();
+    expect(friendship?.status).toBe("PENDING");
+
+    expect(publishFriendshipEvent).not.toHaveBeenCalled();
+  });
+
+  it("Alice can cancel her outgoing request", async () => {
+    // Create a separate request so we don't interfere
+    // with the existing Alice -> Charlie decline tests.
+    const sendResponse = await app.inject({
+      method: "POST",
+      url: "/friends/requests",
+      headers: authorization(bob),
+      payload: {
+        addresseeId: charlie.id,
+      },
+    });
+
+    expect(sendResponse.statusCode).toBe(201);
+
+    const requestId = sendResponse.json().id;
+
+    const cancelResponse = await app.inject({
+      method: "DELETE",
+      url: `/friends/${charlie.id}`,
+      headers: authorization(bob),
+    });
+
+    expect(cancelResponse.statusCode).toBe(204);
+
+    const friendship = await prisma.friendship.findUnique({
+      where: {
+        id: requestId,
+      },
+    });
+
+    expect(friendship).toBeNull();
   });
 
   it("Charlie declines Alice's request", async () => {

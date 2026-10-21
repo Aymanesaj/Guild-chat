@@ -14,6 +14,8 @@ import {
   deleteFriendshipById,
   findAcceptedFriendships,
   findPendingFriendRequests,
+  declinePendingFriendRequest,
+  deleteFriendshipConditionally,
 } from "../repositories/friendship.repository.js";
 
 import { toFriendRequestResponse } from "../mappers/friendship.mapper.js";
@@ -196,7 +198,7 @@ export async function declineFriendRequest(
     throw new ConflictError("Friend request is not pending");
   }
 
-  await deleteFriendshipById(requestId);
+  await declinePendingFriendRequest(requestId, userId);
 }
 
 export async function removeFriend(
@@ -213,7 +215,36 @@ export async function removeFriend(
     throw new NotFoundError("Friendship not found");
   }
 
-  await deleteFriendshipById(friendship.id);
+  if (friendship.status === "PENDING") {
+    if (friendship.addresseeId === userId)
+      throw new ForbiddenError("You cannot cancel an incoming friend request");
+    const result = await deleteFriendshipConditionally(friendship.id, userId, "PENDING");
+
+    if (result.count !== 1) {
+      throw new ConflictError(
+        "Friend request is no longer pending",
+      );
+    }
+
+    return ;
+  }
+
+  if (friendship.status === "ACCEPTED")
+  {
+    const result = await deleteFriendshipConditionally(friendship.id, userId, "ACCEPTED");
+
+    if (result.count !== 1) {
+      throw new ConflictError(
+        "Friend request is no longer accepted",
+      );
+    }
+
+    return ;
+  }
+
+  throw new ConflictError(
+    "Invalid friendship status",
+  );
 }
 
 export async function getFriends(userId: string): Promise<PublicProfile[]> {
