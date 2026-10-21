@@ -24,6 +24,19 @@ export function createFriendRequest(requesterId: string, addresseeId: string) {
   });
 }
 
+export function declinePendingFriendRequest(
+  requestId: string,
+  addresseeId: string,
+) {
+  return prisma.friendship.deleteMany({
+    where: {
+      id: requestId,
+      addresseeId,
+      status: "PENDING",
+    },
+  });
+}
+
 export function findFriendRequestById(id: string) {
   return prisma.friendship.findUnique({
     where: {

@@ -12,6 +12,8 @@ import { randomUUID } from "node:crypto";
 import { buildApp } from "../app.js";
 import { prisma } from "../database/prisma.js";
 import { publishFriendshipEvent } from "../messaging/friendship.publisher.js";
+import { declinePendingFriendRequest } from
+  "../repositories/friendship.repository.js";
 
 // Keep the real Fastify and PostgreSQL integration, but avoid opening
 // a real RabbitMQ connection in friendship endpoint tests.
@@ -204,6 +206,35 @@ describe("Friendship endpoints integration", () => {
     });
 
     expect(response.statusCode).toBe(409);
+    expect(publishFriendshipEvent).not.toHaveBeenCalled();
+  });
+
+
+  it("a stale decline cannot delete an accepted friendship", async () => {
+    // Alice's request has already been accepted by Bob.
+    // Simulate the delete step of a decline operation
+    // that began before the acceptance completed.
+
+    const result = await declinePendingFriendRequest(
+      aliceBobRequestId,
+      bob.id,
+    );
+
+    // An accepted friendship must not match
+    // the conditional PENDING deletion.
+    expect(result.count).toBe(0);
+
+    // Verify the friendship still exists.
+    const friendship = await prisma.friendship.findUnique({
+      where: {
+        id: aliceBobRequestId,
+      },
+    });
+
+    expect(friendship).not.toBeNull();
+    expect(friendship?.status).toBe("ACCEPTED");
+
+    // No new friendship event should be published.
     expect(publishFriendshipEvent).not.toHaveBeenCalled();
   });
 
