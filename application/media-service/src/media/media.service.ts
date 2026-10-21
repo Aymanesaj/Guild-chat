@@ -1,21 +1,32 @@
 import { prisma } from "../database/prisma.js";
+
 import {
   createPresignedUploadUrl,
-  UPLOAD_URL_TTL_SECONDS,
-} from "../storage/r2.storage.js";
-import { createMediaKeys } from "./media-keys.js";
-import { validateUploadRequest } from "./media-policy.js";
-import type {
-  CallerService,
-  MediaPurpose,
-} from "./media-policy.js";
-import { withFinalizationSlot } from "./finalization-limit.js";
-import {
   deleteObject,
   downloadObject,
   getObjectInfo,
   uploadWebp,
+  UPLOAD_URL_TTL_SECONDS,
+  createPresignedDownloadUrl,
+  DOWNLOAD_URL_TTL_SECONDS,
 } from "../storage/r2.storage.js";
+
+import {
+  createCandidateKey,
+  createMediaKeys,
+} from "./media-keys.js";
+
+import {
+  getMaxUploadBytes,
+  validateUploadRequest,
+} from "./media-policy.js";
+
+import type {
+  CallerService,
+  MediaPurpose,
+} from "./media-policy.js";
+
+import { withFinalizationSlot } from "./finalization-limit.js";
 
 import {
   ImageProcessorBusyError,
@@ -25,105 +36,67 @@ import {
 import {
   claimUpload,
   findUpload,
+  PROCESSING_LEASE_MS,
 } from "../repositories/upload.repository.js";
-
-import { getMaxUploadBytes } from "./media-policy.js";
 
 interface CreateUploadInput {
   ownerId: string;
   purpose: MediaPurpose;
   contentType: string;
 }
+
+interface FinalizeUploadInput {
+  uploadId: string;
+  ownerId: string;
+  purpose: MediaPurpose;
+}
+
 interface DeleteMediaInput {
   mediaId: string;
   ownerId: string;
   purpose: MediaPurpose;
 }
 
-export async function deleteMedia(
+interface GetDownloadUrlInput {
+  mediaId: string;
+  ownerId: string;
+  purpose: MediaPurpose;
+}
+
+export async function getDownloadUrl(
   caller: CallerService,
-  input: DeleteMediaInput,
+  input: GetDownloadUrlInput,
 ) {
-  const access = {
+  const upload = await findUpload({
     uploadId: input.mediaId,
     ownerId: input.ownerId,
     purpose: input.purpose,
     caller,
-  };
-
-  const upload = await findUpload(access);
+  });
 
   if (!upload) {
     throw new Error("Media not found");
   }
 
-  // Repeating a successful deletion is safe.
-  if (upload.status === "DELETED") {
-    return { mediaId: upload.id, status: "DELETED" as const };
+  if (
+    upload.status !== "READY" ||
+    !upload.finalKey ||
+    upload.finalCleanupPending
+  ) {
+    throw new Error("Media is not available for download");
   }
 
-  if (upload.status !== "READY" || !upload.finalKey) {
-    throw new Error("Only ready media can be deleted");
-  }
-
-  const finalKey = upload.finalKey;
-
-  // Persist the intent before making the external storage request.
-  const marked = await prisma.mediaUpload.updateMany({
-    where: {
-      id: upload.id,
-      ownerId: input.ownerId,
-      callerService: caller,
-      purpose: input.purpose,
-      status: "READY",
-      finalKey,
-    },
-    data: {
-      finalCleanupPending: true,
-    },
-  });
-
-  if (marked.count !== 1) {
-    const current = await findUpload(access);
-
-    if (current?.status === "DELETED") {
-      return { mediaId: upload.id, status: "DELETED" as const };
-    }
-
-    throw new Error("Media state changed; retry deletion");
-  }
-
-  // If this fails, finalCleanupPending stays true for retry.
-  await deleteObject(finalKey);
-
-  const deleted = await prisma.mediaUpload.updateMany({
-    where: {
-      id: upload.id,
-      status: "READY",
-      finalKey,
-      finalCleanupPending: true,
-    },
-    data: {
-      status: "DELETED",
-      deletedAt: new Date(),
-      finalCleanupPending: false,
-    },
-  });
-
-  if (deleted.count !== 1) {
-    const current = await findUpload(access);
-
-    if (current?.status !== "DELETED") {
-      throw new Error("Could not confirm deletion; retry");
-    }
-  }
+  const downloadUrl = await createPresignedDownloadUrl(
+    upload.finalKey,
+  );
 
   return {
     mediaId: upload.id,
-    status: "DELETED" as const,
+    downloadUrl,
+    contentType: "image/webp" as const,
+    expiresIn: DOWNLOAD_URL_TTL_SECONDS,
   };
 }
-
 
 export async function createUpload(
   caller: CallerService,
@@ -173,12 +146,6 @@ export async function createUpload(
   };
 }
 
-interface FinalizeUploadInput {
-  uploadId: string;
-  ownerId: string;
-  purpose: MediaPurpose;
-}
-
 export async function finalizeUpload(
   caller: CallerService,
   input: FinalizeUploadInput,
@@ -203,13 +170,14 @@ async function finalizeUploadInternal(
     throw new Error("Upload not found");
   }
 
-  const uploadId = upload.id;
   const temporaryKey = upload.temporaryKey;
-  // A repeated request receives the original successful result.
+
+  // Return the original result when finalization already succeeded.
   if (upload.status === "READY") {
     if (upload.finalCleanupPending) {
-        throw new Error("Media is pending deletion");
+      throw new Error("Media is pending deletion");
     }
+
     if (
       !upload.finalKey ||
       !upload.finalContentType ||
@@ -243,7 +211,7 @@ async function finalizeUploadInternal(
     throw new Error("Upload state changed; retry the request");
   }
 
-  // Every state update must belong to this processing attempt.
+  // Only this processing attempt may update the claimed upload.
   const processingWhere = {
     id: upload.id,
     status: "PROCESSING" as const,
@@ -269,14 +237,17 @@ async function finalizeUploadInternal(
 
   const maxBytes = getMaxUploadBytes(upload.purpose);
 
-  const object = await getObjectInfo(upload.temporaryKey);
+  const object = await getObjectInfo(temporaryKey);
 
-  if (object.sizeBytes !== undefined && object.sizeBytes > maxBytes) {
+  if (
+    object.sizeBytes !== undefined &&
+    object.sizeBytes > maxBytes
+  ) {
     await rejectUpload("IMAGE_TOO_LARGE");
     throw new Error("Image exceeds the upload size limit");
   }
 
-  const source = await downloadObject(upload.temporaryKey, maxBytes);
+  const source = await downloadObject(temporaryKey, maxBytes);
 
   let processed: Awaited<ReturnType<typeof processImage>>;
 
@@ -284,7 +255,7 @@ async function finalizeUploadInternal(
     processed = await processImage(source, upload.purpose);
   } catch (error) {
     if (error instanceof ImageProcessorBusyError) {
-      // No final object has been written; allow another attempt.
+      // No final object has been written, so another attempt is safe.
       await prisma.mediaUpload.updateMany({
         where: processingWhere,
         data: {
@@ -300,16 +271,25 @@ async function finalizeUploadInternal(
     throw error;
   }
 
-  // Reuse the upload ID. Do not generate a new UUID here.
-  const finalKey =
-    upload.purpose === "AVATAR"
-      ? `identity/users/${upload.ownerId}/avatars/${upload.id}.webp`
-      : `chat/attachments/${upload.id}.webp`;
+  // Must match the candidateKey recorded by claimUpload().
+  const finalKey = createCandidateKey(
+    upload.purpose,
+    upload.ownerId,
+    upload.id,
+    processingToken,
+  );
 
   await uploadWebp(finalKey, processed.buffer);
 
   const saved = await prisma.mediaUpload.updateMany({
-    where: processingWhere,
+    where: {
+      ...processingWhere,
+
+      // An expired attempt must not publish its result.
+      processingStartedAt: {
+        gt: new Date(Date.now() - PROCESSING_LEASE_MS),
+      },
+    },
     data: {
       status: "READY",
       finalKey,
@@ -326,10 +306,11 @@ async function finalizeUploadInternal(
   });
 
   if (saved.count !== 1) {
+    // Recovery tracks candidateKey and can remove the orphan.
     throw new Error("Upload processing ownership was lost");
   }
 
-  await cleanupTemporaryObject(upload.temporaryKey);
+  await cleanupTemporaryObject(temporaryKey);
 
   return {
     mediaId: upload.id,
@@ -341,6 +322,95 @@ async function finalizeUploadInternal(
   };
 }
 
+export async function deleteMedia(
+  caller: CallerService,
+  input: DeleteMediaInput,
+) {
+  const access = {
+    uploadId: input.mediaId,
+    ownerId: input.ownerId,
+    purpose: input.purpose,
+    caller,
+  };
+
+  const upload = await findUpload(access);
+
+  if (!upload) {
+    throw new Error("Media not found");
+  }
+
+  if (upload.status === "DELETED") {
+    return {
+      mediaId: upload.id,
+      status: "DELETED" as const,
+    };
+  }
+
+  if (upload.status !== "READY" || !upload.finalKey) {
+    throw new Error("Only ready media can be deleted");
+  }
+
+  const finalKey = upload.finalKey;
+
+  // Persist deletion intent before contacting R2.
+  const marked = await prisma.mediaUpload.updateMany({
+    where: {
+      id: upload.id,
+      ownerId: input.ownerId,
+      callerService: caller,
+      purpose: input.purpose,
+      status: "READY",
+      finalKey,
+    },
+    data: {
+      finalCleanupPending: true,
+    },
+  });
+
+  if (marked.count !== 1) {
+    const current = await findUpload(access);
+
+    if (current?.status === "DELETED") {
+      return {
+        mediaId: upload.id,
+        status: "DELETED" as const,
+      };
+    }
+
+    throw new Error("Media state changed; retry deletion");
+  }
+
+  // On failure, the persisted cleanup flag allows retries.
+  await deleteObject(finalKey);
+
+  const deleted = await prisma.mediaUpload.updateMany({
+    where: {
+      id: upload.id,
+      status: "READY",
+      finalKey,
+      finalCleanupPending: true,
+    },
+    data: {
+      status: "DELETED",
+      deletedAt: new Date(),
+      finalCleanupPending: false,
+    },
+  });
+
+  if (deleted.count !== 1) {
+    const current = await findUpload(access);
+
+    if (current?.status !== "DELETED") {
+      throw new Error("Could not confirm deletion; retry");
+    }
+  }
+
+  return {
+    mediaId: upload.id,
+    status: "DELETED" as const,
+  };
+}
+
 async function cleanupTemporaryObject(
   temporaryKey: string,
 ): Promise<void> {
@@ -349,5 +419,7 @@ async function cleanupTemporaryObject(
   } catch {
     console.error("Media cleanup: immediate source deletion failed");
   }
-}
 
+  // Keep tempCleanupPending true. The worker deletes again after
+  // URL expiry because the presigned PUT can recreate the source.
+}

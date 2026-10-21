@@ -91,6 +91,13 @@ interface MediaResponse {
   status: string;
 }
 
+interface DownloadResponse {
+  mediaId: string;
+  downloadUrl: string;
+  contentType: string;
+  expiresIn: number;
+}
+
 interface StatusResponse {
   uploadId: string;
   status: string;
@@ -233,6 +240,71 @@ try {
   assert.deepEqual(repeated, media);
   console.log("PASS: finalization succeeds and is repeatable");
 
+
+  stage = "downloading finalized image";
+
+  const downloadInput = {
+    mediaId: media.mediaId,
+    ownerId,
+    purpose: "AVATAR",
+  };
+
+  await assert.rejects(
+    rpc("GetDownloadUrl", downloadInput, chatToken),
+    { code: status.NOT_FOUND },
+  );
+
+  await assert.rejects(
+    rpc(
+      "GetDownloadUrl",
+      {
+        ...downloadInput,
+        ownerId: `other-${randomUUID()}`,
+      },
+      identityToken,
+    ),
+    { code: status.NOT_FOUND },
+  );
+
+  console.log("PASS: unauthorized download URL requests rejected");
+
+  const download = await rpc<DownloadResponse>(
+    "GetDownloadUrl",
+    downloadInput,
+    identityToken,
+  );
+
+  assert.equal(download.mediaId, media.mediaId);
+  assert.equal(download.contentType, "image/webp");
+  assert.ok(download.expiresIn > 0);
+
+  const imageResponse = await fetch(download.downloadUrl, {
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  const downloadedBytes = Buffer.from(
+    await imageResponse.arrayBuffer(),
+  );
+
+  assert.equal(
+    imageResponse.ok,
+    true,
+    `R2 GET HTTP ${imageResponse.status}`,
+  );
+
+  assert.equal(
+    imageResponse.headers.get("content-type"),
+    "image/webp",
+  );
+
+  const imageMetadata = await sharp(downloadedBytes).metadata();
+
+  assert.equal(imageMetadata.format, "webp");
+  assert.equal(imageMetadata.width, 512);
+  assert.equal(imageMetadata.height, 512);
+
+  console.log("PASS: signed URL downloads the actual WebP image");
+
   stage = "deleting through gRPC";
 
   const deleteInput = {
@@ -261,6 +333,13 @@ try {
   deleted = true;
 
   console.log("PASS: deletion is repeatable and status is DELETED");
+
+  await assert.rejects(
+    rpc("GetDownloadUrl", downloadInput, identityToken),
+    { code: status.FAILED_PRECONDITION },
+  );
+
+  console.log("PASS: deleted media cannot receive a download URL");
 } catch (error) {
   console.error(`FAIL during: ${stage}`);
 

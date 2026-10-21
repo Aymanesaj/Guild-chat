@@ -31,6 +31,24 @@ const r2 = new S3Client({
 
 export const UPLOAD_URL_TTL_SECONDS = 300;
 
+export const DOWNLOAD_URL_TTL_SECONDS = 300;
+
+export async function createPresignedDownloadUrl(
+  finalKey: string,
+): Promise<string> {
+  const command = new GetObjectCommand({
+    Bucket: bucket,
+    Key: finalKey,
+    ResponseContentType: "image/webp",
+    ResponseContentDisposition: "inline",
+    ResponseCacheControl: "private, no-store",
+  });
+
+  return getSignedUrl(r2, command, {
+    expiresIn: DOWNLOAD_URL_TTL_SECONDS,
+  });
+}
+
 export async function createPresignedUploadUrl(
   temporaryKey: string,
   contentType: ImageContentType,

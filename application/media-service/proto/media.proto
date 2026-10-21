@@ -7,7 +7,9 @@ service MediaService {
   rpc FinalizeUpload(UploadRequest) returns (FinalizeUploadResponse);
   rpc DeleteMedia(MediaRequest) returns (DeleteMediaResponse);
   rpc GetMediaStatus(UploadRequest) returns (GetMediaStatusResponse);
+  rpc GetDownloadUrl(MediaRequest) returns (GetDownloadUrlResponse);
 }
+
 
 enum MediaPurpose {
   MEDIA_PURPOSE_UNSPECIFIED = 0;
@@ -23,6 +25,13 @@ enum UploadStatus {
   FAILED = 4;
   EXPIRED = 5;
   DELETED = 6;
+}
+
+message GetDownloadUrlResponse {
+  string media_id = 1;
+  string download_url = 2;
+  string content_type = 3;
+  uint32 expires_in = 4;
 }
 
 message CreateUploadRequest {

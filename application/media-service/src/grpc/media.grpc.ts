@@ -12,17 +12,20 @@ import type {
 import { loadSync } from "@grpc/proto-loader";
 import { z } from "zod";
 
-import {
-  createUpload,
-  finalizeUpload,
-  deleteMedia,
-} from "../media/media.service.js";
 import { findUpload } from "../repositories/upload.repository.js";
 import type { CallerService } from "../media/media-policy.js";
 import {
   createServiceAuthenticator,
   ServiceAuthenticationError,
 } from "./service-auth.js";
+
+import {
+  createUpload,
+  finalizeUpload,
+  deleteMedia,
+  getDownloadUrl,
+} from "../media/media.service.js";
+
 
 const purposeSchema = z.enum(["AVATAR", "CHAT_IMAGE"]);
 const ownerSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/);
@@ -70,6 +73,7 @@ const knownErrors = new Map<string, status>([
   ["Image dimensions exceed the allowed limits", status.INVALID_ARGUMENT],
   ["Image processor is busy; retry later", status.RESOURCE_EXHAUSTED],
   ["Media finalization capacity reached; retry later", status.RESOURCE_EXHAUSTED],
+  ["Media is not available for download", status.FAILED_PRECONDITION],
 ]);
 
 function toRpcError(error: unknown) {
@@ -178,6 +182,7 @@ export async function startMediaGrpcServer() {
     CreateUpload: handler(createSchema, createUpload),
     FinalizeUpload: handler(uploadSchema, finalizeUpload),
     DeleteMedia: handler(mediaSchema, deleteMedia),
+    GetDownloadUrl: handler(mediaSchema, getDownloadUrl),
 
     GetMediaStatus: handler(uploadSchema, async (caller, input) => {
       const upload = await findUpload({ ...input, caller });
