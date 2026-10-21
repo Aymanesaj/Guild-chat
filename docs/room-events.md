@@ -1,5 +1,9 @@
 # Org → Chat room events
 
+> These events refresh users' room lists. What happened *inside* a room (joins,
+> kicks, role changes, renames) for the message history is a separate event, see
+> [room-timeline-events.md](room-timeline-events.md).
+
 Org records an internal `RoomChangedEvent` inside the room mutation transaction.
 `RoomEventPublisher` runs only AFTER_COMMIT (no nontransactional fallback), declares
 the durable topology, sends persistent JSON with mandatory routing, and waits up to
