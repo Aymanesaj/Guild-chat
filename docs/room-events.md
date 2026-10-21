@@ -47,10 +47,20 @@ no remaining recipients. `ROOM_REMOVED` alone never authorizes history deletion.
 Org uses Boot 4.1 / Jackson 3's `JacksonJsonMessageConverter`; Chat uses Boot 3.5 /
 Jackson 2's `Jackson2JsonMessageConverter`. Each has a dedicated AMQP mapper and
 explicit `@JsonProperty` names, independent of HTTP SNAKE_CASE. Org removes the
-Java type header; Chat infers its local concrete listener record. No shared Java
+Java type header; Chat infers its local concrete listener record. Unknown `change`
+strings, blank strings, and numeric ordinals fail JSON conversion. Missing or null `change` values are rejected by the
+consumer before cache, history, subscription, or socket effects; these failures
+follow the existing bounded retry and confirmed DLQ recovery policy. No shared Java
 package or Java-native serialization is required. The old notification gRPC client,
 handler and Chat server are removed; synchronous identity and Org room/membership
-RPCs remain. Proto definitions are retained to avoid unrelated cleanup.
+RPCs remain. Org and Chat each define their own ordinary Java `messaging.RoomChange`
+enum and use it in `RoomChangedMessage`. Org also uses its enum in internal events
+and room services. The uppercase JSON enum values are unchanged; neither service
+imports the other's Java types. Both obsolete `src/main/proto/chat.proto` files
+contained only the retired generated enum and have been removed. The notification
+service/request/response definitions had already been removed. The active
+`identity.proto` and `org.proto` contracts, gRPC dependencies, and protobuf Maven
+generation remain in both services.
 
 ## Topology and failure handling
 
@@ -138,10 +148,11 @@ docker stop guildchat-room-events-test
 ```
 
 Org's test declares the topology without Chat, checks persistent JSON and real
-mandatory returns, then leaves a Jackson 3 publication for Chat. Chat consumes that
-publication with Jackson 2 and checks another synthetic update, malformed JSON,
-invalid recipients, and exactly three attempts for a failing deletion before DLQ
-recovery. Sockets/cache/repository are mocked in these broker tests; actual room
+mandatory returns, then leaves all three Jackson 3 enum publications for Chat.
+Chat consumes them into its own Jackson 2/local-enum contract without type headers, verifies the
+existing WebSocket event names, and checks another synthetic update, malformed
+JSON, unknown/missing/null changes, invalid recipients, and exactly three attempts
+for a failing deletion before DLQ recovery. Sockets/cache/repository are mocked in these broker tests; actual room
 history scoping is verified separately against disposable MongoDB.
 
 ### Results (2026-10-20)
@@ -155,6 +166,37 @@ history scoping is verified separately against disposable MongoDB.
   listening only on a random loopback port. Testcontainers used disposable MongoDB.
 - `docker compose config --quiet` and `git diff --check` passed.
 - No production queue/data was used. No commit, push, deployment or owner message.
+
+### Enum cleanup verification (2026-10-21)
+
+The cleanup adds a local `messaging/RoomChange.java` enum in each service and
+removes both `src/main/proto/chat.proto` files, which contained only the obsolete
+protobuf enum. Org's `RoomChangedEvent`, `RoomService`,
+`DirectMessageCreationService`, `RoomChangedMessage`, and `RoomEventPublisher` now
+use Org's enum. Chat's `RoomChangedMessage` and `RoomChangedConsumer` use Chat's
+enum; its `RabbitMQConfig` rejects ordinal and blank enum coercion. Related event,
+consumer, publisher, broker, ownership, and WebSocket tests use the local types.
+No notification-specific Maven configuration remained to remove: both POMs retain
+protobuf generation and gRPC dependencies for the active identity and Org RPCs.
+
+- Both services passed `mvn clean verify`, regenerating required protobuf sources
+  and producing executable JARs. Neither generated sources nor packaged classes
+  contain `com.fttranscendence.chat.grpc`; both retain identity and Org RPC classes.
+- Org: 43 tests passed, including the existing ownership/transaction suite and
+  the actual broker publisher test. Chat: 261 tests passed after the full suite
+  and opt-in broker test, including real MongoDB and WebSocket checks.
+- The isolated broker checks verified all three actual Org/Jackson 3 enum JSON
+  publications deserialize into Chat/Jackson 2 local enums without type headers,
+  preserve WebSocket names, and leave history untouched for ordinary removal.
+  Unknown, missing, and null changes reached the durable DLQ without side effects;
+  a failing handler still made exactly three attempts. Broker-test socket, cache,
+  and repository collaborators are mocks; production data was not used.
+- Converter tests additionally verify exact uppercase values, camelCase fields,
+  HTTP naming independence, rejection of ordinal/blank changes, and rejection of
+  deletion flags on ADDED/UPDATED. `git diff --check` passed.
+- The JSON wire format, topology, recipients, transaction timing, numeric room IDs,
+  history/subscription rules, acknowledgements, and retry/recovery policy did not
+  change. No shared Java library was introduced. No commit, push or deployment.
 
 ## Chat owner handoff (ready to send)
 

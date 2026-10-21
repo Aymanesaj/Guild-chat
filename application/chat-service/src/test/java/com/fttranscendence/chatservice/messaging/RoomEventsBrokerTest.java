@@ -54,9 +54,15 @@ class RoomEventsBrokerTest {
     @Test
     void actualJsonDeliveryAndBoundedRecoveryIncludeMalformedJsonAndListenerFailures() throws Exception {
         admin.initialize();
-        // A producer-generated Jackson 3 message is left in this isolated queue by Org's test.
-        verify(sockets, timeout(10000)).sendToUser(RoomChangedConsumerTest.ALICE, "room.updated", Map.of("room_id", 4242L));
-        verify(cache, timeout(10000)).invalidate(4242L);
+        // Producer-generated Jackson 3 messages are left by Org's test, without type headers.
+        // Deserialize into Chat's own enum and preserve every frontend event name.
+        var expected = Map.of(4242L, "room.added", 4243L, "room.updated", 4244L, "room.removed");
+        expected.forEach((roomId, event) -> {
+            verify(sockets, timeout(10000)).sendToUser(RoomChangedConsumerTest.ALICE, event, Map.of("room_id", roomId));
+            verify(cache, timeout(10000)).invalidate(roomId);
+        });
+        verify(sockets).revokeRoom(RoomChangedConsumerTest.ALICE, 4244L);
+        verifyNoInteractions(messages);
         clearInvocations(sockets, cache);
         send("""
                 {"roomId":"42","change":"ROOM_UPDATED","userIds":["%s"],"roomDeleted":false}
@@ -65,7 +71,11 @@ class RoomEventsBrokerTest {
         verify(cache, timeout(10000)).invalidate(42L);
         clearInvocations(sockets, cache);
 
-        for (String invalid : List.of("{broken", """
+        for (String invalid : List.of(
+                "{\"roomId\":\"42\",\"change\":\"ROOM_CREATED\",\"userIds\":[],\"roomDeleted\":true}",
+                "{\"roomId\":\"42\",\"userIds\":[],\"roomDeleted\":true}",
+                "{\"roomId\":\"42\",\"change\":null,\"userIds\":[],\"roomDeleted\":true}",
+                "{broken", """
                 {"roomId":"42","change":"ROOM_REMOVED","userIds":["bad"],"roomDeleted":true}
                 """)) {
             send(invalid);
