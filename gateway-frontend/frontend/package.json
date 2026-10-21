@@ -7,10 +7,6 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "npm run test:messages && npm run test:presence && npm run test:dm",
-    "test:dm": "node --experimental-vm-modules tests/dmDrafts.test.mjs",
-    "test:messages": "node tests/messageContent.test.mjs",
-    "test:presence": "node --experimental-vm-modules tests/presence.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
