@@ -292,6 +292,63 @@ describe(
     );
 
 
+
+    it("concurrent refresh requests create only one replacement", async () => {
+      // Create a fresh refresh token.
+      const loginBody = await login();
+      const originalToken = loginBody.refreshToken;
+
+      // Send two refresh requests simultaneously.
+      const [responseA, responseB] = await Promise.all([
+        app.inject({
+          method: "POST",
+          url: "/auth/refresh",
+          payload: { refreshToken: originalToken },
+        }),
+        app.inject({
+          method: "POST",
+          url: "/auth/refresh",
+          payload: { refreshToken: originalToken },
+        }),
+      ]);
+
+      // Exactly one request should succeed.
+      const statuses = [
+        responseA.statusCode,
+        responseB.statusCode,
+      ].sort();
+
+      expect(statuses).toEqual([200, 401]);
+
+      // The old token should be revoked.
+      const originalHash = hashRefreshToken(originalToken);
+
+      const original = await prisma.refreshToken.findUnique({
+        where: { tokenHash: originalHash },
+      });
+
+      expect(original?.revoked).toBe(true);
+      expect(original?.replacedBy).toBeTruthy();
+
+      // There must be exactly one replacement linked
+      // to the original token.
+      const replacements = await prisma.refreshToken.findMany({
+        where: {
+          userId,
+          replaces: {
+            is: {
+              id: original!.id,
+            },
+          },
+        },
+      });
+
+      expect(replacements).toHaveLength(1);
+      expect(replacements[0].id).toBe(original?.replacedBy);
+    });
+
+
+
     /* -----------------------------------------------------
        OLD TOKEN BECOMES REVOKED
        ----------------------------------------------------- */
