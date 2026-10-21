@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
     "test": "vitest run",
-    "test:media": "tsx scripts/test-media.ts"
+    "test:media": "tsx scripts/test-media.ts",
+    "test:grpc": "tsx scripts/test-media-grpc.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1154.0",
