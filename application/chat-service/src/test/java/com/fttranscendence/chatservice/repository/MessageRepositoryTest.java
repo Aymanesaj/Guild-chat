@@ -141,6 +141,16 @@ class MessageRepositoryTest extends MongoTestSupport {
         assertThat(reloaded.getCreatedAt()).isEqualTo(createdAt);
     }
 
+    @Test
+    void permanentDeletionTargetsOnlyTheNumericRoomId() {
+        send(ROOM, "one");
+        send(ROOM, "two");
+        Message other = send(OTHER_ROOM, "keep");
+        assertThat(repository.deleteByRoomId(ROOM)).isEqualTo(2);
+        assertThat(repository.deleteByRoomId(ROOM)).isZero();
+        assertThat(repository.findAll()).extracting(Message::getId).containsExactly(other.getId());
+    }
+
     // ------------------------------------------ conditional (atomic) writes
 
     @Test

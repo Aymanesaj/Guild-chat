@@ -34,20 +34,17 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fttranscendence.chat.grpc.ChatNotifyServiceGrpc;
-import com.fttranscendence.chat.grpc.RoomChange;
-import com.fttranscendence.chat.grpc.RoomChangedRequest;
-import com.fttranscendence.chatservice.grpc.ChatGrpcServer;
+import com.fttranscendence.chatservice.messaging.RoomChangedConsumer;
+import com.fttranscendence.chatservice.messaging.RoomChangedMessage;
+import com.fttranscendence.chatservice.messaging.RoomChange;
 import com.fttranscendence.chatservice.grpc.IdentityClient;
 import com.fttranscendence.chatservice.grpc.OrgClient;
 import com.fttranscendence.chatservice.support.MongoTestSupport;
 
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 
 /**
  * The whole path for user-level events, with no room subscription anywhere:
- *   - org's RoomChanged gRPC call (over real TCP) → room.added on every tab
+ *   - converted AMQP event (consumer invoked directly) → room.added on every tab
  *   - a REST POST → room.activity on a member who has no room open
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -58,6 +55,7 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
     /** Rooms no other test class uses: cached contexts share RoomMembersCache. */
     private static final long ROOM = 720L;
     private static final long ACTIVITY_ROOM = 721L;
+    private static final long KICK_ROOM = 722L;
 
     @LocalServerPort
     private int port;
@@ -66,10 +64,16 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
     private TestRestTemplate rest;
 
     @Autowired
-    private ChatGrpcServer grpcServer;
+    private RoomChangedConsumer consumer;
+
+    @Autowired
+    private org.springframework.amqp.support.converter.Jackson2JsonMessageConverter converter;
 
     @Autowired
     private ChatWebSocketHandler handler;
+
+    @Autowired
+    private SubscriptionRegistry subscriptions;
 
     @MockBean
     private IdentityClient identityClient;
@@ -80,7 +84,6 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final StandardWebSocketClient client = new StandardWebSocketClient();
     private final List<WebSocketSession> opened = new ArrayList<>();
-    private ManagedChannel channel;
 
     private static final class RecordingClient extends TextWebSocketHandler {
         final BlockingQueue<String> frames = new LinkedBlockingQueue<>();
@@ -98,7 +101,6 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
         when(identityClient.validateToken(BOB + ".token")).thenReturn(Optional.of(BOB));
         when(orgClient.isMember(anyString(), anyLong())).thenReturn(true);
 
-        channel = ManagedChannelBuilder.forAddress("localhost", grpcServer.port()).usePlaintext().build();
     }
 
     @AfterEach
@@ -108,7 +110,6 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
                 session.close();
             }
         }
-        channel.shutdownNow();
         awaitConnections(ALICE, 0);
         awaitConnections(BOB, 0);
     }
@@ -148,11 +149,14 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
         awaitConnections(BOB, 2);
         awaitConnections(ALICE, 1);
 
-        ChatNotifyServiceGrpc.newBlockingStub(channel).roomChanged(RoomChangedRequest.newBuilder()
-                .setRoomId(String.valueOf(ROOM))
-                .setChange(RoomChange.ROOM_ADDED)
-                .addUserIds(BOB)
-                .build());
+        var properties = new org.springframework.amqp.core.MessageProperties();
+        properties.setInferredArgumentType(RoomChangedMessage.class);
+        properties.setContentType("application/json");
+        byte[] json = ("{\"roomId\":\"" + ROOM + "\",\"change\":\"ROOM_ADDED\","
+                + "\"userIds\":[\"" + BOB + "\"],\"roomDeleted\":false}")
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        consumer.consume((RoomChangedMessage) converter.fromMessage(
+                new org.springframework.amqp.core.Message(json, properties)));
 
         for (RecordingClient tab : List.of(bobTab1, bobTab2)) {
             JsonNode frame = nextFrame(tab);
@@ -160,6 +164,38 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
             assertThat(frame.path("data").path("room_id").asLong()).isEqualTo(ROOM);
         }
         assertThat(receivesNothing(alice)).isTrue();
+    }
+
+    @Test
+    @DisplayName("a removed user's open socket stops receiving the room's messages")
+    void removalEndsTheLiveFeed() throws Exception {
+        RecordingClient bob = connect(BOB);
+        awaitConnections(BOB, 1);
+        opened.get(opened.size() - 1).sendMessage(new TextMessage(
+                "{\"event\":\"subscribe\",\"data\":{\"room_id\":" + KICK_ROOM + "}}"));
+        awaitSubscribers(KICK_ROOM, 1);
+
+        consumer.consume(new RoomChangedMessage(String.valueOf(KICK_ROOM), RoomChange.ROOM_REMOVED, List.of(BOB), false));
+
+        JsonNode removed = nextFrame(bob);
+        assertThat(removed.path("event").asText()).isEqualTo("room.removed");
+        assertThat(subscriptions.sessionsIn(KICK_ROOM)).as("subscription revoked").isEmpty();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(ALICE + ".token");
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        ResponseEntity<String> response = rest.postForEntity("/rooms/" + KICK_ROOM + "/messages",
+                new HttpEntity<>("{\"content\":\"after the kick\"}", headers), String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        assertThat(receivesNothing(bob)).as("no message.new after removal").isTrue();
+    }
+
+    private void awaitSubscribers(long roomId, int expected) throws Exception {
+        for (int attempt = 0; attempt < 50 && subscriptions.subscriberCount(roomId) != expected; attempt++) {
+            Thread.sleep(100);
+        }
+        assertThat(subscriptions.subscriberCount(roomId)).as("subscribers of %s", roomId).isEqualTo(expected);
     }
 
     @Test

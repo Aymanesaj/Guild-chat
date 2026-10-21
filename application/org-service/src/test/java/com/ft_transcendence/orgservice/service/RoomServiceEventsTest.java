@@ -35,11 +35,11 @@ import com.ft_transcendence.orgservice.repository.MemberRoleRepository;
 import com.ft_transcendence.orgservice.repository.RoleRepository;
 import com.ft_transcendence.orgservice.repository.RoomMemberRepository;
 import com.ft_transcendence.orgservice.repository.RoomRepository;
-import com.fttranscendence.chat.grpc.RoomChange;
+import com.ft_transcendence.orgservice.messaging.RoomChange;
 
 /**
  * Which RoomChangedEvents RoomService publishes, and to whom. Mocked
- * repositories, no database: the after-commit delivery is ChatNotifyClient's
+ * repositories, no database: the after-commit delivery is RoomEventPublisher's
  * job and Spring's, not tested here.
  */
 class RoomServiceEventsTest {
@@ -123,7 +123,7 @@ class RoomServiceEventsTest {
     }
 
     @Test
-    @DisplayName("new DM: ROOM_ADDED to both people, so it shows up before the first message")
+    @DisplayName("new DM: delegate to the transaction-owning creation service")
     void newDirectMessage() {
         when(roomRepository.findByTypeAndDmUser1AndDmUser2(any(), any(), any())).thenReturn(Optional.empty());
         when(identity.userExists(BOB)).thenReturn(true);
@@ -132,8 +132,9 @@ class RoomServiceEventsTest {
 
         roomService.createDirectMessageRoom(OWNER, BOB);
 
-        assertThat(published()).containsExactly(
-                new RoomChangedEvent(ROOM, RoomChange.ROOM_ADDED, Set.of(OWNER, BOB)));
+        // DM creation registers its own event inside DirectMessageCreationService's transaction.
+        assertThat(published()).isEmpty();
+        verify(dmCreation).createDirectMessageRoom(any(), any(), eq(OWNER), eq(BOB));
     }
 
     @Test
@@ -195,7 +196,7 @@ class RoomServiceEventsTest {
     }
 
     @Test
-    @DisplayName("last member (the owner) leaves: ROOM_REMOVED to them, nothing for an empty room")
+    @DisplayName("last owner leaves: departure plus explicit deletion even with no remaining recipients")
     void lastOwnerLeaves() {
         groupRoom();
         when(roomMemberRepository.findByRoomIdAndUserId(ROOM, OWNER)).thenReturn(Optional.of(member(OWNER)));
@@ -207,7 +208,8 @@ class RoomServiceEventsTest {
         roomService.leaveRoom(ROOM, OWNER);
 
         assertThat(published()).containsExactly(
-                new RoomChangedEvent(ROOM, RoomChange.ROOM_REMOVED, Set.of(OWNER)));
+                new RoomChangedEvent(ROOM, RoomChange.ROOM_REMOVED, Set.of(OWNER)),
+                new RoomChangedEvent(ROOM, RoomChange.ROOM_REMOVED, Set.of(), true));
     }
 
     @Test
@@ -219,7 +221,7 @@ class RoomServiceEventsTest {
         roomService.deleteRoom(ROOM);
 
         assertThat(published()).containsExactly(
-                new RoomChangedEvent(ROOM, RoomChange.ROOM_REMOVED, Set.of(OWNER, BOB)));
+                new RoomChangedEvent(ROOM, RoomChange.ROOM_REMOVED, Set.of(OWNER, BOB), true));
     }
 
     @Test

@@ -136,6 +136,32 @@ class SubscriptionRegistryTest {
     }
 
     @Test
+    @DisplayName("removeRoom drops every subscriber of that room and keeps their other rooms")
+    void removeRoomCleansBothMaps() {
+        registry.subscribe(ROOM, tab1);
+        registry.subscribe(ROOM, tab2);
+        registry.subscribe(OTHER_ROOM, tab1);
+
+        registry.removeRoom(ROOM);
+
+        assertThat(registry.sessionsIn(ROOM)).isEmpty();
+        assertThat(registry.sessionsIn(OTHER_ROOM)).containsExactly(tab1);
+        assertThat(registry.roomCount()).isEqualTo(1);
+        assertThat(registry.trackedSessionCount()).as("tab2 had only ROOM, so it is gone").isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("removeRoom on a room nobody joined changes nothing")
+    void removeRoomUnknownIsHarmless() {
+        registry.subscribe(ROOM, tab1);
+
+        registry.removeRoom(OTHER_ROOM);
+
+        assertThat(registry.sessionsIn(ROOM)).containsExactly(tab1);
+        assertThat(registry.trackedSessionCount()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("removal matches by session id, so the raw session cleans up its decorator")
     void removalMatchesById() {
         // The handler registers the ConcurrentWebSocketSessionDecorator but

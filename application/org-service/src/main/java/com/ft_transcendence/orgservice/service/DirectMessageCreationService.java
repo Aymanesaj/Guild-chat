@@ -13,18 +13,24 @@ import com.ft_transcendence.orgservice.repository.RoomMemberRepository;
 import com.ft_transcendence.orgservice.repository.RoomRepository;
 import jakarta.transaction.Transactional;
 import java.util.UUID;
+import java.util.Set;
+import org.springframework.context.ApplicationEventPublisher;
+import com.ft_transcendence.orgservice.messaging.RoomChange;
 import org.springframework.stereotype.Service;
 
 @Service
 public class DirectMessageCreationService {
 
+    private final ApplicationEventPublisher events;
     RoleRepository roleRepository;
     RoomRepository roomRepository;
     RoomMemberRepository roomMemberRepository;
     MemberRoleRepository memberRoleRepository;
 
     public DirectMessageCreationService(RoleRepository roleRepository, RoomRepository roomRepository,
-                                        RoomMemberRepository roomMemberRepository, MemberRoleRepository memberRoleRepository) {
+                                        RoomMemberRepository roomMemberRepository, MemberRoleRepository memberRoleRepository,
+                                        ApplicationEventPublisher events) {
+        this.events = events;
         this.roleRepository = roleRepository;
         this.roomRepository = roomRepository;
         this.roomMemberRepository = roomMemberRepository;
@@ -66,6 +72,10 @@ public class DirectMessageCreationService {
             targetRoleAssignment.setRoomMember(savedTargetRoomMember);
             targetRoleAssignment.setRole(memberRole);
             memberRoleRepository.save(targetRoleAssignment);
+            // Register while the actual creation transaction is active; rollback drops it.
+            events.publishEvent(new RoomChangedEvent(savedRoom.getId(),
+                    RoomChange.ROOM_ADDED,
+                    Set.of(creatorId, targetUserId)));
             return new RoomResponse(savedRoom.getId(), savedRoom.getName(), 
             savedRoom.getCreatedAt(), savedRoom.getType(), savedRoom.getUpdatedAt(), 
             savedRoom.getDmUser1().equals(creatorId) ? savedRoom.getDmUser2() : savedRoom.getDmUser1());

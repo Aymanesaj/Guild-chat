@@ -47,7 +47,7 @@ beforeAll(async () => {
           `caller_${suffix}@example.com`,
 
         password:
-          "strongpassword123",
+          "Strongpassword123",
 
         displayName:
           "Caller",
@@ -85,7 +85,7 @@ beforeAll(async () => {
           `target_${suffix}@example.com`,
 
         password:
-          "strongpassword123",
+          "Strongpassword123",
 
         displayName:
           "Target User",

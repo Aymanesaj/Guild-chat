@@ -31,7 +31,7 @@ import com.ft_transcendence.orgservice.repository.MemberRoleRepository;
 import com.ft_transcendence.orgservice.repository.RoleRepository;
 import com.ft_transcendence.orgservice.repository.RoomMemberRepository;
 import com.ft_transcendence.orgservice.repository.RoomRepository;
-import com.fttranscendence.chat.grpc.RoomChange;
+import com.ft_transcendence.orgservice.messaging.RoomChange;
 
 @Service
 public class RoomService {
@@ -266,8 +266,8 @@ public class RoomService {
 
         List<RoomMember> roomMembers = roomMemberRepository.findByRoomId(roomId);
         // Collected before the rows go: afterwards nobody is left to tell.
-        publishRoomChange(roomId, RoomChange.ROOM_REMOVED,
-                roomMembers.stream().map(RoomMember::getUserId).toList());
+        events.publishEvent(new RoomChangedEvent(roomId, RoomChange.ROOM_REMOVED,
+                roomMembers.stream().map(RoomMember::getUserId).collect(Collectors.toSet()), true));
         for (RoomMember roomMember : roomMembers) {
             memberRoleRepository.deleteAllByRoomMember(roomMember);
         }
@@ -494,9 +494,6 @@ public class RoomService {
                     creatorId,
                     targetUserId
             );
-            // Only a DM that did not exist yet is news. Both sides: the
-            // target's DM list must show it before the first message arrives.
-            publishRoomChange(created.id(), RoomChange.ROOM_ADDED, List.of(creatorId, targetUserId));
             return created;
         }
         catch (DataIntegrityViolationException e)

@@ -259,8 +259,8 @@ none). They keep room lists and DM previews live without polling.
 
 The `room.added` / `room.removed` / `room.updated` frames carry only the id:
 refetch the list over REST (org-service), which applies its own permission
-rules. org-service sends them through chat's internal gRPC
-`ChatNotifyService.RoomChanged` after its transaction commits.
+rules. org-service publishes JSON through RabbitMQ after its transaction commits.
+See [the room-event contract and reliability limits](../../docs/room-events.md).
 
 `room.activity` is sent alongside `message.*`, not instead of it: a client with
 the room open and subscribed receives both. It can arrive slightly before or
@@ -296,7 +296,7 @@ All of these are best effort. Events sent while a socket is down are lost, so
 - Subscriptions and presence are in memory: one chat-service instance only.
 - `room.activity` uses a member list cached in memory per room. It is
   refreshed when org reports a change to that room. If that report is lost
-  (chat restarting at that moment), a removed member may keep receiving that
+  (for example, Org publication fails after commit), a removed member may keep receiving that
   room's previews until the room changes again or chat restarts.
 
 ## Internal
@@ -305,4 +305,4 @@ All of these are best effort. Events sent while a socket is down are lost, so
 |---|---|---|
 | GET | `/actuator/health` | Docker healthcheck. Not routed by the gateway. |
 | GET | `/actuator/prometheus` | Metrics scrape. Not routed by the gateway. |
-| gRPC | `:9090` `chat.ChatNotifyService/RoomChanged` | Called by org-service when a room changes. Not routed by the gateway, no auth (private network). See `src/main/proto/chat.proto`. |
+| AMQP | `guildchat.room-events` → `guildchat.chat-service.room-events` | Durable direct exchange/queue, routing key `room.changed`. JSON contract: [room events](../../docs/room-events.md). |

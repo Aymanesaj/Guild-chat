@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
  *
  * In memory only, never in the database: org stays the source of truth (see
  * OrgClient). An entry is dropped whenever org reports that the room changed
- * (ChatNotifyGrpcService), so the next message reloads it.
+ * (RoomChangedConsumer), so the next message reloads it.
  *
  * What staleness costs: if org's notification is lost (chat restarting, a
  * dropped call), a kicked user keeps receiving the room's previews until the

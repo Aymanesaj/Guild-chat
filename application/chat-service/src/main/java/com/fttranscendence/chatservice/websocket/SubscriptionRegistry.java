@@ -69,6 +69,18 @@ public class SubscriptionRegistry {
 
         rooms.forEach(roomId -> removeFromRoom(roomId , session.getId()));
     }
+
+
+    public void removeRoom(Long roomId) {
+        Set<WebSocketSession> sessions = sessionsByRoom.remove(roomId);
+        if(sessions == null) {
+            return ;
+        }
+        sessions.forEach(session -> roomsBySessionId.computeIfPresent(session.getId() , (id , rooms) -> {
+            rooms.remove(roomId);
+            return rooms.isEmpty() ? null : rooms;
+        }));
+    }
     /**  The fan-out  target list Empty never null */
     public Set<WebSocketSession> sessionsIn(Long roomId){
         return sessionsByRoom.getOrDefault(roomId, Set.of());

@@ -32,10 +32,11 @@ export function findFriendRequestById(id: string) {
   });
 }
 
-export function acceptFriendRequest(id: string) {
+export async function acceptFriendRequest(id: string) {
   return prisma.friendship.update({
     where: {
       id,
+      status: "PENDING",
     },
     data: {
       status: "ACCEPTED",
