@@ -40,6 +40,12 @@ public final class WsEvents {
      */
     public static final String ROOM_ACTIVITY = "room.activity";
 
+    /** Someone sent you a friend request. data: { friendship_id, user_id: requester } */
+    public static final String FRIEND_REQUEST_RECEIVED = "friend.request.received";
+    /** You sent a friend request (your other tabs). data: { friendship_id, user_id: addressee } */
+    public static final String FRIEND_REQUEST_SENT = "friend.request.sent";
+    /** A friend request involving you was accepted. data: { friendship_id, user_id: the other user } */
+    public static final String FRIEND_REQUEST_ADDED = "friend.added";
     /** Not in the spec: there is no status code after the upgrade, so errors are frames. */
     public static final String ERROR = "error";
 
