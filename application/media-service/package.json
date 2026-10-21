@@ -4,9 +4,32 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "test": "vitest run",
+    "test:media": "tsx scripts/test-media.ts"
   },
   "dependencies": {
-    "fastify": "^5.12.5"
+    "@aws-sdk/client-s3": "^3.1154.0",
+    "@aws-sdk/s3-request-presigner": "^3.1154.0",
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
+    "dotenv": "^18.0.8",
+    "fastify": "^5.12.5",
+    "file-type": "^22.2.0",
+    "pg": "^8.23.1",
+    "sharp": "^0.35.5",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/pg": "^8.23.1",
+    "prisma": "^7.10.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
   }
 }
