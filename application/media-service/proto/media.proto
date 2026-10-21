@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package guild.media.v1;
+
+service MediaService {
+  rpc CreateUpload(CreateUploadRequest) returns (CreateUploadResponse);
+  rpc FinalizeUpload(UploadRequest) returns (FinalizeUploadResponse);
+  rpc DeleteMedia(MediaRequest) returns (DeleteMediaResponse);
+  rpc GetMediaStatus(UploadRequest) returns (GetMediaStatusResponse);
+}
+
+enum MediaPurpose {
+  MEDIA_PURPOSE_UNSPECIFIED = 0;
+  AVATAR = 1;
+  CHAT_IMAGE = 2;
+}
+
+enum UploadStatus {
+  UPLOAD_STATUS_UNSPECIFIED = 0;
+  PENDING = 1;
+  PROCESSING = 2;
+  READY = 3;
+  FAILED = 4;
+  EXPIRED = 5;
+  DELETED = 6;
+}
+
+message CreateUploadRequest {
+  string owner_id = 1;
+  MediaPurpose purpose = 2;
+  string content_type = 3;
+}
+
+message CreateUploadResponse {
+  string upload_id = 1;
+  string upload_url = 2;
+  string required_content_type = 3;
+  uint32 expires_in = 4;
+}
+
+message UploadRequest {
+  string upload_id = 1;
+  string owner_id = 2;
+  MediaPurpose purpose = 3;
+}
+
+message FinalizeUploadResponse {
+  string media_id = 1;
+  string final_key = 2;
+  string content_type = 3;
+  uint32 width = 4;
+  uint32 height = 5;
+  UploadStatus status = 6;
+}
+
+message MediaRequest {
+  string media_id = 1;
+  string owner_id = 2;
+  MediaPurpose purpose = 3;
+}
+
+message DeleteMediaResponse {
+  string media_id = 1;
+  UploadStatus status = 2;
+}
+
+message GetMediaStatusResponse {
+  string upload_id = 1;
+  UploadStatus status = 2;
+  string error_code = 3;
+  bool deletion_pending = 4;
+}
