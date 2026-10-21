@@ -9,7 +9,7 @@ import type {
   CallerService,
   MediaPurpose,
 } from "./media-policy.js";
-
+import { withFinalizationSlot } from "./finalization-limit.js";
 import {
   deleteObject,
   downloadObject,
@@ -180,6 +180,15 @@ interface FinalizeUploadInput {
 }
 
 export async function finalizeUpload(
+  caller: CallerService,
+  input: FinalizeUploadInput,
+) {
+  return withFinalizationSlot(() =>
+    finalizeUploadInternal(caller, input),
+  );
+}
+
+async function finalizeUploadInternal(
   caller: CallerService,
   input: FinalizeUploadInput,
 ) {

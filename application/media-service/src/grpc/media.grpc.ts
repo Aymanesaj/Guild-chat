@@ -69,6 +69,7 @@ const knownErrors = new Map<string, status>([
   ["Animated images are not supported", status.INVALID_ARGUMENT],
   ["Image dimensions exceed the allowed limits", status.INVALID_ARGUMENT],
   ["Image processor is busy; retry later", status.RESOURCE_EXHAUSTED],
+  ["Media finalization capacity reached; retry later", status.RESOURCE_EXHAUSTED],
 ]);
 
 function toRpcError(error: unknown) {
