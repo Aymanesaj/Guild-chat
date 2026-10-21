@@ -92,7 +92,7 @@ public class RoomService {
                     UUID otherUserId = room.getDmUser1().equals(userId) ? room.getDmUser2() : room.getDmUser1();
                     return new RoomResponse(
                             room.getId(),
-                            room.getName(),
+                            room.getName(), room.getDescription(),
                             room.getCreatedAt(),
                             room.getType(),
                             room.getUpdatedAt(),
@@ -212,16 +212,21 @@ public class RoomService {
             throw new ForbiddenException("User does not have permission to update this room");
         }
 
-        if (room.getName() != null && room.getName().equals(request.name())) {
-            throw new BadRequestException("New room name is the same as the current name");
+        if (java.util.Objects.equals(room.getName(), request.name())
+                && (request.description() == null
+                    || java.util.Objects.equals(room.getDescription(), request.description()))) {
+            throw new BadRequestException("Room name and description are unchanged");
         }
 
         room.setName(request.name());
+        if (request.description() != null) {
+            room.setDescription(request.description());
+        }
         publishRoomChange(roomId, RoomChange.ROOM_UPDATED, memberIds(roomId));
 
         return new RoomResponse(
                 room.getId(),
-                room.getName(),
+                room.getName(), room.getDescription(),
                 room.getCreatedAt(),
                 room.getType(),
                 room.getUpdatedAt(),
@@ -415,7 +420,7 @@ public class RoomService {
         return roomMembers.stream()
                 .filter(roomMember -> roomMember.getRoom().getType() != RoomType.DM) // Exclude DM rooms
                 .map(roomMember -> new RoomResponse(roomMember.getRoom().getId(),
-                            roomMember.getRoom().getName(), roomMember.getRoom().getCreatedAt(),
+                            roomMember.getRoom().getName(), roomMember.getRoom().getDescription(), roomMember.getRoom().getCreatedAt(),
                             roomMember.getRoom().getType(), roomMember.getRoom().getUpdatedAt(),
                             null))
                 .toList();
@@ -442,7 +447,7 @@ public class RoomService {
         if (!isUserInRoom(roomId, userId)) {
             throw new ForbiddenException("User does not have permission to access this room");
         }
-        return new RoomResponse(room.getId(), room.getName(), room.getCreatedAt(), room.getType(), room.getUpdatedAt(),
+        return new RoomResponse(room.getId(), room.getName(), room.getDescription(), room.getCreatedAt(), room.getType(), room.getUpdatedAt(),
                 room.getType() == RoomType.DM ? room.getDmUser1().equals(userId) ? room.getDmUser2() : room.getDmUser1() : null);
     }
 
@@ -474,7 +479,7 @@ public class RoomService {
 
             return new RoomResponse(
                     room.getId(),
-                    room.getName(),
+                    room.getName(), room.getDescription(),
                     room.getCreatedAt(),
                     room.getType(),
                     room.getUpdatedAt(),
@@ -508,7 +513,7 @@ public class RoomService {
 
             return new RoomResponse(
                     existingRoom.getId(),
-                    existingRoom.getName(),
+                    existingRoom.getName(), existingRoom.getDescription(),
                     existingRoom.getCreatedAt(),
                     existingRoom.getType(),
                     existingRoom.getUpdatedAt(),
@@ -521,6 +526,7 @@ public class RoomService {
     public RoomResponse createRoom(CreateRoomRequest request, UUID creatorId) {
         Room room = new Room();
         room.setName(request.name());
+        room.setDescription(request.description());
         room.setType(RoomType.GROUP);
         Room savedRoom = roomRepository.save(room);
 
@@ -557,7 +563,7 @@ public class RoomService {
         // inserts the room locally.
         publishRoomChange(savedRoom.getId(), RoomChange.ROOM_ADDED, List.of(creatorId));
 
-        return new RoomResponse(savedRoom.getId(), savedRoom.getName(), savedRoom.getCreatedAt()
+        return new RoomResponse(savedRoom.getId(), savedRoom.getName(), savedRoom.getDescription(), savedRoom.getCreatedAt()
             , savedRoom.getType(), savedRoom.getUpdatedAt(), null);
     }
 }

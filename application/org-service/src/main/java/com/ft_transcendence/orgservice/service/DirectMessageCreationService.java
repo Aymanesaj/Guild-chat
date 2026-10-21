@@ -76,7 +76,7 @@ public class DirectMessageCreationService {
             events.publishEvent(new RoomChangedEvent(savedRoom.getId(),
                     RoomChange.ROOM_ADDED,
                     Set.of(creatorId, targetUserId)));
-            return new RoomResponse(savedRoom.getId(), savedRoom.getName(), 
+            return new RoomResponse(savedRoom.getId(), savedRoom.getName(), savedRoom.getDescription(),
             savedRoom.getCreatedAt(), savedRoom.getType(), savedRoom.getUpdatedAt(), 
             savedRoom.getDmUser1().equals(creatorId) ? savedRoom.getDmUser2() : savedRoom.getDmUser1());
     }
