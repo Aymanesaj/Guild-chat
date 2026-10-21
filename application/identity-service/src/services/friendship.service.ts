@@ -1,8 +1,11 @@
+
 import { BadRequestError } from "../errors/bad-request.error.js";
 import { NotFoundError } from "../errors/not-found.error.js";
 import { ConflictError } from "../errors/conflict.error.js";
 import { ForbiddenError } from "../errors/forbidden.error.js";
+
 import { findUserById } from "../repositories/user.repository.js";
+
 import {
   createFriendRequest,
   findFriendshipBetween,
@@ -12,13 +15,44 @@ import {
   findAcceptedFriendships,
   findPendingFriendRequests,
 } from "../repositories/friendship.repository.js";
+
 import { toFriendRequestResponse } from "../mappers/friendship.mapper.js";
+import { toPublicProfile } from "../mappers/user.mapper.js";
+
 import type {
   FriendRequestResponse,
   FriendRequestsResponse,
 } from "../types/friendship.types.js";
-import { toPublicProfile } from "../mappers/user.mapper.js";
-import { PublicProfile } from "../types/user.types.js";
+
+
+import type { PublicProfile } from "../types/user.types.js";
+
+import { publishFriendshipEvent } from "../messaging/friendship.publisher.js";
+import type { FriendshipEventType } from "../messaging/friendship.events.js";
+
+async function publishFriendshipEventSafely(
+  eventType: FriendshipEventType,
+  friendship: {
+    id: string;
+    requesterId: string;
+    addresseeId: string;
+  },
+): Promise<void> {
+  try {
+    await publishFriendshipEvent(eventType, {
+      friendshipId: friendship.id,
+      requesterId: friendship.requesterId,
+      addresseeId: friendship.addresseeId,
+    });
+  } catch (error) {
+    // The database operation has already succeeded.
+    // A RabbitMQ failure must not turn it into an HTTP failure.
+    console.error(
+      `Failed to publish ${eventType} for friendship ${friendship.id}`,
+      error,
+    );
+  }
+}
 
 export async function sendFriendRequest(
   requesterId: string,
@@ -51,10 +85,13 @@ export async function sendFriendRequest(
     }
   }
 
-  try {
-    const friendship = await createFriendRequest(requesterId, addresseeId);
+  let friendship;
 
-    return toFriendRequestResponse(friendship);
+  try {
+    friendship = await createFriendRequest(
+      requesterId,
+      addresseeId,
+    );
   } catch (error) {
     if (
       typeof error === "object" &&
@@ -69,6 +106,14 @@ export async function sendFriendRequest(
 
     throw error;
   }
+
+  // Publish only after successful database creation.
+  await publishFriendshipEventSafely(
+    "FRIEND_REQUEST_SENT",
+    friendship,
+  );
+
+  return toFriendRequestResponse(friendship);
 }
 
 export async function acceptFriendRequest(
@@ -81,6 +126,7 @@ export async function acceptFriendRequest(
     throw new NotFoundError("Friend request not found");
   }
 
+  // Only the recipient can accept the request.
   if (friendship.addresseeId !== userId) {
     throw new ForbiddenError(
       "You are not allowed to accept this friend request",
@@ -88,10 +134,44 @@ export async function acceptFriendRequest(
   }
 
   if (friendship.status !== "PENDING") {
-    throw new ConflictError("Friend request is not pending");
+    throw new ConflictError(
+      "Friend request is not pending",
+    );
   }
 
-  const accepted = await acceptFriendRequestInDb(requestId);
+  let accepted;
+
+  try {
+    // Repository must conditionally update PENDING -> ACCEPTED.
+    accepted = await acceptFriendRequestInDb(requestId);
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "P2025"
+    ) {
+      throw new ConflictError(
+        "Friend request is no longer pending",
+      );
+    }
+
+    throw error;
+  }
+
+  // Supports repository implementations returning null
+  // when no pending friendship was updated.
+  if (!accepted) {
+    throw new ConflictError(
+      "Friend request is no longer pending",
+    );
+  }
+
+  // Only publish after a successful acceptance transition.
+  await publishFriendshipEventSafely(
+    "FRIEND_REQUEST_ACCEPTED",
+    accepted,
+  );
 
   return toFriendRequestResponse(accepted);
 }
@@ -132,7 +212,6 @@ export async function removeFriend(
   if (!friendship) {
     throw new NotFoundError("Friendship not found");
   }
-
 
   await deleteFriendshipById(friendship.id);
 }
