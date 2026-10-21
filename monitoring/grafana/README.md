@@ -42,7 +42,7 @@ The dashboard provider automatically loads and continuously syncs dashboards fro
 
 | Dashboard | File | Metrics & Visualizations |
 | :--- | :--- | :--- |
-| **Microservices Overview** | `microservices-dashboard.json` | Service health, firing-alert count, active alerts, HTTP request and error rates, JVM heap memory, and container CPU usage |
+| **Microservices Overview** | `microservices-dashboard.json` | Service health, firing-alert count, active alerts, HTTP request and error rates, JVM and Node.js heap memory, and container CPU usage |
 | **Docker & Host Metrics** | `docker-metrics.json` | System uptime, container CPU and memory utilization, block I/O, network traffic, and container restarts |
 
 Below the service health panel, **Firing Alerts** shows the current count and
@@ -50,6 +50,20 @@ Below the service health panel, **Firing Alerts** shows the current count and
 container or service. Both panels query Prometheus. A pending alert is waiting for
 its rule's duration before firing. With no active alerts, the count is `0` and the
 table displays **No data**. Silenced alerts still appear; silences mute notifications.
+
+Identity appears in the health, HTTP request rate, HTTP 5xx error rate, and heap
+memory panels. Its Fastify metrics use `http_request_duration_seconds_count`
+and the `status_code` label. HTTP charts need requests to instrumented routes
+and at least two Prometheus scrapes before rates appear.
+
+After changing the Prometheus scrape configuration, validate and reload it:
+
+```bash
+docker compose exec -T prometheus promtool check config /etc/prometheus/prometheus.yml
+docker compose kill -s SIGHUP prometheus
+```
+
+Grafana automatically reloads the dashboard JSON within 10 seconds.
 
 Access Grafana at:
 ```
