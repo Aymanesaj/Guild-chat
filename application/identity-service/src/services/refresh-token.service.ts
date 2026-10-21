@@ -12,7 +12,7 @@ import {
   findRefreshTokenByHash,
   revokeAllRefreshTokens,
   revokeRefreshToken,
-  setReplacement,
+  rotateRefreshTokenInDb
 } from "../repositories/refresh-token.repository.js";
 
 const REFRESH_TTL_SECONDS = Number(
@@ -85,24 +85,34 @@ export async function rotateRefreshToken(
     throw new UnauthorizedError("Refresh token expired");
   }
 
-  await revokeRefreshToken(existing.id);
-
   const newRawToken = generateRefreshToken();
 
-  const replacement =
-    await createRefreshToken({
-      userId: existing.userId,
-      tokenHash: hashRefreshToken(newRawToken),
-      expiresAt: new Date(
-        Date.now() +
-          REFRESH_TTL_SECONDS * 1000
-      ),
-    });
-
-  await setReplacement(
-    existing.id,
-    replacement.id
+  const expiresAt = new Date(
+    Date.now() + REFRESH_TTL_SECONDS * 1000,
   );
+
+  const rotated = await rotateRefreshTokenInDb(
+    existing.id,
+    existing.userId,
+    hashRefreshToken(newRawToken),
+    expiresAt,
+  );
+
+  if (!rotated) {
+    const current = await findRefreshTokenByHash(hash);
+
+    if (current?.revoked && current.replacedBy) {
+      await revokeAllRefreshTokens(current.userId);
+
+      throw new UnauthorizedError(
+        "Refresh token reuse detected; sessions revoked",
+      );
+    }
+
+    throw new UnauthorizedError(
+      "Refresh token is no longer valid",
+    );
+  }
 
   return {
     userId: existing.userId,

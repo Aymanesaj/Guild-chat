@@ -17,6 +17,8 @@ public class RabbitMQConfig {
     public static final String ROOM_EVENTS_EXCHANGE = "guildchat.room-events";
     public static final String CHAT_ROOM_EVENTS_QUEUE = "guildchat.chat-service.room-events";
     public static final String ROOM_CHANGED_ROUTING_KEY = "room.changed";
+    public static final String ROOM_TIMELINE_ROUTING_KEY = "room.timeline";
+    public static final String CHAT_ROOM_TIMELINE_QUEUE = "guildchat.chat-service.room-timeline";
     public static final String DEAD_EXCHANGE = "guildchat.room-events.dead";
     public static final String DEAD_QUEUE = "guildchat.chat-service.room-events.dead";
 
@@ -25,8 +27,10 @@ public class RabbitMQConfig {
         DirectExchange exchange = new DirectExchange(ROOM_EVENTS_EXCHANGE, true, false);
         DirectExchange deadExchange = new DirectExchange(DEAD_EXCHANGE, true, false);
         Queue queue = QueueBuilder.durable(CHAT_ROOM_EVENTS_QUEUE).build();
+        Queue timelineQueue = QueueBuilder.durable(CHAT_ROOM_TIMELINE_QUEUE).build();
         Queue deadQueue = QueueBuilder.durable(DEAD_QUEUE).build();
-        return new Declarables(exchange, deadExchange, queue, deadQueue,
+        return new Declarables(exchange, deadExchange, queue, deadQueue, timelineQueue,
+                BindingBuilder.bind(timelineQueue).to(exchange).with(ROOM_TIMELINE_ROUTING_KEY),
                 BindingBuilder.bind(queue).to(exchange).with(ROOM_CHANGED_ROUTING_KEY),
                 BindingBuilder.bind(deadQueue).to(deadExchange).with(ROOM_CHANGED_ROUTING_KEY));
     }
@@ -39,7 +43,7 @@ public class RabbitMQConfig {
 
     @Bean
     public RabbitAdmin rabbitAdmin(ConnectionFactory connectionFactory) {
-      // Declares roomEventsTopology on every (re)connect; RoomEventPublisher also uses it.
+        // Declares topology on every (re)connect; the timeline publisher also initializes it.
         return new RabbitAdmin(connectionFactory);
     }
 }
