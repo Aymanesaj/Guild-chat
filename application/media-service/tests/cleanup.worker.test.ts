@@ -45,8 +45,68 @@ describe("cleanupUploads", () => {
     vi.resetAllMocks();
     updateMany.mockResolvedValue({ count: 1 });
     removeObject.mockResolvedValue(undefined);
+    findMany.mockResolvedValue([]);
   });
 
+  it("marks an expired processing attempt failed", async () => {
+  queueResults([], [], []);
+
+  findMany
+    .mockResolvedValueOnce([
+      {
+        id: "stale-upload",
+        processingToken: "old-token",
+        candidateKey: "chat/attachments/stale.webp",
+      },
+    ] as Awaited<ReturnType<typeof prisma.mediaUpload.findMany>>)
+    .mockResolvedValueOnce([]);
+
+  await cleanupUploads();
+
+  expect(updateMany).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: expect.objectContaining({
+        id: "stale-upload",
+        status: "PROCESSING",
+        processingToken: "old-token",
+      }),
+      data: expect.objectContaining({
+        status: "FAILED",
+        errorCode: "PROCESSING_EXPIRED",
+        tempCleanupPending: true,
+        finalCleanupPending: true,
+      }),
+    }),
+  );
+});
+
+it("retains orphan tracking after deleting a failed candidate", async () => {
+  queueResults([], [], []);
+
+  findMany
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce([
+      {
+        id: "failed-upload",
+        candidateKey: "chat/attachments/failed.webp",
+      },
+    ] as Awaited<ReturnType<typeof prisma.mediaUpload.findMany>>);
+
+  await cleanupUploads();
+
+  expect(removeObject).toHaveBeenCalledWith(
+    "chat/attachments/failed.webp",
+  );
+
+  expect(updateMany).toHaveBeenCalledTimes(1);
+  expect(updateMany).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: {
+        orphanCleanupAfter: expect.any(Date),
+      },
+    }),
+  );
+});
   it("does nothing when no uploads need cleanup", async () => {
     queueResults([], [], []);
 

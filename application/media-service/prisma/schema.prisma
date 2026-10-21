@@ -57,6 +57,10 @@ model MediaUpload {
   completedAt DateTime?
   deletedAt   DateTime?
 
+  candidateKey       String?   @unique
+  orphanCleanupAfter DateTime?
+
+  @@index([status, finalCleanupPending, orphanCleanupAfter])
   @@index([status, expiresAt])
   @@index([status, processingStartedAt])
   @@index([callerService, ownerId, purpose])

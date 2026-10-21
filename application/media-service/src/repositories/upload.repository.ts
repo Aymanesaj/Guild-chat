@@ -4,6 +4,9 @@ import type {
   CallerService,
   MediaPurpose,
 } from "../media/media-policy.js";
+import { createCandidateKey } from "../media/media-keys.js";
+
+export const PROCESSING_LEASE_MS = 5 * 60 * 1000;
 
 interface UploadAccess {
   uploadId: string;
@@ -27,6 +30,12 @@ export async function claimUpload(
   access: UploadAccess,
 ): Promise<string | null> {
   const processingToken = randomUUID();
+  const candidateKey = createCandidateKey(
+    access.purpose,
+    access.ownerId,
+    access.uploadId,
+    processingToken,
+  );
   const now = new Date();
 
   const result = await prisma.mediaUpload.updateMany({
@@ -45,6 +54,8 @@ export async function claimUpload(
       processingToken,
       processingStartedAt: now,
       errorCode: null,
+      candidateKey,
+      orphanCleanupAfter: null,
     },
   });
 

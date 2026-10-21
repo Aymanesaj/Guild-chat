@@ -1,6 +1,27 @@
 import { randomUUID } from "node:crypto";
 import type { MediaPurpose } from "./media-policy.js";
 
+export function createCandidateKey(
+  purpose: MediaPurpose,
+  ownerId: string,
+  uploadId: string,
+  processingToken: string,
+): string {
+  const filename = `${uploadId}-${processingToken}.webp`;
+
+  switch (purpose) {
+    case "AVATAR":
+      return `identity/users/${ownerId}/avatars/${filename}`;
+
+    case "CHAT_IMAGE":
+      return `chat/attachments/${filename}`;
+
+    default:
+      throw new Error("Unsupported media purpose");
+  }
+}
+
+
 export function createMediaKeys(
   purpose: MediaPurpose,
   ownerId: string,

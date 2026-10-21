@@ -1,5 +1,6 @@
 import { prisma } from "../database/prisma.js";
 import { deleteObject } from "../storage/r2.storage.js";
+import { PROCESSING_LEASE_MS } from "../repositories/upload.repository.js";
 
 const BATCH_SIZE = 10;
 const CLEANUP_INTERVAL_MS = 30_000;
@@ -115,6 +116,8 @@ export async function cleanupUploads(): Promise<void> {
       console.error("Media cleanup: temporary deletion failed");
     }
   }
+  await failExpiredProcessing();
+  await cleanupFailedCandidates();
 }
 
 export function startCleanupWorker() {
@@ -146,4 +149,92 @@ export function startCleanupWorker() {
       await running;
     }
   };
+}
+
+async function failExpiredProcessing(): Promise<void> {
+  const cutoff = new Date(Date.now() - PROCESSING_LEASE_MS);
+
+  const stale = await prisma.mediaUpload.findMany({
+    where: {
+      status: "PROCESSING",
+      processingStartedAt: { lte: cutoff },
+    },
+    select: {
+      id: true,
+      processingToken: true,
+      candidateKey: true,
+    },
+    take: BATCH_SIZE,
+    orderBy: { processingStartedAt: "asc" },
+  });
+
+  for (const upload of stale) {
+    await prisma.mediaUpload.updateMany({
+      where: {
+        id: upload.id,
+        status: "PROCESSING",
+        processingToken: upload.processingToken,
+        processingStartedAt: { lte: cutoff },
+      },
+      data: {
+        status: "FAILED",
+        errorCode: "PROCESSING_EXPIRED",
+        processingToken: null,
+        processingStartedAt: null,
+        tempCleanupPending: true,
+        finalCleanupPending: upload.candidateKey !== null,
+        orphanCleanupAfter: new Date(),
+      },
+    });
+  }
+}
+
+async function cleanupFailedCandidates(): Promise<void> {
+  const now = new Date();
+
+  const candidates = await prisma.mediaUpload.findMany({
+    where: {
+      status: "FAILED",
+      finalCleanupPending: true,
+      candidateKey: { not: null },
+      orphanCleanupAfter: { lte: now },
+    },
+    select: {
+      id: true,
+      candidateKey: true,
+    },
+    take: BATCH_SIZE,
+    orderBy: { orphanCleanupAfter: "asc" },
+  });
+
+  for (const upload of candidates) {
+    if (!upload.candidateKey) {
+      continue;
+    }
+
+    const claimed = await prisma.mediaUpload.updateMany({
+      where: {
+        id: upload.id,
+        status: "FAILED",
+        finalCleanupPending: true,
+        candidateKey: upload.candidateKey,
+        orphanCleanupAfter: { lte: now },
+      },
+      data: {
+        orphanCleanupAfter: new Date(Date.now() + 5 * 60 * 1000),
+      },
+    });
+
+    if (claimed.count !== 1) {
+      continue;
+    }
+
+    try {
+      await deleteObject(upload.candidateKey);
+    } catch {
+      console.error("Media cleanup: orphan deletion failed");
+    }
+
+    // Retain tracking in case an expired worker writes the object later.
+  }
 }
