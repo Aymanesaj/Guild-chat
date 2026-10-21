@@ -9,10 +9,6 @@ import { resolveUsers } from "./users";
 const ROOMS = "/api/orgs/rooms";
 const DM_ROOMS = `${ROOMS}/dm`;
 
-function page(items, { limit, offset = 0 } = {}) {
-  return limit ? items.slice(offset, offset + limit) : items.slice(offset);
-}
-
 /** org-service RoomResponse -> the shape the UI renders. */
 function normalizeRoom(room) {
   return {
@@ -69,15 +65,15 @@ async function withPeers(rooms) {
 }
 
 /** GET /rooms — group rooms only; org-service serves DMs from /rooms/dm. */
-export async function getRooms(options) {
+export async function getRooms() {
   const rooms = await request(ROOMS, {}, "Failed to fetch rooms");
-  return page(await withPeers((rooms || []).map(normalizeRoom)), options);
+  return (rooms || []).map(normalizeRoom);
 }
 
 /** GET /rooms/dm — the caller's DM rooms, each with its peer resolved. */
-async function getDmRooms(options) {
+async function getDmRooms() {
   const rooms = await request(DM_ROOMS, {}, "Failed to fetch conversations");
-  return page(await withPeers((rooms || []).map(normalizeRoom)), options);
+  return withPeers((rooms || []).map(normalizeRoom));
 }
 
 export async function createRoom(name) {
@@ -89,7 +85,23 @@ export async function createRoom(name) {
   return normalizeRoom(room);
 }
 
-/** Opens (or reuses) the DM room with another user. */
+/** Read-only: reuse an existing DM, or open a local conversation until Send. */
+export async function openDm(peer) {
+  const rooms = await getDmRooms();
+  const existing = rooms.find((room) => (room.peer_id ?? room.peer?.id) === peer.id);
+  if (existing) return existing;
+
+  return {
+    id: `draft-dm:${peer.id}`,
+    name: null,
+    type: "dm",
+    isDraft: true,
+    peer_id: peer.id,
+    peer,
+  };
+}
+
+/** Creates (or reuses) the DM when the user sends a message. */
 export async function getOrCreateDm(userId) {
   const room = await request(
     DM_ROOMS,
@@ -145,15 +157,6 @@ export async function removeMember(roomId, userId) {
   );
 }
 
-/** The owner can't leave (org answers 403 "Owner cannot leave the room."). */
-export async function leaveRoom(roomId) {
-  return request(
-    `${ROOMS}/${roomId}/members/me`,
-    { method: "DELETE" },
-    "Failed to leave room",
-  );
-}
-
 /** role: "admin" | "member" — OWNER can't be assigned. */
 export async function assignRole(roomId, userId, role) {
   return request(
@@ -165,7 +168,7 @@ export async function assignRole(roomId, userId, role) {
 
 // --- DM list ----------------------------------------------------------------
 
-export function formatTimestamp(value) {
+function formatTimestamp(value) {
   if (!value) return "";
 
   const sent = new Date(value);
@@ -246,11 +249,8 @@ export function sortDmRooms(rooms) {
 /**
  * The caller's DM rooms, reusing the previews already in `known`.
  *
- * Fetching a preview costs one request per room, so doing it for the whole list
- * every time makes this N+1 — too expensive to poll. A room we have already
- * seen keeps the preview we have; only rooms that are new to us are fetched. So
- * a steady-state poll is a single request, and the extra ones happen only on
- * the tick where a new conversation first appears.
+ * Existing rooms keep their previews; only newly discovered rooms need the
+ * batched last-messages request.
  *
  * Keeping previews fresh is the socket's job: DmView applies each
  * `room.activity` event (see onRoomEvent in messages.js) to `known`, so this

@@ -9,15 +9,15 @@ export function messageByteLength(content) {
 }
 
 /** Bound typing and pastes without cutting a Unicode code point in half. */
-export function limitMessageInput(content) {
-  const candidate = content.slice(0, MAX_MESSAGE_INPUT_BYTES);
-  if (messageByteLength(candidate) <= MAX_MESSAGE_INPUT_BYTES) return candidate;
+export function limitMessageInput(content, maxBytes = MAX_MESSAGE_INPUT_BYTES) {
+  const candidate = content.slice(0, maxBytes);
+  if (messageByteLength(candidate) <= maxBytes) return candidate;
 
   let bytes = 0;
   let end = 0;
   for (const character of candidate) {
     bytes += messageByteLength(character);
-    if (bytes > MAX_MESSAGE_INPUT_BYTES) break;
+    if (bytes > maxBytes) break;
     end += character.length;
   }
   return candidate.slice(0, end);

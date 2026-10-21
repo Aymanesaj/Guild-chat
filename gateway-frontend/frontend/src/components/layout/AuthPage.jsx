@@ -1,14 +1,16 @@
 import styled from "styled-components";
 import { useToast } from "../ui/ToastProvider";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { TbEye, TbEyeOff } from "react-icons/tb";
 import { loginUser, registerUser } from "../../api/authentication.js";
+import { getRegistrationPasswordError } from "../../utils/passwordValidation.js";
 import {
   Button,
   Card as UICard,
   IconButton,
   Input as UIInput,
+  InlineError,
 } from "../ui";
 
 const Container = styled.div`
@@ -209,9 +211,22 @@ function LoginView({ setView, onLogin, values, onChange, loading }) {
 
 function SignupView({ setView, onSignup, values, onChange, loading }) {
   const navigate = useNavigate();
+  const passwordHintId = useId();
+  const passwordErrorId = useId();
+  const confirmPasswordErrorId = useId();
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [confirmPasswordTouched, setConfirmPasswordTouched] = useState(false);
+  const passwordError = passwordTouched
+    ? getRegistrationPasswordError(values.password)
+    : "";
+  const confirmPasswordError = confirmPasswordTouched && values.password !== values.confirmPassword
+    ? "Passwords do not match"
+    : "";
 
   const handleSignup = async (e) => {
     e.preventDefault();
+    setPasswordTouched(true);
+    setConfirmPasswordTouched(true);
     // Covers both a rejected registration and a local password mismatch.
     if (await onSignup(values.username, values.email, values.password, values.confirmPassword)) {
       navigate("/app");
@@ -240,20 +255,40 @@ function SignupView({ setView, onSignup, values, onChange, loading }) {
           value={values.email}
           onChange={(e) => onChange("email", e.target.value)}
         />
-        <PasswordInput
-          name="password"
-          autoComplete="new-password"
-          placeholder="Password"
-          value={values.password}
-          onChange={(e) => onChange("password", e.target.value)}
-        />
-        <PasswordInput
-          name="confirmPassword"
-          autoComplete="new-password"
-          placeholder="Confirm Password"
-          value={values.confirmPassword}
-          onChange={(e) => onChange("confirmPassword", e.target.value)}
-        />
+        <div>
+          <PasswordInput
+            name="password"
+            autoComplete="new-password"
+            placeholder="Password"
+            value={values.password}
+            onChange={(e) => onChange("password", e.target.value)}
+            onBlur={() => setPasswordTouched(true)}
+            $invalid={Boolean(passwordError)}
+            aria-invalid={Boolean(passwordError)}
+            aria-describedby={passwordError ? `${passwordHintId} ${passwordErrorId}` : passwordHintId}
+          />
+          <div aria-live="polite">
+            {passwordError && <InlineError id={passwordErrorId}>{passwordError}</InlineError>}
+          </div>
+        </div>
+        <div>
+          <PasswordInput
+            name="confirmPassword"
+            autoComplete="new-password"
+            placeholder="Confirm Password"
+            value={values.confirmPassword}
+            onChange={(e) => onChange("confirmPassword", e.target.value)}
+            onBlur={() => setConfirmPasswordTouched(true)}
+            $invalid={Boolean(confirmPasswordError)}
+            aria-invalid={Boolean(confirmPasswordError)}
+            aria-describedby={confirmPasswordError ? confirmPasswordErrorId : undefined}
+          />
+          <div aria-live="polite">
+            {confirmPasswordError && (
+              <InlineError id={confirmPasswordErrorId}>{confirmPasswordError}</InlineError>
+            )}
+          </div>
+        </div>
 
         <PrimaryButton type="submit" $full disabled={loading}>
           {loading ? "Creating..." : "Create Account"}
@@ -321,7 +356,7 @@ function AuthPage( { onLogin } ) {
     email = email.trim();
 
     // Match identity-service's registration rules, including its Zod email pattern.
-    let validationError = "";
+    let validationError;
     if (username.length < 3) {
       validationError = "Username must be at least 3 characters";
     } else if (username.length > 32) {
@@ -332,12 +367,9 @@ function AuthPage( { onLogin } ) {
       validationError = "Email is not valid";
     } else if (email.length > 255) {
       validationError = "Email must be at most 255 characters";
-    } else if (password.length < 8) {
-      validationError = "Password must be at least 8 characters long";
-    } else if (password.length > 128) {
-      validationError = "Password must be at most 128 characters";
-    } else if (password !== confirmPassword) {
-      validationError = "Passwords do not match";
+    } else {
+      validationError = getRegistrationPasswordError(password)
+        || (password !== confirmPassword ? "Passwords do not match" : "");
     }
 
     if (validationError) {

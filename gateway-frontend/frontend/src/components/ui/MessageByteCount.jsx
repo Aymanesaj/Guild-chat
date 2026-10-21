@@ -1,11 +1,11 @@
 import styled from "styled-components";
 import { MAX_MESSAGE_BYTES } from "../../utils/messageContent";
 
-export default function MessageByteCount({ bytes, ...props }) {
-  const overLimit = bytes > MAX_MESSAGE_BYTES;
+export default function MessageByteCount({ bytes, maxBytes = MAX_MESSAGE_BYTES, ...props }) {
+  const overLimit = bytes > maxBytes;
   return (
     <Count $overLimit={overLimit} {...props}>
-      {bytes.toLocaleString("en-US")} / {MAX_MESSAGE_BYTES.toLocaleString("en-US")}
+      {bytes.toLocaleString("en-US")} / {maxBytes.toLocaleString("en-US")}
     </Count>
   );
 }

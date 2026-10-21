@@ -57,6 +57,11 @@ const RoomListNav = styled.nav`
   margin-top: var(--space-2);
   overflow-y: auto;
   min-height: 0;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
 `;
 
 /** Shared shape for the room rows and the Direct Messages entry. */

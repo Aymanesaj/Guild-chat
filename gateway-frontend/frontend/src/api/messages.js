@@ -97,14 +97,12 @@ const subscribers = new Map();
 /** userId -> Set<handler>; shared across member lists, friends and DM peers. */
 const presenceSubscribers = new Map();
 const PRESENCE_BATCH_SIZE = 100;
-const statusListeners = new Set();
 /** Listeners for user-level room events, see onRoomEvent. */
 const roomListeners = new Set();
 /** False until the first successful open of this session: later opens are reconnects. */
 let hasOpened = false;
 
 let socket = null;
-let status = "closed";
 let timer = null;
 let attempt = 0;
 /** Pending close after the last room left; a room switch cancels it. */
@@ -114,11 +112,6 @@ let keepOpen = false;
 const IDLE_CLOSE_MS = 2000;
 
 const roomKey = (roomId) => String(roomId);
-
-function setStatus(next) {
-  status = next;
-  statusListeners.forEach((listener) => listener(next));
-}
 
 function socketUrl() {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -232,8 +225,6 @@ function connect() {
   timer = null;
   if (socket || !wantsSocket() || !getAccessToken()) return;
 
-  setStatus("connecting");
-
   // The handshake only carries the token in the URL; don't send a stale one.
   if (isAccessTokenExpired()) {
     ensureFreshToken().then(() => {
@@ -253,7 +244,6 @@ function connect() {
     subscribers.forEach((_, key) => sendRoomFrame("subscribe", key));
     // Presence subscriptions return a fresh snapshot, including on reconnect.
     sendPresenceFrames("presence.subscribe", [...presenceSubscribers.keys()]);
-    setStatus("open");
     // Room events sent while the socket was down are lost for good, so lists
     // refetch once. Not on the first open: they are loading already.
     if (hasOpened) emitRoomEvent({ type: "resync" });
@@ -271,14 +261,9 @@ function connect() {
     handleFrame(frame);
   };
 
-  current.onerror = () => {
-    if (socket === current) setStatus("error");
-  };
-
   current.onclose = async (event) => {
     if (socket !== current) return;
     socket = null;
-    setStatus("closed");
     if (!wantsSocket()) return;
 
     // A rejected handshake (expired token) surfaces as an abnormal 1006 close
@@ -307,7 +292,6 @@ function disconnect() {
   const current = socket;
   socket = null;
   current?.close(1000);
-  setStatus("closed");
 }
 
 window.addEventListener(LOGOUT_EVENT, () => {
@@ -389,13 +373,6 @@ export function subscribeToPresence(userIds, handler) {
     sendPresenceFrames("presence.unsubscribe", removed);
     closeWhenUnused();
   };
-}
-
-/** Socket status: "connecting" | "open" | "closed" | "error". */
-export function onConnectionStatus(listener) {
-  statusListeners.add(listener);
-  listener(status);
-  return () => statusListeners.delete(listener);
 }
 
 /**
