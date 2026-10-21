@@ -19,7 +19,8 @@ const HISTORY_PAGE_SIZE = 50;
  */
 export function useRoomMessages(roomId) {
   const [messages, setMessages] = useState([]);
-  const [state, setState] = useState("loading");
+  // A local DM draft has no history or room subscription until its first send.
+  const [state, setState] = useState(roomId ? "loading" : "success");
   const [connection, setConnection] = useState("connecting");
   const [sending, setSending] = useState(false);
   const [hasOlder, setHasOlder] = useState(false);

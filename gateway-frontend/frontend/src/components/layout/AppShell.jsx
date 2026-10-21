@@ -135,6 +135,14 @@ function AppShellContent({ onLogout }) {
     setIsNavOpen(false);
   }, []);
 
+  // A first send may finish after navigation. Replace only its own draft and
+  // keep whichever view the user has since chosen.
+  const handleRoomInitialized = useCallback((draftId, room) => {
+    setActiveRoomId((current) =>
+      current?.isDraft && current.id === draftId ? room : current,
+    );
+  }, []);
+
   // A loaded list that no longer contains the open room means we were removed
   // from it. Without this the room view stays mounted and subscribed while the
   // sidebar no longer lists it.
@@ -178,6 +186,7 @@ function AppShellContent({ onLogout }) {
           <MainContent>
             <MainPanel
               activeView={isDirectMessages ? true : activeRoomId}
+              onRoomInitialized={handleRoomInitialized}
             />
           </MainContent>
         </AppShellRoot>

@@ -89,7 +89,23 @@ export async function createRoom(name) {
   return normalizeRoom(room);
 }
 
-/** Opens (or reuses) the DM room with another user. */
+/** Read-only: reuse an existing DM, or open a local conversation until Send. */
+export async function openDm(peer) {
+  const rooms = await getDmRooms();
+  const existing = rooms.find((room) => (room.peer_id ?? room.peer?.id) === peer.id);
+  if (existing) return existing;
+
+  return {
+    id: `draft-dm:${peer.id}`,
+    name: null,
+    type: "dm",
+    isDraft: true,
+    peer_id: peer.id,
+    peer,
+  };
+}
+
+/** Creates (or reuses) the DM when the user sends a message. */
 export async function getOrCreateDm(userId) {
   const room = await request(
     DM_ROOMS,
