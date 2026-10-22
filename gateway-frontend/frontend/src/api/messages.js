@@ -140,6 +140,8 @@ const presenceSubscribers = new Map();
 const PRESENCE_BATCH_SIZE = 100;
 /** Listeners for user-level room events, see onRoomEvent. */
 const roomListeners = new Set();
+/** Raw user-level events for notification displays; no additional socket. */
+const notificationListeners = new Set();
 /** False until the first successful open of this session: later opens are reconnects. */
 let hasOpened = false;
 
@@ -258,15 +260,24 @@ async function handleFrame(frame) {
         type: event.slice("room.".length),
         roomId: data.room_id,
       });
+      if (event !== "room.updated") {
+        notificationListeners.forEach((listener) => listener({ event, data }));
+      }
       break;
     case "room.activity":
       if (!data.message) break;
+      notificationListeners.forEach((listener) => listener({ event, data }));
       emitRoomEvent({
         type: "activity",
         roomId: data.room_id,
         change: data.change,
         preview: toPreview(data.message),
       });
+      break;
+    case "friend.request.received":
+    case "friend.request.sent":
+    case "friend.added":
+      notificationListeners.forEach((listener) => listener({ event, data }));
       break;
     case "error":
       break;
@@ -355,6 +366,7 @@ window.addEventListener(LOGOUT_EVENT, () => {
   subscribers.clear();
   presenceSubscribers.clear();
   roomListeners.clear();
+  notificationListeners.clear();
   disconnect();
 });
 
@@ -450,4 +462,10 @@ export function subscribeToPresence(userIds, handler) {
 export function onRoomEvent(listener) {
   roomListeners.add(listener);
   return () => roomListeners.delete(listener);
+}
+
+/** Notification candidates on the session socket. Returns an unsubscribe function. */
+export function onNotificationEvent(listener) {
+  notificationListeners.add(listener);
+  return () => notificationListeners.delete(listener);
 }

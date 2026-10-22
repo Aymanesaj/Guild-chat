@@ -130,7 +130,7 @@ function useUsernameAvailability(username, currentUsername) {
 // Component
 // -----------------------------------------------------------------------------
 
-export default function ProfileOverlay({ user, onClose }) {
+export default function ProfileOverlay({ user, onClose, initialTab = "friends" }) {
   const toast = useToast();
   const isPhone = useMediaQuery(PHONE_QUERY);
   const {
@@ -189,7 +189,7 @@ export default function ProfileOverlay({ user, onClose }) {
   // Main section and friends sub-tabs.
   const [managementSection, setManagementSection] = useState("friends");
   const [managementTab, setManagementTab] =
-    useState("friends");
+    useState(initialTab);
 
 
   // ---------------------------------------------------------------------------
