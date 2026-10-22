@@ -113,6 +113,10 @@ services:
       CHAT_MONGO_PASSWORD: ${CHAT_MONGO_PASSWORD}
       CHAT_MONGO_AUTH_DB: ${CHAT_MONGO_AUTH_DB}
       IDENTITY_GRPC_PORT: ${IDENTITY_GRPC_PORT}
+      # Chat images (CHAT_IMAGE) through Media.
+      MEDIA_GRPC_HOST: media-service
+      MEDIA_GRPC_PORT: 50054
+      MEDIA_CHAT_TOKEN: ${MEDIA_CHAT_TOKEN:-}
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/actuator/health || exit 1"]
       interval: 20s
@@ -157,10 +161,9 @@ services:
       JWT_ISSUER: ${JWT_ISSUER}
       IDENTITY_HTTP_PORT: ${IDENTITY_HTTP_PORT}
       AVATAR_DIR: ${AVATAR_DIR}
-      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
-      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
-      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
-      R2_BUCKET: ${R2_BUCKET}
+      # Avatars go through Media; only Media holds the R2 credentials.
+      MEDIA_GRPC_ADDRESS: media-service:50054
+      MEDIA_IDENTITY_TOKEN: ${MEDIA_IDENTITY_TOKEN:-}
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
     volumes:
@@ -192,9 +195,13 @@ services:
     restart: "no"
 
   media-service:
+    mem_limit: 512m
     build: ./application/media-service
     environment:
       PORT: 8084
+      # gRPC for Identity and Chat: listen on the Docker network, not only inside the container.
+      MEDIA_GRPC_HOST: 0.0.0.0
+      MEDIA_GRPC_PORT: 50054
       MEDIA_DATABASE_URL: ${MEDIA_DATABASE_URL:-}
       MEDIA_IDENTITY_TOKEN: ${MEDIA_IDENTITY_TOKEN:-}
       MEDIA_CHAT_TOKEN: ${MEDIA_CHAT_TOKEN:-}
@@ -205,7 +212,8 @@ services:
       R2_ENDPOINT: ${R2_ENDPOINT:-}
       R2_REGION: ${R2_REGION:-auto}
     expose:
-      - "8084"
+      - "8084"  # HTTP: /health only
+      - "50054" # gRPC: Identity (avatars) and Chat (images); internal, never routed by Nginx
     networks:
       - private
     depends_on:
@@ -248,6 +256,7 @@ services:
   # ============================================================
 
   media-postgres:
+    mem_limit: 256m
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: media

@@ -1,14 +1,7 @@
 import "dotenv/config";
 import { fileURLToPath } from "node:url";
-import {
-  Server,
-  ServerCredentials,
-  status,
-} from "@grpc/grpc-js";
-import type {
-  handleUnaryCall,
-  ServiceDefinition,
-} from "@grpc/grpc-js";
+import { Server, ServerCredentials, status } from "@grpc/grpc-js";
+import type { handleUnaryCall, ServiceDefinition } from "@grpc/grpc-js";
 import { loadSync } from "@grpc/proto-loader";
 import { z } from "zod";
 
@@ -25,7 +18,6 @@ import {
   deleteMedia,
   getDownloadUrl,
 } from "../media/media.service.js";
-
 
 const purposeSchema = z.enum(["AVATAR", "CHAT_IMAGE"]);
 const ownerSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/);
@@ -72,7 +64,10 @@ const knownErrors = new Map<string, status>([
   ["Animated images are not supported", status.INVALID_ARGUMENT],
   ["Image dimensions exceed the allowed limits", status.INVALID_ARGUMENT],
   ["Image processor is busy; retry later", status.RESOURCE_EXHAUSTED],
-  ["Media finalization capacity reached; retry later", status.RESOURCE_EXHAUSTED],
+  [
+    "Media finalization capacity reached; retry later",
+    status.RESOURCE_EXHAUSTED,
+  ],
   ["Media is not available for download", status.FAILED_PRECONDITION],
 ]);
 
@@ -114,9 +109,10 @@ export async function startMediaGrpcServer() {
   const host = process.env.MEDIA_GRPC_HOST ?? "127.0.0.1";
   const port = Number(process.env.MEDIA_GRPC_PORT ?? "50054");
 
-  // This initial listener uses plaintext transport for local development.
-  if (host !== "127.0.0.1") {
-    throw new Error("Local Media gRPC must bind to 127.0.0.1");
+  // Plaintext like the other internal gRPC services: reachable only on the private
+  // Docker network (not published, not routed by Nginx); every call needs a service token.
+  if (!["127.0.0.1", "0.0.0.0"].includes(host)) {
+    throw new Error("MEDIA_GRPC_HOST must be 127.0.0.1 or 0.0.0.0");
   }
 
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -143,10 +139,7 @@ export async function startMediaGrpcServer() {
 
   function handler<T>(
     schema: z.ZodType<T>,
-    operation: (
-      caller: CallerService,
-      input: T,
-    ) => Promise<object>,
+    operation: (caller: CallerService, input: T) => Promise<object>,
   ): handleUnaryCall<unknown, object> {
     return (call, callback) => {
       async function execute() {
