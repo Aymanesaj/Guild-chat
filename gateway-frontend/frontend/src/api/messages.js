@@ -1,5 +1,16 @@
-import { buildQuery, ensureFreshToken, jsonBody, LOGOUT_EVENT, refreshSession, request } from "./http";
-import { getAccessToken, getRefreshToken, isAccessTokenExpired } from "./tokens";
+import {
+  buildQuery,
+  ensureFreshToken,
+  jsonBody,
+  LOGOUT_EVENT,
+  refreshSession,
+  request,
+} from "./http";
+import {
+  getAccessToken,
+  getRefreshToken,
+  isAccessTokenExpired,
+} from "./tokens";
 import { resolveUsers } from "./users";
 import { assertMessageSize } from "../utils/messageContent";
 
@@ -27,7 +38,8 @@ import { assertMessageSize } from "../utils/messageContent";
 
 const CHAT = "/api/chat";
 
-function normalizeMessage(message, sender) {
+function normalizeMessage(message, users) {
+  const sender = users.get(message.sender_id);
   return {
     id: message.id,
     room_id: message.room_id,
@@ -36,16 +48,41 @@ function normalizeMessage(message, sender) {
     sender_avatar: sender?.avatar ?? null,
     reply_to_id: message.reply_to_id ?? null,
     content: message.content,
+    content_type: message.content_type ?? "text",
+    system: normalizeSystem(message.system, users),
     sent_at: message.created_at,
     edited_at: message.edited_at ?? null,
     deleted: Boolean(message.deleted),
   };
 }
 
-/** Attaches senders: chat stores ids only, names and avatars come from identity. */
+/** Room events (member joined, kicked, ...): chat sends ids, names are resolved here. */
+function normalizeSystem(system, users) {
+  if (!system) return null;
+  return {
+    type: system.type,
+    actor_id: system.actor_id,
+    actor_username: users.get(system.actor_id)?.username ?? "Someone",
+    target_id: system.target_id,
+    target_username: users.get(system.target_id)?.username ?? "someone",
+    role: system.role,
+    previous_role: system.previous_role,
+    name: system.name,
+    previous_name: system.previous_name,
+  };
+}
+
+/** Attaches users: chat stores ids only, names and avatars come from identity. */
 async function withUsernames(messages) {
-  const senders = await resolveUsers(messages.map((message) => message.sender_id));
-  return messages.map((message) => normalizeMessage(message, senders.get(message.sender_id)));
+  // Senders, plus the people named in system messages. resolveUsers skips nulls.
+  const users = await resolveUsers(
+    messages.flatMap((message) => [
+      message.sender_id,
+      message.system?.actor_id,
+      message.system?.target_id,
+    ]),
+  );
+  return messages.map((message) => normalizeMessage(message, users));
 }
 
 /**
@@ -87,7 +124,11 @@ export async function editMessage(messageId, content) {
 
 /** The sender, or a room owner/admin. */
 export async function deleteMessage(messageId) {
-  await request(`${CHAT}/messages/${messageId}`, { method: "DELETE" }, "Failed to delete message");
+  await request(
+    `${CHAT}/messages/${messageId}`,
+    { method: "DELETE" },
+    "Failed to delete message",
+  );
 }
 
 // --- shared socket ------------------------------------------------------------
@@ -141,13 +182,17 @@ function sendRoomFrame(event, key) {
 /** Match the backend's 100 distinct ids per presence frame limit. */
 function sendPresenceFrames(event, userIds) {
   for (let start = 0; start < userIds.length; start += PRESENCE_BATCH_SIZE) {
-    sendFrame(event, { user_ids: userIds.slice(start, start + PRESENCE_BATCH_SIZE) });
+    sendFrame(event, {
+      user_ids: userIds.slice(start, start + PRESENCE_BATCH_SIZE),
+    });
   }
 }
 
 function dispatchPresence(userId, status) {
   if (status !== "online" && status !== "offline") return;
-  presenceSubscribers.get(userId)?.forEach((handler) => handler({ userId, status }));
+  presenceSubscribers
+    .get(userId)
+    ?.forEach((handler) => handler({ userId, status }));
 }
 
 function dispatch(roomId, update) {
@@ -182,7 +227,9 @@ async function handleFrame(frame) {
 
   switch (event) {
     case "presence.snapshot":
-      Object.entries(data.statuses || {}).forEach(([userId, status]) => dispatchPresence(userId, status));
+      Object.entries(data.statuses || {}).forEach(([userId, status]) =>
+        dispatchPresence(userId, status),
+      );
       break;
     case "presence.changed":
       dispatchPresence(data.user_id, data.status);
@@ -193,7 +240,12 @@ async function handleFrame(frame) {
       break;
     }
     case "message.edited":
-      dispatch(data.room_id, { type: "edited", id: data.id, content: data.content, edited_at: data.edited_at });
+      dispatch(data.room_id, {
+        type: "edited",
+        id: data.id,
+        content: data.content,
+        edited_at: data.edited_at,
+      });
       break;
     case "message.deleted":
       dispatch(data.room_id, { type: "deleted", id: data.id });
@@ -202,7 +254,10 @@ async function handleFrame(frame) {
     case "room.removed":
     case "room.updated":
       // "room.added" -> "added": the list only needs to know what to refetch.
-      emitRoomEvent({ type: event.slice("room.".length), roomId: data.room_id });
+      emitRoomEvent({
+        type: event.slice("room.".length),
+        roomId: data.room_id,
+      });
       break;
     case "room.activity":
       if (!data.message) break;

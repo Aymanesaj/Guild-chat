@@ -18,6 +18,7 @@ import { Button, ConfirmDialog, EmptyState, IconButton, Input, Spinner } from ".
 import MessageByteCount from "../ui/MessageByteCount";
 import ConversationIntro from "./ConversationIntro";
 import { MAX_MESSAGE_BYTES, MAX_MESSAGE_INPUT_BYTES, MESSAGE_SIZE_ERROR, limitMessageInput, messageByteLength } from "../../utils/messageContent";
+import { describeSystemMessage } from "../../utils/systemMessage";
 
 const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
 const MESSAGE_GROUP_GAP = 60 * 60 * 1000;
@@ -107,6 +108,15 @@ const DayDivider = styled.div`
     flex: 1;
     background: var(--border-strong);
   }
+`;
+
+const SystemLine = styled.p`
+  align-self: center;
+  max-width: min(90%, 640px);
+  margin: var(--space-2) 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  text-align: center;
 `;
 
 const MessageItemWrap = styled.div`
@@ -456,7 +466,14 @@ function RoomContent({
                         <time dateTime={message.sent_at}>{dayFormatter.format(date)}</time>
                       </DayDivider>
                     )}
-                    <MessageItem
+                    {message.content_type === "system" ? (
+                      <SystemLine>
+                        {describeSystemMessage(message.system, currentUserId)}
+                        {date && (
+                          <> · <time dateTime={message.sent_at}>{timeFormatter.format(date)}</time></>
+                        )}
+                      </SystemLine>
+                    ) : (<MessageItem
                       message={message}
                       repliedTo={message.reply_to_id ? messagesById?.get(message.reply_to_id) : null}
                       isOwn={isOwn}
@@ -471,6 +488,7 @@ function RoomContent({
                       onEdit={onEdit}
                       onStartDelete={() => setPendingDelete(message)}
                     />
+                    )}
                   </Fragment>
                 );
               })}
