@@ -73,6 +73,7 @@ function MainPanel({ activeView, onRoomInitialized }) {
       key={roomKey}
       roomId={activeView.isDraft ? null : activeView.id}
       roomName={roomName}
+      roomDescription={activeView.description}
       isDm={isDm}
       peer={activeView.peer}
       draft={drafts[roomKey] ?? ""}

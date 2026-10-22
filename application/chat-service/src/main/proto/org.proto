@@ -21,7 +21,7 @@ message CheckMembershipRequest {
 
 message CheckMembershipResponse {
   bool is_member = 1;
-  string role = 2; //  "OWNER" | "ADMIN" | "MEMBER"; "" when not a member 
+  string role = 2; // "OWNER" | "ADMIN" | "MEMBER"; "" when not a member
 }
 
 message GetRoomRequest {
@@ -49,6 +49,7 @@ message ListUserRoomsResponse {
 message CreateRoomRequest {
   string name = 1;
   string creator_id = 2;
+  optional string description = 3;
 }
 
 message RoomResponse {
@@ -57,6 +58,7 @@ message RoomResponse {
   string created_at = 3;
   string type = 4;
   string updated_at = 5;
+  optional string description = 6;
 }
 
 message MemberResponse {

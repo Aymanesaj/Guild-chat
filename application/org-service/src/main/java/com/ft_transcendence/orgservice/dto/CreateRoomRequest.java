@@ -8,6 +8,8 @@ public record CreateRoomRequest(
         @NotBlank(message = "Room name cannot be blank")
         @NotNull(message = "Room name cannot be null")
         @Size(max = 100)
-        String name
+        String name,
+        @Size(max = 500, message = "Room description cannot exceed 500 characters")
+        String description
 ) {
 }

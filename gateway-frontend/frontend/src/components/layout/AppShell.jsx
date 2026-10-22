@@ -101,6 +101,16 @@ function AppShellContent({ onLogout }) {
     setRoomsState("success");
   }, []);
 
+  const updateRoom = useCallback((room) => {
+    mutationSeq.current += 1;
+    setRooms((previous) => previous.map((current) => current.id === room.id ? room : current));
+  }, []);
+
+  const removeRoom = useCallback((roomId) => {
+    mutationSeq.current += 1;
+    setRooms((previous) => previous.filter((room) => room.id !== roomId));
+  }, []);
+
   const openNav = useCallback(() => setIsNavOpen(true), []);
   const closeNav = useCallback(() => setIsNavOpen(false), []);
 
@@ -149,6 +159,12 @@ function AppShellContent({ onLogout }) {
     handleDirectMessages();
   }, [rooms, roomsState, activeRoomId, handleDirectMessages]);
 
+  // Use the current group metadata so local edits and socket refreshes update
+  // the open header without remounting its messages or losing the draft.
+  const activeRoom = activeRoomId?.type === "group"
+    ? rooms.find((room) => room.id === activeRoomId.id) ?? activeRoomId
+    : activeRoomId;
+
   return (
     <NavDrawerProvider value={navDrawer}>
       <RoomNavigationProvider navigateToRoom={handleRoomChange}>
@@ -167,6 +183,8 @@ function AppShellContent({ onLogout }) {
               rooms={rooms}
               roomsState={roomsState}
               onRoomCreated={addRoom}
+              onRoomUpdated={updateRoom}
+              onRoomLeft={removeRoom}
               onRoomChange={handleRoomChange}
               onDirectMessages={handleDirectMessages}
               onLogout={onLogout}
@@ -175,7 +193,7 @@ function AppShellContent({ onLogout }) {
 
           <MainContent>
             <MainPanel
-              activeView={isDirectMessages ? true : activeRoomId}
+              activeView={isDirectMessages ? true : activeRoom}
               onRoomInitialized={handleRoomInitialized}
             />
           </MainContent>

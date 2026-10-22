@@ -61,15 +61,17 @@ public class OrgGrpcService extends OrgServiceGrpc.OrgServiceImplBase {
         com.ft_transcendence.orgservice.dto.RoomResponse room =
                 roomService.getRoomById(roomId, userId);
 
-        RoomResponse response = RoomResponse.newBuilder()
+        RoomResponse.Builder response = RoomResponse.newBuilder()
                 .setId(room.id().toString())
                 .setName(room.name())
                 .setCreatedAt(room.createdAt().toString())
                 .setType(room.type().name())
-                .setUpdatedAt(room.updatedAt().toString())
-                .build();
+                .setUpdatedAt(room.updatedAt().toString());
+        if (room.description() != null) {
+            response.setDescription(room.description());
+        }
 
-        responseObserver.onNext(response);
+        responseObserver.onNext(response.build());
         responseObserver.onCompleted();
     }
 
@@ -87,15 +89,16 @@ public class OrgGrpcService extends OrgServiceGrpc.OrgServiceImplBase {
                 ListUserRoomsResponse.newBuilder();
 
         for (var room : rooms) {
-            response.addRooms(
-                    RoomResponse.newBuilder()
-                            .setId(room.id().toString())
-                            .setName(room.name())
-                            .setCreatedAt(room.createdAt().toString())
-                            .setType(room.type().name())
-                            .setUpdatedAt(room.updatedAt().toString())
-                            .build()
-            );
+            RoomResponse.Builder roomResponse = RoomResponse.newBuilder()
+                    .setId(room.id().toString())
+                    .setName(room.name())
+                    .setCreatedAt(room.createdAt().toString())
+                    .setType(room.type().name())
+                    .setUpdatedAt(room.updatedAt().toString());
+            if (room.description() != null) {
+                roomResponse.setDescription(room.description());
+            }
+            response.addRooms(roomResponse.build());
         }
 
         responseObserver.onNext(response.build());
@@ -138,21 +141,24 @@ public class OrgGrpcService extends OrgServiceGrpc.OrgServiceImplBase {
 
         com.ft_transcendence.orgservice.dto.CreateRoomRequest roomRequest =
                 new com.ft_transcendence.orgservice.dto.CreateRoomRequest(
-                        request.getName()
+                        request.getName(),
+                        request.hasDescription() ? request.getDescription() : null
                 );
 
         com.ft_transcendence.orgservice.dto.RoomResponse room =
                 roomService.createRoom(roomRequest, creatorId);
 
-        RoomResponse response = RoomResponse.newBuilder()
+        RoomResponse.Builder response = RoomResponse.newBuilder()
                 .setId(room.id().toString())
                 .setName(room.name())
                 .setCreatedAt(room.createdAt().toString())
                 .setType(room.type().name())
-                .setUpdatedAt(room.updatedAt().toString())
-                .build();
+                .setUpdatedAt(room.updatedAt().toString());
+        if (room.description() != null) {
+            response.setDescription(room.description());
+        }
 
-        responseObserver.onNext(response);
+        responseObserver.onNext(response.build());
         responseObserver.onCompleted();
     }
 }

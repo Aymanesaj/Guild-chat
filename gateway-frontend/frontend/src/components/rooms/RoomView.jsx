@@ -26,7 +26,7 @@ const RoomMain = styled.div`
   min-width: 0;
 `;
 
-function RoomView({ roomId, roomName, isDm, peer, draft, onDraftChange, onSendDraft }) {
+function RoomView({ roomId, roomName, roomDescription, isDm, peer, draft, onDraftChange, onSendDraft }) {
   const { isPhone, isNavOpen, closeNav } = useNavDrawer();
   const { profile, previewUser } = useProfileOverlay();
 
@@ -106,6 +106,7 @@ function RoomView({ roomId, roomName, isDm, peer, draft, onDraftChange, onSendDr
           roomChat={messages}
           state={state}
           roomName={roomName}
+          roomDescription={roomDescription}
           isDm={isDm}
           peer={peer}
           messagesById={messagesById}

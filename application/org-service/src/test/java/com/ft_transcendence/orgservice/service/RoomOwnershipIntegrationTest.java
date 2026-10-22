@@ -18,6 +18,7 @@ import java.util.concurrent.TimeoutException;
 import com.ft_transcendence.orgservice.messaging.RoomEventPublisher;
 import com.ft_transcendence.orgservice.client.IdentityGrpcClient;
 import com.ft_transcendence.orgservice.dto.CreateRoomRequest;
+import com.ft_transcendence.orgservice.dto.UpdateRoomRequest;
 import com.ft_transcendence.orgservice.exception.ForbiddenException;
 import com.ft_transcendence.orgservice.exception.NotFoundException;
 import com.ft_transcendence.orgservice.model.MemberRole;
@@ -89,8 +90,75 @@ class RoomOwnershipIntegrationTest {
                 .when(notifications).onRoomChanged(any());
         when(identity.userExists(any())).thenReturn(true);
         owner = UUID.randomUUID();
-        room = service.createRoom(new CreateRoomRequest("ownership"), owner).id();
+        room = service.createRoom(new CreateRoomRequest("ownership", null), owner).id();
         delivered.clear();
+    }
+
+    @Test
+    void descriptionPersistsAndIsReturnedByRoomEndpoints() {
+        String description = "d".repeat(500);
+        var created = service.createRoom(new CreateRoomRequest("described", description), owner);
+        assertThat(created.description()).isEqualTo(description);
+        assertThat(rooms.findById(created.id()).orElseThrow().getDescription()).isEqualTo(description);
+        assertThat(service.getRoomById(created.id(), owner).description()).isEqualTo(description);
+        assertThat(service.getRoomsByUserId(owner)).anySatisfy(response -> {
+            assertThat(response.id()).isEqualTo(created.id());
+            assertThat(response.description()).isEqualTo(description);
+        });
+
+        var updated = service.updateRoom(created.id(), new UpdateRoomRequest("described", "Updated"), owner);
+        assertThat(updated.description()).isEqualTo("Updated");
+        assertThat(rooms.findById(created.id()).orElseThrow().getDescription()).isEqualTo("Updated");
+        service.updateRoom(created.id(), new UpdateRoomRequest("renamed", null), owner);
+        assertThat(service.getRoomById(created.id(), owner).description()).isEqualTo("Updated");
+        service.updateRoom(created.id(), new UpdateRoomRequest("renamed", ""), owner);
+        assertThat(service.getRoomById(created.id(), owner).description()).isEmpty();
+    }
+
+    @Test
+    void roomsWithoutDescriptionsContinueToWork() {
+        assertThat(service.getRoomById(room, owner).description()).isNull();
+        service.updateRoom(room, new UpdateRoomRequest("renamed", null), owner);
+        assertThat(service.getRoomById(room, owner).description()).isNull();
+        service.updateRoom(room, new UpdateRoomRequest("renamed", "Added later"), owner);
+        assertThat(service.getRoomById(room, owner).description()).isEqualTo("Added later");
+    }
+
+    @Test
+    void descriptionEditsKeepExistingRoomPermissions() {
+        UUID member = add(RoleName.MEMBER);
+        UUID admin = add(RoleName.ADMIN);
+        assertThatThrownBy(() -> service.updateRoom(room,
+                new UpdateRoomRequest("ownership", "Forbidden"), member))
+                .isInstanceOf(ForbiddenException.class);
+        assertThatThrownBy(() -> service.updateRoom(room,
+                new UpdateRoomRequest("ownership", "Forbidden"), UUID.randomUUID()))
+                .isInstanceOf(NotFoundException.class);
+        assertThat(service.getRoomById(room, owner).description()).isNull();
+        service.updateRoom(room, new UpdateRoomRequest("ownership", "Admin edit"), admin);
+        assertThat(service.getRoomById(room, owner).description()).isEqualTo("Admin edit");
+    }
+
+    @Test
+    void descriptionValidationAllowsNullAnd500ButRejects501Characters() {
+        try (var factory = jakarta.validation.Validation.buildDefaultValidatorFactory()) {
+            var validator = factory.getValidator();
+            for (String description : java.util.Arrays.asList(null, "", "d".repeat(500))) {
+                assertThat(validator.validate(new CreateRoomRequest("room", description))).isEmpty();
+                assertThat(validator.validate(new UpdateRoomRequest("room", description))).isEmpty();
+            }
+            assertThat(validator.validate(new CreateRoomRequest("room", "d".repeat(501))))
+                    .anySatisfy(violation -> assertThat(violation.getPropertyPath().toString()).isEqualTo("description"));
+            assertThat(validator.validate(new UpdateRoomRequest("room", "d".repeat(501))))
+                    .anySatisfy(violation -> assertThat(violation.getPropertyPath().toString()).isEqualTo("description"));
+        }
+        assertThatThrownBy(() -> service.createRoom(
+                new CreateRoomRequest("too long", "d".repeat(501)), owner))
+                .isInstanceOf(jakarta.validation.ConstraintViolationException.class);
+        assertThatThrownBy(() -> service.updateRoom(room,
+                new UpdateRoomRequest("ownership", "d".repeat(501)), owner))
+                .hasRootCauseInstanceOf(jakarta.validation.ConstraintViolationException.class);
+        assertThat(service.getRoomById(room, owner).description()).isNull();
     }
 
     @Test

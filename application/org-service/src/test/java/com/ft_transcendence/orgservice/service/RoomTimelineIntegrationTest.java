@@ -38,12 +38,14 @@ class RoomTimelineIntegrationTest {
     @EnableAutoConfiguration
     @EntityScan(basePackageClasses = Room.class)
     @EnableJpaRepositories(basePackageClasses = RoomRepository.class)
-    @Import({RoomService.class, DirectMessageCreationService.class, RoomTimelinePublisher.class, InternalEvents.class})
+    @Import({RoomService.class, DirectMessageCreationService.class, RoomTimelinePublisher.class, RoomEventPublisher.class, InternalEvents.class})
     static class Config {}
 
     static class InternalEvents {
         final List<RoomTimelineEvent> emitted = new ArrayList<>();
+        final List<RoomChangedEvent> changed = new ArrayList<>();
         @EventListener public void capture(RoomTimelineEvent event) { emitted.add(event); }
+        @EventListener public void captureChange(RoomChangedEvent event) { changed.add(event); }
     }
 
     @MockitoBean RabbitTemplate rabbit;
@@ -55,13 +57,14 @@ class RoomTimelineIntegrationTest {
     @Autowired ApplicationEventPublisher events;
     @Autowired PlatformTransactionManager manager;
     final List<RoomTimelineMessage> sent = new ArrayList<>();
+    final List<RoomChangedMessage> changesSent = new ArrayList<>();
     UUID owner;
     long room;
     Instant before;
 
     @BeforeEach
     void setup() {
-        internal.emitted.clear(); sent.clear();
+        clear();
         when(identity.userExists(any())).thenReturn(true);
         doAnswer(call -> {
             sent.add(call.getArgument(2));
@@ -69,8 +72,14 @@ class RoomTimelineIntegrationTest {
             return null;
         }).when(rabbit).convertAndSend(eq("guildchat.room-events"), eq("room.timeline"),
                 any(Object.class), any(MessagePostProcessor.class), any(CorrelationData.class));
+        doAnswer(call -> {
+            changesSent.add(call.getArgument(2));
+            call.getArgument(4, CorrelationData.class).getFuture().complete(new CorrelationData.Confirm(true, null));
+            return null;
+        }).when(rabbit).convertAndSend(eq("guildchat.room-events"), eq("room.changed"),
+                any(Object.class), any(MessagePostProcessor.class), any(CorrelationData.class));
         owner = UUID.randomUUID(); before = Instant.now();
-        room = service.createRoom(new CreateRoomRequest("original"), owner).id();
+        room = service.createRoom(new CreateRoomRequest("original", null), owner).id();
     }
 
     private UUID add(RoleName role) {
@@ -80,7 +89,117 @@ class RoomTimelineIntegrationTest {
         clear(); return user;
     }
 
-    private void clear() { internal.emitted.clear(); sent.clear(); }
+    private void clear() {
+        internal.emitted.clear(); internal.changed.clear(); sent.clear(); changesSent.clear();
+    }
+
+    private void assertRoomUpdated(UUID... recipients) {
+        assertThat(internal.changed).containsExactly(new RoomChangedEvent(room,
+                RoomChange.ROOM_UPDATED, java.util.Set.of(recipients)));
+        assertThat(changesSent).singleElement().satisfies(message -> {
+            assertThat(message.roomId()).isEqualTo(Long.toString(room));
+            assertThat(message.change()).isEqualTo(RoomChange.ROOM_UPDATED);
+            assertThat(message.roomDeleted()).isFalse();
+            assertThat(message.userIds()).containsExactlyInAnyOrderElementsOf(
+                    java.util.Arrays.stream(recipients).map(UUID::toString).toList());
+        });
+    }
+
+    @Test
+    void descriptionOnlyEditCommitsRoomUpdateWithoutRenameAndEmptyStringClears() {
+        for (String description : List.of("Room description", "")) {
+            clear();
+            new TransactionTemplate(manager).executeWithoutResult(status -> {
+                var response = service.updateRoom(room, new UpdateRoomRequest("original", description), owner);
+                assertThat(response.description()).isEqualTo(description);
+                assertThat(internal.changed).hasSize(1);
+                assertThat(internal.emitted).isEmpty();
+                assertThat(changesSent).isEmpty();
+                assertThat(sent).isEmpty();
+            });
+            var persisted = rooms.findById(room).orElseThrow();
+            assertThat(persisted.getName()).isEqualTo("original");
+            assertThat(persisted.getDescription()).isEqualTo(description);
+            assertRoomUpdated(owner);
+            assertThat(internal.emitted).isEmpty();
+            assertThat(sent).isEmpty();
+        }
+    }
+
+    @Test
+    void combinedEditPersistsBothFieldsAndPublishesExactlyOneCorrectRenameAfterCommit() {
+        service.updateRoom(room, new UpdateRoomRequest("original", "Old description"), owner);
+        clear();
+        new TransactionTemplate(manager).executeWithoutResult(status -> {
+            var response = service.updateRoom(room, new UpdateRoomRequest("renamed", "New description"), owner);
+            assertThat(response.name()).isEqualTo("renamed");
+            assertThat(response.description()).isEqualTo("New description");
+            assertThat(internal.emitted).hasSize(1);
+            assertThat(sent).isEmpty();
+            assertThat(changesSent).isEmpty();
+        });
+        var persisted = rooms.findById(room).orElseThrow();
+        assertThat(persisted.getName()).isEqualTo("renamed");
+        assertThat(persisted.getDescription()).isEqualTo("New description");
+        assertThat(internal.emitted).hasSize(1);
+        assertThat(sent).hasSize(1);
+        assertEvent(0, RoomTimelineType.ROOM_RENAMED, owner, null, null, null, "renamed", "original");
+        assertRoomUpdated(owner);
+    }
+
+    @Test
+    void nameOnlyEditPreservesExistingDescriptionAndPublishesRenameAndRoomUpdate() {
+        service.updateRoom(room, new UpdateRoomRequest("original", "Keep this description"), owner);
+        clear();
+        service.updateRoom(room, new UpdateRoomRequest("name only", null), owner);
+        var persisted = rooms.findById(room).orElseThrow();
+        assertThat(persisted.getName()).isEqualTo("name only");
+        assertThat(persisted.getDescription()).isEqualTo("Keep this description");
+        assertThat(internal.emitted).hasSize(1);
+        assertThat(sent).hasSize(1);
+        assertEvent(0, RoomTimelineType.ROOM_RENAMED, owner, null, null, null, "name only", "original");
+        assertRoomUpdated(owner);
+    }
+
+    @Test
+    void unchangedRequestsWithNullEqualOrAlreadyEmptyDescriptionsRejectWithoutEvents() {
+        for (String description : java.util.Arrays.asList(null, "Existing description", "")) {
+            new TransactionTemplate(manager).executeWithoutResult(status ->
+                    rooms.findById(room).orElseThrow().setDescription(description));
+            for (String requested : java.util.Arrays.asList(null, description)) {
+                clear();
+                assertThatThrownBy(() -> service.updateRoom(room,
+                        new UpdateRoomRequest("original", requested), owner))
+                        .isInstanceOf(BadRequestException.class)
+                        .hasMessage("Room name and description are unchanged");
+                assertThat(rooms.findById(room).orElseThrow().getDescription()).isEqualTo(description);
+                assertThat(internal.emitted).isEmpty(); assertThat(internal.changed).isEmpty();
+                assertThat(sent).isEmpty(); assertThat(changesSent).isEmpty();
+            }
+        }
+    }
+
+    @Test
+    void descriptionAndCombinedEditsRetainMemberAndOutsiderRestrictionsAndAdminPermission() {
+        UUID member = add(RoleName.MEMBER);
+        UUID adminUser = add(RoleName.ADMIN);
+        UUID outsider = UUID.randomUUID();
+        for (String name : List.of("original", "forbidden rename")) {
+            assertThatThrownBy(() -> service.updateRoom(room,
+                    new UpdateRoomRequest(name, "Forbidden"), member)).isInstanceOf(ForbiddenException.class);
+            assertThatThrownBy(() -> service.updateRoom(room,
+                    new UpdateRoomRequest(name, "Forbidden"), outsider)).isInstanceOf(NotFoundException.class);
+        }
+        var persisted = rooms.findById(room).orElseThrow();
+        assertThat(persisted.getName()).isEqualTo("original");
+        assertThat(persisted.getDescription()).isNull();
+        assertThat(internal.emitted).isEmpty(); assertThat(internal.changed).isEmpty();
+        assertThat(sent).isEmpty(); assertThat(changesSent).isEmpty();
+        service.updateRoom(room, new UpdateRoomRequest("original", "Admin edit"), adminUser);
+        assertThat(rooms.findById(room).orElseThrow().getDescription()).isEqualTo("Admin edit");
+        assertThat(sent).isEmpty(); assertThat(internal.emitted).isEmpty();
+        assertRoomUpdated(owner, member, adminUser);
+    }
 
     private void assertEvent(int index, RoomTimelineType type, UUID actor, UUID target,
             RoleName role, RoleName previousRole, String name, String previousName) {
@@ -110,7 +229,7 @@ class RoomTimelineIntegrationTest {
         assertEvent(2, RoomTimelineType.ROLE_CHANGED, owner, member, RoleName.ADMIN, RoleName.MEMBER, null, null);
         service.updateMemberRole(room, member, RoleName.MEMBER, owner);
         assertEvent(3, RoomTimelineType.ROLE_CHANGED, owner, member, RoleName.MEMBER, RoleName.ADMIN, null, null);
-        service.updateRoom(room, new UpdateRoomRequest("renamed"), owner);
+        service.updateRoom(room, new UpdateRoomRequest("renamed", null), owner);
         assertEvent(4, RoomTimelineType.ROOM_RENAMED, owner, null, null, null, "renamed", "original");
         assertThat(internal.emitted).extracting(RoomTimelineEvent::eventId).doesNotHaveDuplicates();
         assertThat(sent).hasSize(5);
@@ -120,7 +239,7 @@ class RoomTimelineIntegrationTest {
     void nullablePreviousNameIsPreserved() {
         new TransactionTemplate(manager).executeWithoutResult(status -> rooms.findById(room).orElseThrow().setName(null));
         clear();
-        service.updateRoom(room, new UpdateRoomRequest("named"), owner);
+        service.updateRoom(room, new UpdateRoomRequest("named", null), owner);
         assertEvent(0, RoomTimelineType.ROOM_RENAMED, owner, null, null, null, "named", null);
     }
 
@@ -146,7 +265,7 @@ class RoomTimelineIntegrationTest {
     @Test
     void ownerDeparturePreservesSendOrderAndSuccessorsActualPreviousRole() {
         for (RoleName previous : List.of(RoleName.ADMIN, RoleName.MEMBER)) {
-            if (previous == RoleName.MEMBER) room = service.createRoom(new CreateRoomRequest("another"), owner).id();
+            if (previous == RoleName.MEMBER) room = service.createRoom(new CreateRoomRequest("another", null), owner).id();
             UUID successor = add(previous);
             service.leaveRoom(room, owner);
             assertEvent(0, RoomTimelineType.MEMBER_LEFT, owner, owner, null, null, null, null);
@@ -161,7 +280,7 @@ class RoomTimelineIntegrationTest {
     void finalDepartureAndExplicitDeletionHaveNoTimeline() {
         clear(); service.leaveRoom(room, owner);
         assertThat(sent).isEmpty(); assertThat(internal.emitted).isEmpty();
-        room = service.createRoom(new CreateRoomRequest("delete"), owner).id();
+        room = service.createRoom(new CreateRoomRequest("delete", null), owner).id();
         clear(); service.deleteRoom(room);
         assertThat(sent).isEmpty(); assertThat(internal.emitted).isEmpty();
     }
@@ -177,7 +296,7 @@ class RoomTimelineIntegrationTest {
         long dm = service.createDirectMessageRoom(owner, target).id();
         service.createDirectMessageRoom(owner, target);
         service.getDirectMessageRoomsByUserId(owner);
-        service.updateRoom(dm, new UpdateRoomRequest("private"), owner);
+        service.updateRoom(dm, new UpdateRoomRequest("private", null), owner);
         service.markRoomAsRead(dm, owner);
         service.leaveRoom(dm, target);
         service.deleteRoom(dm);
@@ -190,10 +309,10 @@ class RoomTimelineIntegrationTest {
         assertThatThrownBy(() -> service.removeMember(room, member, member)).isInstanceOf(ForbiddenException.class);
         assertThatThrownBy(() -> service.removeMember(room, member, owner)).isInstanceOf(ForbiddenException.class);
         assertThatThrownBy(() -> service.addMember(room, member, UUID.randomUUID())).isInstanceOf(ForbiddenException.class);
-        assertThatThrownBy(() -> service.updateRoom(room, new UpdateRoomRequest("bad"), member)).isInstanceOf(ForbiddenException.class);
+        assertThatThrownBy(() -> service.updateRoom(room, new UpdateRoomRequest("bad", null), member)).isInstanceOf(ForbiddenException.class);
         assertThatThrownBy(() -> service.updateMemberRole(room, member, RoleName.ADMIN, member)).isInstanceOf(ForbiddenException.class);
         assertThatThrownBy(() -> service.updateMemberRole(room, member, RoleName.MEMBER, owner)).isInstanceOf(BadRequestException.class);
-        assertThatThrownBy(() -> service.updateRoom(room, new UpdateRoomRequest("original"), owner)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> service.updateRoom(room, new UpdateRoomRequest("original", null), owner)).isInstanceOf(BadRequestException.class);
         assertThat(sent).isEmpty(); assertThat(internal.emitted).isEmpty();
     }
 
@@ -211,7 +330,7 @@ class RoomTimelineIntegrationTest {
         assertThat(service.findRoleInRoom(room, owner)).contains(RoleName.OWNER);
         clear();
         new TransactionTemplate(manager).executeWithoutResult(status -> {
-            service.updateRoom(room, new UpdateRoomRequest("committed"), owner);
+            service.updateRoom(room, new UpdateRoomRequest("committed", null), owner);
             assertThat(internal.emitted).hasSize(1);
             assertThat(sent).isEmpty();
         });

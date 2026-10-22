@@ -116,7 +116,7 @@ class RoomServiceEventsTest {
         when(saved.getType()).thenReturn(RoomType.GROUP);
         when(roomRepository.save(any())).thenReturn(saved);
 
-        roomService.createRoom(new CreateRoomRequest("general"), OWNER);
+        roomService.createRoom(new CreateRoomRequest("general", null), OWNER);
 
         assertThat(published()).containsExactly(
                 new RoomChangedEvent(ROOM, RoomChange.ROOM_ADDED, Set.of(OWNER)));
@@ -128,7 +128,7 @@ class RoomServiceEventsTest {
         when(roomRepository.findByTypeAndDmUser1AndDmUser2(any(), any(), any())).thenReturn(Optional.empty());
         when(identity.userExists(BOB)).thenReturn(true);
         when(dmCreation.createDirectMessageRoom(any(), any(), eq(OWNER), eq(BOB)))
-                .thenReturn(new RoomResponse(ROOM, null, null, RoomType.DM, null, BOB));
+                .thenReturn(new RoomResponse(ROOM, null, null, null, RoomType.DM, null, BOB));
 
         roomService.createDirectMessageRoom(OWNER, BOB);
 
@@ -232,7 +232,7 @@ class RoomServiceEventsTest {
         isAdmin(OWNER);
         membersAre(OWNER, BOB);
 
-        roomService.updateRoom(ROOM, new UpdateRoomRequest("new"), OWNER);
+        roomService.updateRoom(ROOM, new UpdateRoomRequest("new", null), OWNER);
 
         assertThat(published()).containsExactly(
                 new RoomChangedEvent(ROOM, RoomChange.ROOM_UPDATED, Set.of(OWNER, BOB)));

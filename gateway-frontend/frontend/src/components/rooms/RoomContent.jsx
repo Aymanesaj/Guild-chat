@@ -358,6 +358,7 @@ function RoomContent({
   roomChat,
   state,
   roomName,
+  roomDescription,
   isDm,
   peer,
   messagesById,
@@ -432,6 +433,7 @@ function RoomContent({
               {!hasOlder && !loadingOlder && !olderError && (
                 <ConversationIntro
                   roomName={roomName}
+                  roomDescription={roomDescription}
                   isDm={isDm}
                   peer={peer}
                   isEmpty={roomChat.length === 0}
