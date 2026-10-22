@@ -1,6 +1,7 @@
 import { buildQuery, jsonBody, request } from "./http";
 import { getCurrentUserId } from "./tokens";
 import { resolveUsers } from "./users";
+import { validateRoomDetails } from "../utils/roomValidation";
 
 /**
  * Rooms, DMs, members and roles are owned by org-service (gateway prefix
@@ -14,6 +15,7 @@ function normalizeRoom(room) {
   return {
     id: room.id,
     name: room.name ?? null,
+    description: room.description ?? "",
     type: String(room.type || "").toLowerCase(), // "dm" | "group"
     created_at: room.createdAt ?? null,
     updated_at: room.updatedAt ?? null,
@@ -76,13 +78,35 @@ async function getDmRooms() {
   return withPeers((rooms || []).map(normalizeRoom));
 }
 
-export async function createRoom(name) {
+export async function createRoom(name, description = "") {
+  const error = validateRoomDetails(name, description);
+  if (error) throw new Error(error);
   const room = await request(
     ROOMS,
-    { method: "POST", ...jsonBody({ name }) },
+    { method: "POST", ...jsonBody({ name, description }) },
     "Failed to create room",
   );
   return normalizeRoom(room);
+}
+
+/** Owner/admin only. A missing description preserves its current value. */
+export async function updateRoom(roomId, name, description) {
+  const error = validateRoomDetails(name, description);
+  if (error) throw new Error(error);
+  const room = await request(
+    `${ROOMS}/${roomId}`,
+    { method: "PATCH", ...jsonBody({ name, description }) },
+    "Failed to update room",
+  );
+  return normalizeRoom(room);
+}
+
+export async function leaveRoom(roomId) {
+  return request(
+    `${ROOMS}/${roomId}/members/me`,
+    { method: "DELETE" },
+    "Failed to leave room",
+  );
 }
 
 /** Read-only: reuse an existing DM, or open a local conversation until Send. */

@@ -6,6 +6,7 @@ import { TbHash, TbLogout, TbMessageCircle, TbPlus } from "react-icons/tb";
 import { useProfileOverlay } from "./ProfileOverlayContext";
 import { createRoom } from "../../api/rooms";
 import CreateRoomInput from "./CreateRoomInput";
+import RoomOptionsButton from "./RoomOptionsButton";
 import { useAvatarUrl } from "../../hooks/useAvatarUrl";
 import { Avatar, IconButton, InlineError, StatusText } from "../ui";
 
@@ -123,6 +124,20 @@ const DirectMessagesSection = styled.section`
   padding-top: var(--space-4);
 `;
 
+const RoomRow = styled.div`
+  position: relative;
+
+  > button:first-child {
+    padding-right: 38px;
+  }
+
+  &:hover .room-options-trigger,
+  &:focus-within .room-options-trigger {
+    opacity: 1;
+    pointer-events: auto;
+  }
+`;
+
 const ProfilePreviewBox = styled.div`
   display: flex;
   align-items: center;
@@ -189,6 +204,8 @@ function Sidebar({
   rooms,
   roomsState,
   onRoomCreated,
+  onRoomUpdated,
+  onRoomLeft,
   onRoomChange,
   onDirectMessages,
   onLogout
@@ -196,9 +213,9 @@ function Sidebar({
   const [createOpen, setCreateOpen] = useState(false);
   const toast = useToast();
 
-  async function handleCreateRoom(name) {
+  async function handleCreateRoom(name, description) {
     try {
-      const newRoom = await createRoom(name);
+      const newRoom = await createRoom(name, description);
       // Shown straight away rather than waiting for a refetch, which also stops the
       // navigation below from landing on a room the list doesn't have yet.
       onRoomCreated(newRoom);
@@ -224,6 +241,8 @@ function Sidebar({
         isDirectMessages={isDirectMessages}
         activeRoomId={activeRoomId}
         onRoomChange={onRoomChange}
+        onRoomUpdated={onRoomUpdated}
+        onRoomLeft={onRoomLeft}
         state={roomsState}
         onCreate={() => setCreateOpen((s) => !s)}
         createOpen={createOpen}
@@ -252,6 +271,7 @@ function SidebarHeader() {
 
 function RoomsSection({
   rooms, isDirectMessages, activeRoomId, onRoomChange, state,
+  onRoomUpdated, onRoomLeft,
   onCreate, createOpen, onSubmitCreate, onCancelCreate,
 }) {
   return (
@@ -284,6 +304,8 @@ function RoomsSection({
             room={room}
             active={!isDirectMessages && activeRoomId === room.id}
             onClick={() => onRoomChange(room)}
+            onRoomUpdated={onRoomUpdated}
+            onRoomLeft={onRoomLeft}
           />
         ))}
       </RoomListNav>
@@ -308,18 +330,21 @@ function SectionTitle({ title, actionLabel, onCreate }) {
   );
 }
 
-function RoomButton({ room, active, onClick }) {
+function RoomButton({ room, active, onClick, onRoomUpdated, onRoomLeft }) {
   return (
-    <NavItemButton
-      type="button"
-      $active={active}
-      data-active={active}
-      onClick={onClick}
-      title={room.name}
-    >
-      <TbHash size={18} />
-      <span>{room.name}</span>
-    </NavItemButton>
+    <RoomRow>
+      <NavItemButton
+        type="button"
+        $active={active}
+        data-active={active}
+        onClick={onClick}
+        title={room.description ? `${room.name} — ${room.description}` : room.name}
+      >
+        <TbHash size={18} />
+        <span>{room.name}</span>
+      </NavItemButton>
+      <RoomOptionsButton room={room} onRoomUpdated={onRoomUpdated} onRoomLeft={onRoomLeft} />
+    </RoomRow>
   );
 }
 

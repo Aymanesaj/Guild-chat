@@ -42,7 +42,7 @@ const Bio = styled.p`
   white-space: pre-wrap;
 `;
 
-function ConversationIntro({ roomName, isDm, peer, isEmpty }) {
+function ConversationIntro({ roomName, roomDescription, isDm, peer, isEmpty }) {
   const [profile, setProfile] = useState(null);
   const peerId = isDm ? peer?.id : null;
 
@@ -60,7 +60,7 @@ function ConversationIntro({ roomName, isDm, peer, isEmpty }) {
   const user = profile?.id === peerId ? profile : peer;
   const username = user?.username || roomName;
   const displayName = user?.display_name?.trim() || username;
-  const bio = user?.bio?.trim();
+  const description = isDm ? user?.bio?.trim() : roomDescription?.trim();
 
   return (
     <Intro aria-label="Beginning of conversation">
@@ -71,7 +71,7 @@ function ConversationIntro({ roomName, isDm, peer, isEmpty }) {
       )}
       <h3>{isDm ? displayName : `#${roomName}`}</h3>
       {isDm && displayName !== username && <Username>@{username}</Username>}
-      {isDm && bio && <Bio>{bio}</Bio>}
+      {description && <Bio>{description}</Bio>}
       <p>
         {isDm
           ? `This is the beginning of your conversation with ${username}.`
