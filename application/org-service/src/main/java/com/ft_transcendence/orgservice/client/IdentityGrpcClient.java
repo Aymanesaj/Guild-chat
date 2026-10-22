@@ -25,7 +25,7 @@ public class IdentityGrpcClient {
                 .usePlaintext()
                 .build();
 
-        this.stoub = IdentityServiceGrpc.newBlockingStub(channel);
+        this.stub = IdentityServiceGrpc.newBlockingStub(channel);
     }
 
     public ValidateTokenResponse validateToken(String token) {
