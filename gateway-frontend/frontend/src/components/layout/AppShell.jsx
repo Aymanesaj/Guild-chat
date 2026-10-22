@@ -12,7 +12,9 @@ import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { PHONE_QUERY } from "../../constants/breakpoints";
 import { connectChat, onRoomEvent } from "../../api/messages";
-import { getRooms } from "../../api/rooms";
+import { getRoom, getRooms } from "../../api/rooms";
+import { useSocketNotifications } from "../../hooks/useSocketNotifications";
+import { useToast } from "../ui/ToastProvider";
 
 const AppShellRoot = styled.div`
   display: flex;
@@ -42,14 +44,18 @@ const MainContent = styled.main`
 `;
 
 function AppShellContent({ onLogout }) {
+  const toast = useToast();
   const [isDirectMessages, setIsDirectMessages] = useState(true);
   const [activeRoomId, setActiveRoomId] = useState(null);
 
   const isPhone = useMediaQuery(PHONE_QUERY);
   const [isNavOpen, setIsNavOpen] = useState(false);
 
-  const { profile, closeProfile, previewUser, closeUserPreview } =
+  const { currentUser, profile, profileNavigation, openProfile, closeProfile, previewUser, closeUserPreview } =
     useProfileOverlay();
+
+  const navigationSeq = useRef(0);
+  useEffect(() => () => { navigationSeq.current += 1; }, []);
 
   const [rooms, setRooms] = useState([]);
   const [roomsState, setRoomsState] = useState("loading");
@@ -125,15 +131,49 @@ function AppShellContent({ onLogout }) {
   useEscapeKey(closeNav, isPhone && isNavOpen && !profile && !previewUser);
 
   const handleRoomChange = useCallback((roomId) => {
+    navigationSeq.current += 1;
     setActiveRoomId(roomId);
     setIsDirectMessages(false);
     setIsNavOpen(false);
   }, []);
 
   const handleDirectMessages = useCallback(() => {
+    navigationSeq.current += 1;
     setIsDirectMessages(true);
     setIsNavOpen(false);
   }, []);
+
+  const navigateNotification = async (destination) => {
+    const seq = ++navigationSeq.current;
+    try {
+      if (destination.type === "profile") {
+        closeUserPreview();
+        setIsNavOpen(false);
+        await openProfile({ tab: destination.tab });
+      } else if (destination.type === "room") {
+        const room = await getRoom(destination.roomId);
+        if (seq !== navigationSeq.current) return;
+        if (room.type === "group") {
+          // A new-room notification can be clicked before the room-list refresh finishes.
+          mutationSeq.current += 1;
+          setRooms((previous) => [room, ...previous.filter((item) => item.id !== room.id)]);
+          setRoomsState("success");
+          loadRooms();
+        }
+        closeProfile();
+        closeUserPreview();
+        handleRoomChange(room);
+      } else if (destination.type === "conversations") {
+        closeProfile();
+        closeUserPreview();
+        handleDirectMessages();
+      }
+    } catch (error) {
+      if (seq === navigationSeq.current) toast.error(error?.message || "Couldn't open this notification.");
+    }
+  };
+
+  useSocketNotifications(currentUser?.id, isDirectMessages ? null : activeRoomId?.id, navigateNotification, rooms);
 
   // A first send may finish after navigation. Replace only its own draft and
   // keep whichever view the user has since chosen.
@@ -201,7 +241,9 @@ function AppShellContent({ onLogout }) {
 
         {profile && (
           <ProfileOverlay
+            key={profileNavigation.id}
             user={profile}
+            initialTab={profileNavigation.tab}
             onClose={closeProfile}
           />
         )}

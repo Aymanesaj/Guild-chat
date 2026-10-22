@@ -9,6 +9,7 @@ export function ProfileOverlayProvider({ user, children }) {
   const [profile, setProfile] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [previewUser, setPreviewUser] = useState(null);
+  const [profileNavigation, setProfileNavigation] = useState({ tab: "friends", id: 0 });
 
   async function fetchCurrentUser() {
     const user = await getMe();
@@ -28,8 +29,9 @@ export function ProfileOverlayProvider({ user, children }) {
     }
   }
 
-  async function openProfile() {
+  async function openProfile({ tab = "friends" } = {}) {
     await refreshProfile();
+    setProfileNavigation((previous) => ({ tab, id: previous.id + 1 }));
   }
 
   function closeProfile() {
@@ -49,6 +51,7 @@ export function ProfileOverlayProvider({ user, children }) {
       value={{
         currentUser,
         profile,
+        profileNavigation,
         loadingProfile,
         openProfile,
         closeProfile,

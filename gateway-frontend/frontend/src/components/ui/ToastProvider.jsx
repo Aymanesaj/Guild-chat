@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import styled, { keyframes } from "styled-components";
-import { TbAlertCircle, TbCircleCheck, TbX } from "react-icons/tb";
+import { TbAlertCircle, TbBell, TbCircleCheck, TbX } from "react-icons/tb";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { PHONE_QUERY } from "../../constants/breakpoints";
 
@@ -10,8 +10,8 @@ const MAX_TOASTS = 4;
 const EXIT_MS = 180;
 
 /**
- * Shared feedback surface for actions and future notification events.
- * useToast().error(message) / .success(message) return a dismissible ID.
+ * Shared feedback surface for actions and live notifications.
+ * useToast().error(message) / .success(message) / .info(message) return a dismissible ID.
  * .notify({ id, message, type, duration }) deduplicates IDs; duration: 0 persists.
  */
 export function ToastProvider({ children }) {
@@ -25,12 +25,13 @@ export function ToastProvider({ children }) {
     setToasts((current) => current.filter((toast) => toast.id !== id));
   }, []);
 
-  const notify = useCallback(({ message, type = "success", duration, id }) => {
+  const notify = useCallback(({ message, type = "success", duration, id, onActivate }) => {
     if (!message) return;
     const toast = {
       id: id ?? `toast-${++nextId.current}`,
       message,
       type,
+      onActivate,
       duration: duration ?? (type === "error" ? 6500 : 4500),
     };
     setToasts((current) => {
@@ -44,6 +45,7 @@ export function ToastProvider({ children }) {
     notify,
     error: (message, options) => notify({ ...options, message, type: "error" }),
     success: (message, options) => notify({ ...options, message, type: "success" }),
+    info: (message, options) => notify({ ...options, message, type: "info" }),
     dismiss,
   }), [notify, dismiss]);
 
@@ -72,7 +74,7 @@ function Toast({ toast, onDismiss }) {
   const [exiting, setExiting] = useState(false);
   const remaining = useRef(toast.duration);
   const isError = toast.type === "error";
-  const Icon = isError ? TbAlertCircle : TbCircleCheck;
+  const Icon = isError ? TbAlertCircle : toast.type === "info" ? TbBell : TbCircleCheck;
 
   useEffect(() => {
     if (!toast.duration || hovered || focused || exiting) return;
@@ -92,7 +94,7 @@ function Toast({ toast, onDismiss }) {
 
   return (
     <ToastCard
-      $error={isError}
+      $type={toast.type}
       $exiting={exiting}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -101,9 +103,20 @@ function Toast({ toast, onDismiss }) {
         if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
       }}
     >
-      <Icon size={18} aria-hidden="true" />
       <ToastContent role={isError ? "alert" : "status"} aria-atomic="true">
-        {toast.message}
+        <ToastBody
+          as={toast.onActivate ? "button" : "div"}
+          type={toast.onActivate ? "button" : undefined}
+          $actionable={Boolean(toast.onActivate)}
+          onClick={toast.onActivate ? () => {
+            if (exiting) return;
+            setExiting(true);
+            toast.onActivate();
+          } : undefined}
+        >
+          <Icon size={18} aria-hidden="true" />
+          <span>{toast.message}</span>
+        </ToastBody>
       </ToastContent>
       <CloseButton type="button" onClick={() => setExiting(true)} aria-label="Dismiss notification">
         <TbX size={16} aria-hidden="true" />
@@ -153,7 +166,7 @@ const Viewport = styled.section`
 `;
 
 const ToastCard = styled.div`
-  --toast-color: ${({ $error }) => $error ? "var(--danger)" : "var(--success)"};
+  --toast-color: ${({ $type }) => $type === "error" ? "var(--danger)" : $type === "info" ? "var(--info)" : "var(--success)"};
   display: flex;
   flex-shrink: 0;
   align-items: center;
@@ -168,7 +181,6 @@ const ToastCard = styled.div`
   animation: ${({ $exiting }) => $exiting ? fadeAway : fadeUp}
     ${({ $exiting }) => $exiting ? `${EXIT_MS}ms` : "240ms"} var(--ease) both;
 
-  > svg { flex-shrink: 0; color: var(--toast-color); }
 `;
 
 const ToastContent = styled.div`
@@ -177,6 +189,26 @@ const ToastContent = styled.div`
   font-size: var(--text-sm);
   color: var(--text-primary);
   overflow-wrap: anywhere;
+`;
+
+const ToastBody = styled.div`
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: ${({ $actionable }) => $actionable ? "pointer" : "inherit"};
+
+  > svg { flex-shrink: 0; color: var(--toast-color); }
+  > span { min-width: 0; }
+  &:hover > span { text-decoration: ${({ $actionable }) => $actionable ? "underline" : "none"}; }
+  &:focus-visible { outline-color: var(--toast-color); }
 `;
 
 const CloseButton = styled.button`

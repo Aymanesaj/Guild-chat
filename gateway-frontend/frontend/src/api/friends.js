@@ -1,5 +1,7 @@
 import { jsonBody, request } from "./http";
 import { normalizeUser, rememberUser, resolveUsers } from "./users";
+import { getCurrentUserId } from "./tokens";
+import { rememberFriendRequestDirection } from "../utils/friendRequestDirections";
 
 // identity-service's /friends, reached through the gateway's /api/users/ prefix.
 const FRIENDS = "/api/users/friends";
@@ -11,8 +13,16 @@ function page(items, { limit, offset = 0 } = {}) {
 
 async function listPending() {
   // -> { incoming: FriendRequest[], outgoing: FriendRequest[] }
+  const userId = getCurrentUserId();
   const data = await request(`${FRIENDS}/requests`, {}, "Failed to fetch friend requests");
+  data?.incoming?.forEach((item) => rememberFriendRequestDirection(item.id, "incoming", userId));
+  data?.outgoing?.forEach((item) => rememberFriendRequestDirection(item.id, "outgoing", userId));
   return { incoming: data?.incoming ?? [], outgoing: data?.outgoing ?? [] };
+}
+
+/** Prime direction for both sides of socket notifications without resolving profiles. */
+export async function loadFriendRequestDirections() {
+  await listPending();
 }
 
 export async function getFriendsList(options) {
@@ -74,14 +84,19 @@ export async function getFriendshipStatus(userId) {
 }
 
 export async function sendFriendRequest(userId) {
-  return request(
+  const requesterId = getCurrentUserId();
+  const friendship = await request(
     `${FRIENDS}/requests`,
     { method: "POST", ...jsonBody({ addresseeId: userId }) },
     "Failed to send friend request",
   );
+  rememberFriendRequestDirection(friendship?.id, "outgoing", requesterId);
+  return friendship;
 }
 
 export async function acceptFriendRequest(requestId) {
+  // Record before POST: the socket echo can arrive before the HTTP response.
+  rememberFriendRequestDirection(requestId, "incoming");
   return request(
     `${FRIENDS}/requests/${requestId}/accept`,
     { method: "POST" },

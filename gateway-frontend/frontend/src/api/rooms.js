@@ -72,6 +72,13 @@ export async function getRooms() {
   return (rooms || []).map(normalizeRoom);
 }
 
+/** Resolve a notification's room, including the peer for a direct conversation. */
+export async function getRoom(roomId) {
+  const room = await request(`${ROOMS}/${encodeURIComponent(roomId)}`, {}, "This room is no longer available");
+  const [resolved] = await withPeers([normalizeRoom(room)]);
+  return resolved;
+}
+
 /** GET /rooms/dm — the caller's DM rooms, each with its peer resolved. */
 async function getDmRooms() {
   const rooms = await request(DM_ROOMS, {}, "Failed to fetch conversations");
