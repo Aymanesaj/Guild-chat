@@ -1,6 +1,19 @@
 import { prisma } from "../database/prisma.js";
 import { UpdateUserData } from "../types/user.types.js";
 
+
+export function findUserAvatarById(userId: string) {
+  return prisma.user.findUnique({
+    where: {
+      id: userId,
+    },
+    select: {
+      id: true,
+      avatarMediaId: true,
+    },
+  });
+}
+
 export async function usernameExists(
   username: string
 ): Promise<boolean> {
