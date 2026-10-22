@@ -26,7 +26,7 @@ const RoomMain = styled.div`
   min-width: 0;
 `;
 
-function RoomView({ roomId, roomName, isDm, peer, draft, onDraftChange }) {
+function RoomView({ roomId, roomName, isDm, peer, draft, onDraftChange, onSendDraft }) {
   const { isPhone, isNavOpen, closeNav } = useNavDrawer();
   const { profile, previewUser } = useProfileOverlay();
 
@@ -61,6 +61,17 @@ function RoomView({ roomId, roomName, isDm, peer, draft, onDraftChange }) {
     messages, messagesById, state, sending, send, edit, remove,
     hasOlder, loadingOlder, olderError, loadOlder,
   } = useRoomMessages(roomId);
+
+  const [initializingDm, setInitializingDm] = useState(false);
+  const handleSend = async (content, replyToId) => {
+    if (!onSendDraft) return send(content, replyToId);
+    setInitializingDm(true);
+    try {
+      await onSendDraft(content);
+    } finally {
+      setInitializingDm(false);
+    }
+  };
 
   // Read once per view, not once per message row.
   const currentUserId = useMemo(() => getCurrentUserId(), []);
@@ -115,8 +126,8 @@ function RoomView({ roomId, roomName, isDm, peer, draft, onDraftChange }) {
           text={draft}
           onTextChange={onDraftChange}
           focusEnabled={!profile && !previewUser && !isMembersOpen && !(isPhone && isNavOpen)}
-          onSend={send}
-          disabled={sending}
+          onSend={handleSend}
+          disabled={sending || initializingDm}
           replyingTo={replyingTo}
           onCancelReply={() => setReplyingTo(null)}
         />

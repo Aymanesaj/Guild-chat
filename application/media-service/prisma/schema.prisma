@@ -1,0 +1,67 @@
+generator client {
+  provider               = "prisma-client"
+  output                 = "../src/generated/prisma"
+  moduleFormat           = "esm"
+  generatedFileExtension = "ts"
+  importFileExtension    = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MediaPurpose {
+  AVATAR
+  CHAT_IMAGE
+}
+
+enum CallerService {
+  IDENTITY
+  CHAT
+}
+
+enum UploadStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+  EXPIRED
+  DELETED
+}
+
+model MediaUpload {
+  id                 String        @id @default(uuid()) @db.Uuid
+  purpose            MediaPurpose
+  callerService      CallerService
+  ownerId            String
+  claimedContentType String
+  temporaryKey       String        @unique
+  status             UploadStatus  @default(PENDING)
+
+  expiresAt           DateTime
+  processingStartedAt DateTime?
+  processingToken     String?   @db.Uuid
+
+  finalKey         String? @unique
+  finalContentType String?
+  width            Int?
+  height           Int?
+  sizeBytes        Int?
+
+  errorCode           String?
+  tempCleanupPending  Boolean @default(false)
+  finalCleanupPending Boolean @default(false)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+  deletedAt   DateTime?
+
+  candidateKey       String?   @unique
+  orphanCleanupAfter DateTime?
+
+  @@index([status, finalCleanupPending, orphanCleanupAfter])
+  @@index([status, expiresAt])
+  @@index([status, processingStartedAt])
+  @@index([callerService, ownerId, purpose])
+}

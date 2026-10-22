@@ -85,7 +85,7 @@ import jakarta.annotation.PreDestroy;
         } catch( StatusRuntimeException e)
     {
             Status.Code code = e.getStatus().getCode();
-            
+
             // org-service returns NOT_FOUND / INVALID_ARGUMENT for
             // unknown/invalid rooms: not a membership, but not an outage.
             if (code == Status.Code.NOT_FOUND || code == Status.Code.INVALID_ARGUMENT) {

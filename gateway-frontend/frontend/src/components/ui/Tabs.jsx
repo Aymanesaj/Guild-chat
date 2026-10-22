@@ -7,7 +7,7 @@ export const TabList = styled.div`
   border-bottom: 1px solid var(--border-subtle);
 `;
 
-export const Tab = styled.button`
+const Tab = styled.button`
   position: relative;
   border: 0;
   background: transparent;

@@ -19,7 +19,7 @@ export async function updateProfile({ display_name, username, bio } = {}) {
  * identity stores `avatarUrl` as a gateway path (/api/users/avatars/<file>);
  * bare filenames are still accepted for safety.
  */
-export function avatarUrl(avatar) {
+function avatarUrl(avatar) {
   if (!avatar) return null;
   if (avatar.startsWith("/") || /^https?:\/\//.test(avatar)) return avatar;
   return `${API_BASE}/avatars/${encodeURIComponent(avatar)}`;

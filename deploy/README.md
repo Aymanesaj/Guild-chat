@@ -2,6 +2,9 @@
 
 This directory contains the scripts used to bootstrap an **Oracle Cloud Infrastructure (OCI) Free Tier Compute instance** and automate deployments using GitHub Actions.
 
+For private R2 storage and the internal Media service, see
+[Media setup](media/README.md).
+
 ---
 
 ## 1. OCI Instance Recommendation

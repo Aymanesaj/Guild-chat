@@ -1,5 +1,6 @@
 package com.ft_transcendence.orgservice.service;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
@@ -32,6 +33,7 @@ import com.ft_transcendence.orgservice.repository.RoleRepository;
 import com.ft_transcendence.orgservice.repository.RoomMemberRepository;
 import com.ft_transcendence.orgservice.repository.RoomRepository;
 import com.ft_transcendence.orgservice.messaging.RoomChange;
+import com.ft_transcendence.orgservice.messaging.RoomTimelineType;
 
 @Service
 public class RoomService {
@@ -71,6 +73,14 @@ public class RoomService {
             return;
         }
         events.publishEvent(new RoomChangedEvent(roomId, change, Set.copyOf(userIds)));
+    }
+
+    private void publishTimeline(Room room, RoomTimelineType type, UUID actorId, UUID targetId,
+            RoleName role, RoleName previousRole, String name, String previousName) {
+        if (room.getType() == RoomType.GROUP) {
+            events.publishEvent(new RoomTimelineEvent(UUID.randomUUID(), 1, type, room.getId(),
+                    actorId, targetId, role, previousRole, name, previousName, Instant.now()));
+        }
     }
 
     /**
@@ -149,7 +159,7 @@ public class RoomService {
 
     @Transactional
     public void updateMemberRole(Long roomId, UUID targetUserId, RoleName newRoleName, UUID actorId) {
-        lockRoom(roomId);
+        Room room = lockRoom(roomId);
         if (!isUserInRoom(roomId, actorId)) {
             throw new NotFoundException("Room not found with id: " + roomId);
         }
@@ -194,8 +204,11 @@ public class RoomService {
             throw new BadRequestException("New role is the same as the current role");
         }
 
+        RoleName previousRole = memberRole.getRole().getName();
         memberRole.setRole(newRole);
         memberRoleRepository.save(memberRole);
+        publishTimeline(room, RoomTimelineType.ROLE_CHANGED, actorId, targetUserId,
+                newRoleName, previousRole, null, null);
         // Everyone's member list shows roles, and the target's permissions changed.
         publishRoomChange(roomId, RoomChange.ROOM_UPDATED, memberIds(roomId));
     }
@@ -212,15 +225,21 @@ public class RoomService {
             throw new ForbiddenException("User does not have permission to update this room");
         }
 
-        if (java.util.Objects.equals(room.getName(), request.name())
-                && (request.description() == null
-                    || java.util.Objects.equals(room.getDescription(), request.description()))) {
+        String previousName = room.getName();
+        boolean nameChanged = !java.util.Objects.equals(previousName, request.name());
+        boolean descriptionChanged = request.description() != null
+                && !java.util.Objects.equals(room.getDescription(), request.description());
+        if (!nameChanged && !descriptionChanged) {
             throw new BadRequestException("Room name and description are unchanged");
         }
 
         room.setName(request.name());
         if (request.description() != null) {
             room.setDescription(request.description());
+        }
+        if (nameChanged) {
+            publishTimeline(room, RoomTimelineType.ROOM_RENAMED, userId, null,
+                    null, null, request.name(), previousName);
         }
         publishRoomChange(roomId, RoomChange.ROOM_UPDATED, memberIds(roomId));
 
@@ -303,11 +322,15 @@ public class RoomService {
             throw new ForbiddenException("Cannot remove the OWNER from the room");
         }
 
-        leaveRoom(roomId, targetUserId);
+        departRoom(roomId, targetUserId, actorId);
     }
 
     @Transactional
     public void leaveRoom(Long roomId, UUID userId) {
+        departRoom(roomId, userId, userId);
+    }
+
+    private void departRoom(Long roomId, UUID userId, UUID actorId) {
         Room room = lockRoom(roomId);
         RoomMember roomMember = roomMemberRepository
                 .findByRoomIdAndUserId(roomId, userId)
@@ -318,6 +341,8 @@ public class RoomService {
                 );
 
         boolean removeRoom = false;
+        UUID successorId = null;
+        RoleName successorPreviousRole = null;
 
         if (memberRoleRepository
                 .existsByRoomMemberRoomIdAndRoomMemberUserIdAndRoleName(
@@ -341,6 +366,8 @@ public class RoomService {
                         .orElseThrow(() -> new IllegalStateException("Room has no eligible successor"));
                 Role ownerRole = roleRepository.findByRoomIdAndName(roomId, RoleName.OWNER)
                         .orElseThrow(() -> new IllegalStateException("OWNER role not found for room: " + roomId));
+                successorId = successor.getRoomMember().getUserId();
+                successorPreviousRole = successor.getRole().getName();
                 successor.setRole(ownerRole);
                 memberRoleRepository.save(successor);
             } else {
@@ -354,6 +381,12 @@ public class RoomService {
         if (removeRoom) {
             deleteRoom(roomId);
         } else {
+            publishTimeline(room, actorId.equals(userId) ? RoomTimelineType.MEMBER_LEFT
+                    : RoomTimelineType.MEMBER_KICKED, actorId, userId, null, null, null, null);
+            if (successorId != null) {
+                publishTimeline(room, RoomTimelineType.OWNERSHIP_TRANSFERRED, userId, successorId,
+                        RoleName.OWNER, successorPreviousRole, null, null);
+            }
             publishRoomChange(roomId, RoomChange.ROOM_UPDATED, memberIds(roomId));
         }
     }
@@ -401,6 +434,8 @@ public class RoomService {
         memberRoleAssignment.setRole(memberRole);
         memberRoleRepository.save(memberRoleAssignment);
 
+        publishTimeline(room, RoomTimelineType.MEMBER_JOINED, actorId, targetUserId,
+                null, null, null, null);
         Set<UUID> others = memberIds(roomId);
         others.remove(targetUserId);
         publishRoomChange(roomId, RoomChange.ROOM_ADDED, List.of(targetUserId));
@@ -559,6 +594,8 @@ public class RoomService {
         memberRoleAssignment.setRole(ownerRole);
         memberRoleRepository.save(memberRoleAssignment);
 
+        publishTimeline(savedRoom, RoomTimelineType.ROOM_CREATED, creatorId, null,
+                null, null, savedRoom.getName(), null);
         // The creator's other tabs and devices: the creating tab already
         // inserts the room locally.
         publishRoomChange(savedRoom.getId(), RoomChange.ROOM_ADDED, List.of(creatorId));

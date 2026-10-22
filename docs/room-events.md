@@ -1,9 +1,14 @@
 # Org → Chat room events
 
+> These events refresh users' room lists. What happened *inside* a room (joins,
+> kicks, role changes, renames) for the message history is a separate event, see
+> [room-timeline-events.md](room-timeline-events.md).
+
 Org records an internal `RoomChangedEvent` inside the room mutation transaction.
 `RoomEventPublisher` runs only AFTER_COMMIT (no nontransactional fallback), declares
-the durable topology, sends persistent JSON with mandatory routing, and waits up to
-5 seconds for the correlated broker confirm. A return (`NO_ROUTE`), nack, timeout,
+the durable topology through RabbitAdmin on connection, sends persistent JSON with
+mandatory routing, and checks the correlated broker confirm asynchronously with a
+5-second default timeout. A return (`NO_ROUTE`), nack, timeout,
 or connection/declaration failure is logged as an error **after the mutation has
 committed**; it does not fail the business response. A confirm acknowledges broker
 acceptance, not Chat processing or browser receipt.
@@ -93,7 +98,7 @@ replay worker. Investigate failures before any deliberate replay.
 | `RABBITMQ_DEFAULT_PASS` | Required broker password; passed by Compose to both services |
 | `RABBITMQ_HOST` | Optional hostname override; default `rabbitmq` |
 | `spring.rabbitmq.port` | Internal AMQP port, 5672 |
-| `room-events.confirm-timeout-ms` | Org confirm wait; default 5000 |
+| `room-events.confirm-timeout-ms` | Org asynchronous confirm timeout; default 5000 |
 
 Both services enable correlated publisher confirms, publisher returns, and
 mandatory sends. Chat's listener acknowledgement and retry settings are explicit
@@ -107,8 +112,9 @@ loopback port rather than exposing the application broker.
 
 There is **no outbox or publishing worker**. A process crash after database commit,
 or any publication failure, can lose the notification permanently. Publication
-waits in the request's after-commit callback; slow broker/declaration/confirm paths
-can delay the response even though the mutation has already committed. A timeout
+runs in the request's after-commit callback; synchronous connection, topology
+declaration and send work can delay the response even though the mutation has
+already committed. Confirmation checks do not block the request thread. A timeout
 is an unknown outcome: the broker may already have accepted the message.
 
 Retries/redelivery may repeat socket notifications or cache invalidation; there is
@@ -218,3 +224,118 @@ protobuf generation and gRPC dependencies for the active identity and Org RPCs.
 > MongoDB room-scoped deletion. See docs/room-events.md for the schema, test
 > commands and reliability limits: no outbox, duplicates possible, no guaranteed
 > browser delivery. No live credentials or application data changed.
+
+## Group room timeline contract (Org publisher)
+
+Timeline events supplement `room.changed`; its JSON, recipients, routing,
+`roomDeleted` semantics and transport are unchanged. Chat's timeline consumer,
+system-message storage and frontend rendering are intentionally out of scope.
+
+Org declares a durable, non-auto-delete direct exchange `guildchat.room-events`
+and a durable, non-exclusive, non-auto-delete queue
+`guildchat.chat-service.room-timeline`, bound with `room.timeline`. The new queue
+has no arguments (including no DLX or queue-type override). Existing Chat queue
+settings stay compatible and unchanged. This queues timeline messages before
+Chat starts. Org's RabbitAdmin declares topology on connection; the timeline
+listener also calls `initialize()` before each send. Declaration exceptions are
+caught along with immediate send failures. Connection, declaration and send run
+synchronously in the after-commit callback; there is no publishing worker.
+
+Messages are persistent UTF-8 `application/json`, with no `__TypeId__` header.
+AMQP `messageId` equals `eventId`. The payload always has exactly these 11 explicit
+camelCase properties, including nulls regardless of global Jackson inclusion:
+
+```json
+{
+  "eventId": "1c3658ea-c5ef-440a-8820-a08d30db4846",
+  "version": 1,
+  "type": "MEMBER_KICKED",
+  "roomId": "42",
+  "actorId": "a215c5f8-d810-4518-ad4c-8d551eb6dfc4",
+  "targetId": "b7c1d2e3-0000-4000-8000-000000000002",
+  "role": null,
+  "previousRole": null,
+  "name": null,
+  "previousName": null,
+  "occurredAt": "2026-10-21T12:34:56.123Z"
+}
+```
+
+`eventId` is a fresh random UUID per event; retransmitting the same internal
+snapshot preserves its ID. `version` is integer 1. `roomId` remains a positive
+decimal string in the signed 64-bit range. `actorId` is always a UUID string;
+`targetId` is a UUID string or null. Roles use uppercase `OWNER`, `ADMIN`,
+`MEMBER`, or null. Names are strings or null. `occurredAt` is an ISO-8601 UTC
+instant captured with `Instant.now()` inside the action's transaction, before
+commit, and preserved through wire conversion and publication.
+
+| Type | Origin | Actor | Target | Non-null optional values |
+| --- | --- | --- | --- | --- |
+| `ROOM_CREATED` | `createRoom` | Creator | null | `name`: created room name |
+| `MEMBER_JOINED` | `addMember` | Adding user | Added user | None |
+| `MEMBER_LEFT` | `leaveRoom`, or authorized `removeMember` of self | Departing user | Departing user | None |
+| `MEMBER_KICKED` | `removeMember` of another user | Remover | Removed user | None |
+| `OWNERSHIP_TRANSFERRED` | Owner departure with successor | Departing owner | Successor | `role`: OWNER; `previousRole`: actual ADMIN or MEMBER |
+| `ROLE_CHANGED` | `updateMemberRole` | Changing user | Affected user | `role`: new; `previousRole`: actual old role |
+| `ROOM_RENAMED` | `updateRoom` | Renaming user | null | `name`: new; `previousName`: old, possibly null |
+
+All other optional fields are null. Old roles and names are captured before
+managed entities are mutated. Only GROUP rooms emit timeline events. Final-owner
+departure deleting the room, explicit deletion, DMs, reads and lookups emit none;
+there is no `ROOM_DELETED` timeline type. Existing authorization (including
+self-removal authorization), per-room locks and admin-first deterministic
+successor selection remain in force.
+
+`RoomTimelineEvent` is an immutable internal Spring event emitted inside the
+business transaction. `RoomTimelinePublisher` listens only AFTER_COMMIT, with no
+nontransactional fallback. A later rollback may leave an observed internal event,
+but sends nothing externally. Correlated confirms, mandatory returns, nacks,
+exceptional completion and the configured confirmation timeout are checked
+asynchronously. Immediate declaration/send failures and asynchronous failures log
+`eventId`, `roomId` and `type`, state that the mutation already committed and that
+the event may be lost without an outbox. They do not turn a committed action into
+an HTTP failure. No retry mechanism or outbox is added.
+
+For one owner departure, the internal events and the after-commit send attempts
+are ordered `MEMBER_LEFT` then `OWNERSHIP_TRANSFERRED`, using distinct IDs. Both
+listener invocations execute sequentially on the committing thread; confirmation callbacks
+only report results and never dispatch publication tasks. This preserves send
+attempt order for that action, not guaranteed broker receipt or consumer effect
+order if one send fails. One queue/consumer does not guarantee business-event
+ordering across concurrent publishers, reconnects, retries or redelivery.
+
+Chat can consume `guildchat.chat-service.room-timeline` as JSON using its own local
+record/schema and the uppercase event names, without importing Org classes. It
+should acknowledge after successful processing and handle duplicates using
+`eventId`; accepted messages may be redelivered. Chat must implement its own
+validation, duplicate-safe effects and failure/retry policy; the existing
+`room.changed` consumer does not consume this queue. No timeline consumer or
+storage migration is included here.
+
+There is no exactly-once or guaranteed end-to-end delivery. Events can be lost
+between database commit and broker acceptance; a confirm timeout is an unknown
+outcome. Broker acceptance does not confirm Chat processing or frontend receipt.
+
+Timeline verification: `RoomTimelineIntegrationTest` uses real H2 transactions
+with mocked AMQP transport, and `RoomTimelinePublisherTest` verifies conversion,
+metadata, topology and simulated transport outcomes. The opt-in
+`RoomTimelineBrokerTest` requires `ROOM_EVENTS_TEST_PORT` pointing at a disposable
+broker with the credentials shown above; it never targets application queues on
+the application broker. Run it with `-Dtest=RoomTimelineBrokerTest` using the same
+isolated broker setup. It checks actual topology, JSON and ordered departure
+messages. These publisher tests do not verify a Chat timeline implementation.
+
+### Timeline verification result (2026-10-21)
+
+- Org's full Maven test run passed: 57 tests passed; the two opt-in broker tests
+  were skipped. Existing `room.changed`, ownership-transfer, concurrency and DM
+  assertions passed unchanged. `git diff --check` passed.
+- This environment required an explicit Mockito agent at JVM startup:
+  `mvn -q -f application/org-service/pom.xml -DargLine=-javaagent:/home/sajid/.m2/repository/org/mockito/mockito-core/5.23.0/mockito-core-5.23.0.jar test`.
+  The existing application context test also required permission to bind its local
+  gRPC socket outside the restricted sandbox.
+- Docker is unavailable in this WSL environment; actual RabbitMQ timeline
+  delivery, declaration and broker confirmation were not run. Transport outcomes
+  were tested with mocks; database commit/rollback behavior used real H2.
+- No Chat, Identity, frontend, schema or Compose files changed. No application
+  queues were consumed or purged. No commit, push or deployment was performed.

@@ -68,5 +68,3 @@ export function EmptyState({ icon: Icon, title, hint, children, ...rest }) {
     </EmptyStateRoot>
   );
 }
-
-export default EmptyState;

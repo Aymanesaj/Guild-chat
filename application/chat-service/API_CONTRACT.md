@@ -266,6 +266,33 @@ See [the room-event contract and reliability limits](../../docs/room-events.md).
 the room open and subscribed receives both. It can arrive slightly before or
 after the matching `message.*`.
 
+#### Friendship events (no subscription needed)
+
+Sent to **every open socket** of the users involved. `user_id` is always the
+**other** person, never you. Both ids are UUID strings.
+
+| Event | Who receives it | `data` | What the client should do |
+|---|---|---|---|
+| `friend.request.received` | The addressee | `{ "friendship_id": "<uuid>", "user_id": "<requester>" }` | Refetch requests (`GET /api/users/friends/requests` → `{ incoming, outgoing }`); optionally show a toast |
+| `friend.request.sent` | The requester (their **other** tabs and devices; the tab that sent it already knows) | `{ "friendship_id": "<uuid>", "user_id": "<addressee>" }` | Refetch requests (same endpoint, `outgoing`) |
+| `friend.added` | **Both** users | `{ "friendship_id": "<uuid>", "user_id": "<the other user>" }` | Refetch friends (`GET /api/users/friends`) and requests; `presence.subscribe` to `user_id` |
+
+Like `room.*`, these frames carry ids only: **refetch over REST**, where
+identity-service applies its own rules. Do not build list entries from the
+frame. identity-service publishes them through RabbitMQ after its database write;
+chat-service forwards them.
+
+Rules for handling them:
+
+- **Idempotent:** the same frame can arrive twice (broker redelivery). A refetch
+  handles that for free.
+- **Not sent yet:** a request being **declined** or a friend being **removed**
+  produces no frame today. Those lists change only on the next refetch.
+  New event names will be added later. Ignore unknown events, as the client
+  already does.
+- The `friendship_id` is identity's friendship id, the same `id` the
+  `/friends/requests` endpoints return.
+
 All of these are best effort. Events sent while a socket is down are lost, so
 **refetch after every reconnect**.
 
@@ -290,8 +317,9 @@ All of these are best effort. Events sent while a socket is down are lost, so
 
 ### Known limitations
 
-- A user removed from a room keeps receiving that room's live events until
-  their socket reconnects. REST refuses them immediately.
+- A user removed from a room is unsubscribed from it when org's `room.removed`
+  arrives. If that event is lost, they keep receiving the room's live events
+  until their socket reconnects. REST refuses them immediately either way.
 - A socket is not closed when its token expires.
 - Subscriptions and presence are in memory: one chat-service instance only.
 - `room.activity` uses a member list cached in memory per room. It is

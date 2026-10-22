@@ -178,6 +178,48 @@ services:
         condition: service_healthy
     restart: always
 
+  media-migrate:
+    build:
+      context: ./application/media-service
+      target: migration
+    environment:
+      MEDIA_DATABASE_URL: ${MEDIA_DATABASE_URL:-}
+    networks:
+      - private
+    depends_on:
+      media-postgres:
+        condition: service_healthy
+    restart: "no"
+
+  media-service:
+    build: ./application/media-service
+    environment:
+      PORT: 8084
+      MEDIA_DATABASE_URL: ${MEDIA_DATABASE_URL:-}
+      MEDIA_IDENTITY_TOKEN: ${MEDIA_IDENTITY_TOKEN:-}
+      MEDIA_CHAT_TOKEN: ${MEDIA_CHAT_TOKEN:-}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_REGION: ${R2_REGION:-auto}
+    expose:
+      - "8084"
+    networks:
+      - private
+    depends_on:
+      media-migrate:
+        condition: service_completed_successfully
+      media-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8084/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
   rabbitmq:
     image: rabbitmq:4-management
     container_name: rabbitmq
@@ -190,7 +232,7 @@ services:
     - "5672"
 
     ports:
-      - "127.0.0.1:15672:15672" # Management UI (localhost only)
+      - "127.0.0.1:15672:15672"
     restart: unless-stopped
     volumes:
     - rabbitmq_data:/var/lib/rabbitmq
@@ -204,6 +246,25 @@ services:
   # ============================================================
   # DATABASES
   # ============================================================
+
+  media-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: media
+      POSTGRES_DB: media
+      POSTGRES_PASSWORD: ${MEDIA_POSTGRES_PASSWORD:-}
+    volumes:
+      - media_database:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    networks:
+      - private
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U media -d media"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
 
   postgres_db:
     mem_limit: 512m
@@ -434,6 +495,7 @@ services:
 # ============================================================
 
 volumes:
+  media_database:
   rabbitmq_data:
     name: "rabbitmq_data"
   nginx_tls:

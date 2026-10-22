@@ -48,15 +48,12 @@ function AppShellContent({ onLogout }) {
   const isPhone = useMediaQuery(PHONE_QUERY);
   const [isNavOpen, setIsNavOpen] = useState(false);
 
-  const { profile, closeProfile, previewUser, closeUserPreview, roomsRefreshTick } =
+  const { profile, closeProfile, previewUser, closeUserPreview } =
     useProfileOverlay();
 
   const [rooms, setRooms] = useState([]);
   const [roomsState, setRoomsState] = useState("loading");
-  // Bumped by every local write to the list. A poll captures it when it starts
-  // and drops its response if it changed meanwhile, so a request already in
-  // flight can't resurrect a room the user just left or erase one they just
-  // created — the latter would also trip the removal guard below.
+  // Ignore fetches that started before a local room creation or socket change.
   const mutationSeq = useRef(0);
 
   const loadRooms = useCallback(async () => {
@@ -68,29 +65,22 @@ function AppShellContent({ onLogout }) {
       setRooms(data);
       setRoomsState("success");
     } catch {
-      // A failed tick keeps the rooms already on screen; only a first load with
+      // A failed refresh keeps the rooms already on screen; only a first load with
       // nothing to show is an error the sidebar should report.
       setRoomsState((state) => (state === "loading" ? "error" : state));
     }
   }, []);
 
-  // No polling: the list loads once, then refetches only when something says it
-  // changed — the context tick (a local leave) or a socket event below. Lives
-  // in the shell rather than the sidebar so it keeps listening whichever view
-  // is open.
-  //
-  // Leaving a room reports itself through the context tick rather than through
-  // addRoom, so bump the sequence first: a fetch issued just before the leave
-  // can land afterwards and would list the room again.
+  // Load once in the shell; socket events keep the list current in every view.
   useEffect(() => {
     mutationSeq.current += 1;
     loadRooms();
-  }, [loadRooms, roomsRefreshTick]);
+  }, [loadRooms]);
 
   // Added to a room, removed or kicked from one, a room renamed, or the socket
   // reconnected after possibly missing some of those. The event says only
   // which room, so refetch: GET /rooms applies org's own rules. Bumping the
-  // sequence first discards a poll already in flight, which may have been
+  // sequence first discards a request already in flight, which may have been
   // answered before the change and would otherwise land after this fetch.
   // Removal from the open room is then handled by the effect further down.
   useEffect(
@@ -133,6 +123,14 @@ function AppShellContent({ onLogout }) {
   const handleDirectMessages = useCallback(() => {
     setIsDirectMessages(true);
     setIsNavOpen(false);
+  }, []);
+
+  // A first send may finish after navigation. Replace only its own draft and
+  // keep whichever view the user has since chosen.
+  const handleRoomInitialized = useCallback((draftId, room) => {
+    setActiveRoomId((current) =>
+      current?.isDraft && current.id === draftId ? room : current,
+    );
   }, []);
 
   // A loaded list that no longer contains the open room means we were removed
@@ -178,6 +176,7 @@ function AppShellContent({ onLogout }) {
           <MainContent>
             <MainPanel
               activeView={isDirectMessages ? true : activeRoomId}
+              onRoomInitialized={handleRoomInitialized}
             />
           </MainContent>
         </AppShellRoot>
