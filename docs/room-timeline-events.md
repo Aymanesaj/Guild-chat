@@ -1,8 +1,9 @@
 # Org → Chat room timeline events
 
-**Status:** contract agreed, not implemented yet. Org implements the publisher,
-Chat implements the consumer. The two sides can be built in parallel against
-this document.
+**Status:** implemented on both sides. Org publishes from `RoomService`
+(`RoomTimelinePublisher`); Chat consumes in `RoomTimelineConsumer` and stores
+system messages. What the frontend receives is documented in
+`application/chat-service/API_CONTRACT.md` under "System messages".
 
 ## Why
 

@@ -62,16 +62,92 @@ event: the same JSON on both.
   "content_type": "text",
   "created_at": "2026-09-22T10:00:00.123Z",
   "edited_at": null,
-  "deleted": false
+  "deleted": false,
+  "system": null
 }
 ```
 
-- `content_type` is always `"text"` in v1.
+- `content_type` is `"text"` for messages people send, or `"system"` for room
+  events (see below).
 - A deleted message keeps its place in history with `"deleted": true` and
   `"content": null`. The text never leaves the server again.
 - `edited_at` is `null` until the first edit.
+- `system` is `null` on every ordinary message.
 - Sender names and avatars are **not** included: resolve `sender_id` through
   identity-service.
+
+### System messages (room events)
+
+What happened in a room (someone joined, left, was removed, got a new role, the
+room was renamed) is part of its history. These lines come back with
+`GET /rooms/{roomId}/messages` in their place between ordinary messages, and
+arrive live exactly like a new message: `message.new` for sockets subscribed to
+the room, and `room.activity` with `change: "new"` for list previews.
+
+```json
+{
+  "id": "66f0c1a2b3c4d5e6f7a8b9c1",
+  "room_id": 5,
+  "sender_id": null,
+  "reply_to_id": null,
+  "content": null,
+  "content_type": "system",
+  "created_at": "2026-10-22T10:00:00.123Z",
+  "edited_at": null,
+  "deleted": false,
+  "system": {
+    "type": "MEMBER_KICKED",
+    "actor_id": "a215c5f8-d810-4518-ad4c-8d551eb6dfc4",
+    "target_id": "b7c1d2e3-0000-4000-8000-000000000002",
+    "role": null,
+    "previous_role": null,
+    "name": null,
+    "previous_name": null
+  }
+}
+```
+
+**How to tell them apart:** `content_type === "system"` (equivalently,
+`system !== null`). A system message has **no sender and no content**: render
+it as a centered line, not a chat bubble, and build the sentence from `system`.
+
+All 7 keys of `system` are always present; the ones a type does not use are
+`null`. User ids are UUIDs: resolve names through identity-service, as for
+`sender_id`, and **when rendering**, not when storing, because usernames change.
+
+| `type` | `actor_id` | `target_id` | Other fields | Suggested sentence |
+|---|---|---|---|---|
+| `ROOM_CREATED` | creator | `null` | `name` | **{actor}** created the room "{name}" |
+| `MEMBER_JOINED` | who added | who was added | none | **{actor}** added **{target}** |
+| `MEMBER_LEFT` | the person leaving | same as `actor_id` | none | **{actor}** left |
+| `MEMBER_KICKED` | who removed | who was removed | none | **{actor}** removed **{target}** |
+| `OWNERSHIP_TRANSFERRED` | the previous owner | the new owner | `role: "OWNER"`, `previous_role` (`"ADMIN"` or `"MEMBER"`) | **{target}** is now the owner |
+| `ROLE_CHANGED` | who changed it | whose role changed | `role`, `previous_role` (`OWNER` / `ADMIN` / `MEMBER`) | **{actor}** made **{target}** {role} (was {previous_role}) |
+| `ROOM_RENAMED` | who renamed | `null` | `name`, `previous_name` (may be `null`) | **{actor}** renamed the room to "{name}" |
+
+Rules for the client:
+
+- **Use "you"** when `actor_id` or `target_id` is the current user ("You
+  removed Bob", "Alice made you ADMIN").
+- **Unknown `type`:** new types may be added later. Do not crash: render a
+  neutral line ("Room updated") or skip it.
+- **Order:** when an owner leaves, `MEMBER_LEFT` comes first, then
+  `OWNERSHIP_TRANSFERRED`, as two separate messages.
+- **Group rooms only:** DMs never contain system messages.
+- **Previews:** in a room list, `room.activity` can carry a system message.
+  Show the same sentence (shortened if needed) instead of `content`, which is
+  `null`. A `MEMBER_LEFT` sends no `room.activity`; the remaining members get
+  `room.updated` instead and refetch.
+- **They cannot be edited, deleted or replied to.** Hide those actions on system
+  messages. The server refuses them anyway with `SYSTEM_MESSAGE` (edit, delete)
+  and `REPLY_SYSTEM` (send with this `reply_to_id`).
+- **Dedupe by `id`**, as for any message. The server stores and sends each room
+  event once, even if it receives it twice.
+- **When it happened:** `created_at` is when the change happened in
+  org-service. History order is the order chat stored them, which is the same
+  in practice.
+- A user who was **removed** does not see their own `MEMBER_KICKED` line: they
+  are unsubscribed and get `room.removed` instead.
 
 ## REST endpoints
 
@@ -117,6 +193,7 @@ including to the sender's own sockets (dedupe by `id`).
 | 400 | `REPLY_NOT_FOUND` | Replied-to message does not exist |
 | 400 | `REPLY_WRONG_ROOM` | Replied-to message is in another room |
 | 400 | `REPLY_DELETED` | Replied-to message was deleted |
+| 400 | `REPLY_SYSTEM` | Replied-to message is a system message |
 
 ### `GET /messages/{messageId}`: one message
 
@@ -142,6 +219,7 @@ Sender only, and only while the message is younger than **15 minutes**
 |---|---|---|
 | 400 | `INVALID_MESSAGE_ID` / `VALIDATION_ERROR` | Bad id / bad content |
 | 404 | `MESSAGE_NOT_FOUND` | Unknown, or caller not in the room |
+| 403 | `SYSTEM_MESSAGE` | It is a system message (checked before the sender) |
 | 403 | `NOT_SENDER` | Caller did not send it |
 | 403 | `MESSAGE_DELETED` | Message is deleted (also if a delete lands during the edit) |
 | 403 | `EDIT_WINDOW_EXPIRED` | Older than 15 minutes |
@@ -157,6 +235,7 @@ deleted message is not an error.
 |---|---|---|
 | 400 | `INVALID_MESSAGE_ID` | Not a valid message id |
 | 404 | `MESSAGE_NOT_FOUND` | Unknown, or caller not in the room |
+| 403 | `SYSTEM_MESSAGE` | It is a system message: nobody can delete it, owners included |
 | 403 | `NOT_ALLOWED` | Caller is neither the sender nor an owner/admin (checked even if already deleted) |
 
 ### `GET /presence?ids=a,b,c`: online status
