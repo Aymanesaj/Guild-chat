@@ -28,6 +28,9 @@ public class RabbitMQConfig {
     public static final String DEAD_EXCHANGE = "guildchat.room-events.dead";
     public static final String DEAD_QUEUE = "guildchat.chat-service.room-events.dead";
 
+    public static final String ROOM_TIMELINE_ROUTING_KEY = "room.timeline";
+    public static final String CHAT_ROOM_TIMELINE_QUEUE = "guildchat.chat-service.room-timeline";
+
     public static final String FRIENDSHIP_EVENTS_EXCHANGE = "guildchat.friendship-events";
     public static final String CHAT_FRIENDSHIP_EVENTS_QUEUE = "guildchat.chat-service.friendship-events";
     public static final String FRIEND_REQUEST_SENT_ROUTING_KEY = "friendship.request.sent";
@@ -39,8 +42,11 @@ public class RabbitMQConfig {
         DirectExchange deadExchange = new DirectExchange(DEAD_EXCHANGE, true, false);
         Queue queue = QueueBuilder.durable(CHAT_ROOM_EVENTS_QUEUE).build();
         Queue deadQueue = QueueBuilder.durable(DEAD_QUEUE).build();
-        return new Declarables(exchange, deadExchange, queue, deadQueue,
+        Queue timelineQueue = QueueBuilder.durable(CHAT_ROOM_TIMELINE_QUEUE).build();
+        // The timeline queue must be declared here too: Chat may start before Org on a fresh broker.
+        return new Declarables(exchange, deadExchange, queue, deadQueue, timelineQueue,
                 BindingBuilder.bind(queue).to(exchange).with(ROOM_CHANGED_ROUTING_KEY),
+                BindingBuilder.bind(timelineQueue).to(exchange).with(ROOM_TIMELINE_ROUTING_KEY),
                 BindingBuilder.bind(deadQueue).to(deadExchange).with(ROOM_CHANGED_ROUTING_KEY));
     }
 

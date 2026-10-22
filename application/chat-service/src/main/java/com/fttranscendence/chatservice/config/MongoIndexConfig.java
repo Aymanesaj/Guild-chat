@@ -7,8 +7,12 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.event.EventListener;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.index.CompoundIndexDefinition;
+import org.springframework.data.mongodb.core.index.Index;
+import org.springframework.data.mongodb.core.index.PartialIndexFilter;
+import org.springframework.data.mongodb.core.query.Criteria;
 
 @Configuration
 public class MongoIndexConfig {
@@ -18,6 +22,8 @@ public class MongoIndexConfig {
 
     static final String COLLECTION = "messages";
     static final String ROOM_HISTORY_INDEX = "room_id_1__id_-1";
+
+    static final String SYSTEM_EVENT_INDEX = "event_id_unique";
 
     private final MongoTemplate mongoTemplate;
 
@@ -47,6 +53,21 @@ public class MongoIndexConfig {
         } catch (DataAccessException e) {
             log.error("Could not create MongoDB index {} on {} — history queries will scan "
                     + "the whole collection until it exists", ROOM_HISTORY_INDEX, COLLECTION, e);
+        }
+
+          try {
+            String name = mongoTemplate
+                    .indexOps(COLLECTION)
+                    .ensureIndex(new Index()
+                            .on("event_id", Sort.Direction.ASC)
+                            .unique()
+                            .partial(PartialIndexFilter.of(Criteria.where("event_id").exists(true)))
+                            .named(SYSTEM_EVENT_INDEX));
+
+            log.info("MongoDB index ready on {}: {}", COLLECTION, name);
+        } catch (DataAccessException e) {
+            log.error("Could not create MongoDB index {} on {}: a redelivered room event may be "
+                    + "stored twice until it exists", SYSTEM_EVENT_INDEX, COLLECTION, e);
         }
     }
 }

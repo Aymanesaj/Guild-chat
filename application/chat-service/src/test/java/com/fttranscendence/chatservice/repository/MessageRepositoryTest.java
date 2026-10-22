@@ -14,6 +14,7 @@ import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import com.fttranscendence.chatservice.model.Message;
+import com.fttranscendence.chatservice.model.SystemEvent;
 import com.fttranscendence.chatservice.support.MongoTestSupport;
 
 /**
@@ -263,5 +264,50 @@ class MessageRepositoryTest extends MongoTestSupport {
         assertThat(latest.getSenderId()).isEqualTo(ALICE);
         assertThat(latest.getContentType()).isEqualTo("text");
         assertThat(latest.getCreatedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("a system message is stored with snake_case keys and read back whole")
+    void systemMessageRoundTrip() {
+        String bob = "b7c1d2e3-0000-4000-8000-000000000002";
+        Instant occurredAt = Instant.parse("2026-10-22T10:00:00.123Z");
+        SystemEvent roleChanged = new SystemEvent("ROLE_CHANGED", ALICE, bob, "ADMIN", "MEMBER", null, null);
+
+        Message saved = repository.save(Message.system(ROOM, "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                roleChanged, occurredAt));
+
+        org.bson.Document raw = mongoTemplate.getCollection("messages")
+                .find(new org.bson.Document("_id", new ObjectId(saved.getId())))
+                .first();
+        assertThat(raw).isNotNull();
+        assertThat(raw.getString("content_type")).isEqualTo("system");
+        assertThat(raw.getString("event_id")).isEqualTo("7c9e6679-7425-40de-944b-e07fc1f90ae7");
+        assertThat(raw.containsKey("sender_id")).as("no sender stored").isFalse();
+        assertThat(raw.containsKey("content")).as("no content stored").isFalse();
+        org.bson.Document system = raw.get("system", org.bson.Document.class);
+        assertThat(system.getString("type")).isEqualTo("ROLE_CHANGED");
+        assertThat(system.getString("actor_id")).isEqualTo(ALICE);
+        assertThat(system.getString("target_id")).isEqualTo(bob);
+        assertThat(system.getString("previous_role")).isEqualTo("MEMBER");
+
+        Message read = repository.findById(saved.getId()).orElseThrow();
+        assertThat(read.isSystem()).isTrue();
+        assertThat(read.getSenderId()).isNull();
+        assertThat(read.getSystem()).isEqualTo(roleChanged);
+        assertThat(read.getCreatedAt()).isEqualTo(occurredAt);
+    }
+
+    @Test
+    @DisplayName("system messages page through history between ordinary messages")
+    void systemMessagesAppearInHistory() {
+        Message before = send(ROOM, "before");
+        Message system = repository.save(Message.system(ROOM, "0f8fad5b-d9cb-469f-a165-70867728950e",
+                new SystemEvent("MEMBER_LEFT", ALICE, ALICE, null, null, null, null), Instant.now()));
+        Message after = send(ROOM, "after");
+
+        assertThat(repository.findByRoomIdOrderByIdDesc(ROOM, Limit.of(10)))
+                .extracting(Message::getId)
+                .containsExactly(after.getId(), system.getId(), before.getId());
+        assertThat(before.isSystem()).isFalse();
     }
 }

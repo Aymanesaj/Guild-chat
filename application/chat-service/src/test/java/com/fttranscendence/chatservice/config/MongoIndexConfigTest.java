@@ -14,6 +14,17 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.index.IndexInfo;
 import com.fttranscendence.chatservice.support.MongoTestSupport;
+import com.fttranscendence.chatservice.model.Message;
+import com.fttranscendence.chatservice.model.SystemEvent;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.time.Instant;
+import java.util.UUID;
+
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 
 /**
  * The index is what keeps history reads from scanning the whole collection.
@@ -29,6 +40,9 @@ class MongoIndexConfigTest extends MongoTestSupport {
 
     @Autowired
     private MongoTemplate mongoTemplate;
+
+    private static final long ROOM = 4242L;
+    private static final String ALICE = "a215c5f8-d810-4518-ad4c-8d551eb6dfc4";
 
     @Test
     @DisplayName("creates the room history index with the exact keys and order")
@@ -79,6 +93,42 @@ class MongoIndexConfigTest extends MongoTestSupport {
         assertThat(plan).contains("IXSCAN");
         assertThat(plan).contains(MongoIndexConfig.ROOM_HISTORY_INDEX);
         assertThat(plan).doesNotContain("COLLSCAN");
+    }
+
+    @Test
+    @DisplayName("creates a unique index on event_id that covers system messages only")
+    void createsPartialUniqueEventIdIndex() {
+        indexConfig.createIndexes();
+
+        IndexInfo index = indexes().stream()
+                .filter(info -> MongoIndexConfig.SYSTEM_EVENT_INDEX.equals(info.getName()))
+                .findFirst()
+                .orElse(null);
+
+        assertThat(index).as("index %s must exist", MongoIndexConfig.SYSTEM_EVENT_INDEX).isNotNull();
+        assertThat(index.getIndexFields()).hasSize(1);
+        assertThat(index.getIndexFields().get(0).getKey()).isEqualTo("event_id");
+        assertThat(index.isUnique()).isTrue();
+        // Partial: ordinary messages have no event_id and must not collide on "missing".
+        assertThat(index.getPartialFilterExpression()).contains("event_id");
+    }
+
+    @Test
+    @DisplayName("a redelivered room event cannot be stored twice, ordinary messages are unaffected")
+    void duplicateEventIdIsRejected() {
+        indexConfig.createIndexes();
+        String eventId = UUID.randomUUID().toString();
+        SystemEvent left = new SystemEvent("MEMBER_LEFT", ALICE, ALICE, null, null, null, null);
+
+        mongoTemplate.insert(Message.system(ROOM, eventId, left, Instant.now()));
+
+        assertThatThrownBy(() -> mongoTemplate.insert(Message.system(ROOM, eventId, left, Instant.now())))
+                .isInstanceOf(DuplicateKeyException.class);
+        // Two ordinary messages: neither has event_id, both are stored.
+        mongoTemplate.insert(Message.create(ROOM, ALICE, null, "one", "text", Instant.now()));
+        mongoTemplate.insert(Message.create(ROOM, ALICE, null, "two", "text", Instant.now()));
+        assertThat(mongoTemplate.count(new Query(Criteria.where("event_id").is(eventId)),
+                MongoIndexConfig.COLLECTION)).isEqualTo(1);
     }
 
     private IndexInfo roomHistoryIndex() {

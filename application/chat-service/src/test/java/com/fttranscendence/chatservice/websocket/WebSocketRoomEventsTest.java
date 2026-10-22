@@ -24,6 +24,7 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -41,6 +42,9 @@ import com.fttranscendence.chatservice.messaging.FriendshipEventType;
 import com.fttranscendence.chatservice.messaging.RoomChangedConsumer;
 import com.fttranscendence.chatservice.messaging.RoomChangedMessage;
 import com.fttranscendence.chatservice.messaging.RoomChange;
+import com.fttranscendence.chatservice.messaging.RoomTimelineConsumer;
+import com.fttranscendence.chatservice.messaging.RoomTimelineMessage;
+import com.fttranscendence.chatservice.messaging.RoomTimelineType;
 import com.fttranscendence.chatservice.grpc.IdentityClient;
 import com.fttranscendence.chatservice.grpc.OrgClient;
 import com.fttranscendence.chatservice.support.MongoTestSupport;
@@ -60,6 +64,8 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
     private static final long ROOM = 720L;
     private static final long ACTIVITY_ROOM = 721L;
     private static final long KICK_ROOM = 722L;
+    private static final long TIMELINE_ROOM = 723L;
+    private static final String CAROL = "c0000000-0000-4000-8000-000000000003";
 
     @LocalServerPort
     private int port;
@@ -72,6 +78,9 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
 
     @Autowired
     private FriendshipEventConsumer friendships;
+
+    @Autowired
+    private RoomTimelineConsumer timeline;
 
     @Autowired
     private org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry listeners;
@@ -237,7 +246,52 @@ class WebSocketRoomEventsTest extends MongoTestSupport {
                 .flatExtracting(container -> List.of(
                         ((org.springframework.amqp.rabbit.listener.AbstractMessageListenerContainer) container)
                                 .getQueueNames()))
-                .contains(RabbitMQConfig.CHAT_FRIENDSHIP_EVENTS_QUEUE, RabbitMQConfig.CHAT_ROOM_EVENTS_QUEUE);
+                .contains(RabbitMQConfig.CHAT_FRIENDSHIP_EVENTS_QUEUE, RabbitMQConfig.CHAT_ROOM_EVENTS_QUEUE,
+                        RabbitMQConfig.CHAT_ROOM_TIMELINE_QUEUE);
+    }
+
+    @Test
+    @DisplayName("a room event from org is stored, pushed live as message.new, and returned by history")
+    void timelineEventIsPersistedAndPushed() throws Exception {
+        RecordingClient bob = connect(BOB);
+        awaitConnections(BOB, 1);
+        opened.get(opened.size() - 1).sendMessage(new TextMessage(
+                "{\"event\":\"subscribe\",\"data\":{\"room_id\":" + TIMELINE_ROOM + "}}"));
+        awaitSubscribers(TIMELINE_ROOM, 1);
+        // Unique per run: the event_id index is shared by every test using this database.
+        String eventId = java.util.UUID.randomUUID().toString();
+        RoomTimelineMessage kicked = new RoomTimelineMessage(eventId, 1, RoomTimelineType.MEMBER_KICKED,
+                String.valueOf(TIMELINE_ROOM), ALICE, CAROL, null, null, null, null, "2026-10-22T10:00:00.123Z");
+
+        timeline.consume(kicked);
+
+        JsonNode frame = nextFrame(bob);
+        assertThat(frame.path("event").asText()).isEqualTo("message.new");
+        JsonNode pushed = frame.path("data");
+        assertThat(pushed.path("content_type").asText()).isEqualTo("system");
+        assertThat(pushed.path("sender_id").isNull()).isTrue();
+        assertThat(pushed.path("system").path("type").asText()).isEqualTo("MEMBER_KICKED");
+        assertThat(pushed.path("system").path("actor_id").asText()).isEqualTo(ALICE);
+        assertThat(pushed.path("system").path("target_id").asText()).isEqualTo(CAROL);
+
+        // Redelivery: stored once, pushed once.
+        timeline.consume(kicked);
+        assertThat(receivesNothing(bob)).as("no second message.new for a redelivered event").isTrue();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(BOB + ".token");
+        ResponseEntity<String> history = rest.exchange("/rooms/" + TIMELINE_ROOM + "/messages",
+                HttpMethod.GET, new HttpEntity<>(headers), String.class);
+        assertThat(history.getStatusCode()).isEqualTo(HttpStatus.OK);
+        JsonNode page = objectMapper.readTree(history.getBody());
+        List<JsonNode> systemMessages = new ArrayList<>();
+        page.forEach(message -> {
+            if ("system".equals(message.path("content_type").asText())) {
+                systemMessages.add(message);
+            }
+        });
+        assertThat(systemMessages).as("the event appears in history exactly once").hasSize(1);
+        assertThat(systemMessages.get(0)).as("history returns what was pushed").isEqualTo(pushed);
     }
 
     @Test

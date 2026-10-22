@@ -3,7 +3,6 @@ package com.fttranscendence.chatservice.dto;
 import java.time.Instant;
 
 import com.fttranscendence.chatservice.model.Message;
-
 /**
  * What the API returns. Separate from the Message document so that database
  * changes and API changes stay independent — and so deleted messages can hide
@@ -18,7 +17,8 @@ public record MessageResponse(
         String contentType,
         Instant createdAt,
         Instant editedAt,
-        boolean deleted) {
+        boolean deleted,
+        SystemEventResponse system) {
 
     public static MessageResponse from(Message message) {
         boolean deleted = message.isDeleted();
@@ -32,6 +32,7 @@ public record MessageResponse(
                 message.getContentType(),
                 message.getCreatedAt(),
                 message.getEditedAt(),
-                deleted);
+                deleted,
+                SystemEventResponse.from(message.getSystem()));
     }
 }

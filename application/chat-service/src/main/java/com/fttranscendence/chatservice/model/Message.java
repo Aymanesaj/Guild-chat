@@ -36,6 +36,14 @@ public class Message {
     @Field("deleted_at")
     private Instant deletedAt;
 
+
+    /** Set only on system messages: what happened in the room. */
+    @Field("system")
+    private SystemEvent system;
+
+    @Field("event_id")
+    private String eventId;
+
     /**
      * Required by Spring Data to reconstruct the document from MongoDB.
      */
@@ -81,6 +89,32 @@ public class Message {
                 createdAt);
     }
 
+    public static final String SYSTEM_CONTENT_TYPE = "system";
+
+    /**
+     * A room event shown in the history. No sender and no content: the
+     * frontend renders the sentence from the SystemEvent.
+     */
+
+    public static Message system(Long roomId , String eventId,  SystemEvent system , Instant createdAt){
+        Message message = new Message(roomId, null, null, null, SYSTEM_CONTENT_TYPE, createdAt);
+        message.eventId = eventId;
+        message.system = system;
+        return message;
+    }
+
+    /** System messages cannot be edited, deleted or replied to. */
+    public boolean isSystem() {
+        return system != null ;
+    }
+
+    public SystemEvent getSystem() {
+        return system;
+    }
+
+    public String getEventId() {
+        return eventId;
+    }
     /**
      * Applies an edit to the message.
      * Ownership and the edit time window are checked by the service layer.

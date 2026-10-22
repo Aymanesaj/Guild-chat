@@ -9,6 +9,7 @@ import java.util.Map;
 
 import org.bson.types.ObjectId;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 
@@ -16,6 +17,7 @@ import com.fttranscendence.chatservice.exception.ApiException;
 import com.fttranscendence.chatservice.grpc.Membership;
 import com.fttranscendence.chatservice.grpc.OrgClient;
 import com.fttranscendence.chatservice.model.Message;
+import com.fttranscendence.chatservice.model.SystemEvent;
 import com.fttranscendence.chatservice.repository.MessageRepository;
 
 /**
@@ -62,6 +64,29 @@ public class MessageService {
         return saved ;
     }
 
+
+    /**
+     * Stores a room event from org (member joined, kicked, ...) as a system
+     * message, then announces it exactly like a sent message: message.new to
+     * sockets with the room open, room.activity to every member.
+     *
+     * Stored before it is sent, so a reload shows exactly what was pushed.
+     *
+     * @return false if this event was already stored (a broker redelivery):
+     *         it is not stored or announced a second time
+     */
+    public boolean recordSystemEvent(Long roomId, String eventId, SystemEvent system, Instant occurredAt) {
+        Message saved;
+        try {
+            // insert, not save: a duplicate event_id must fail on the unique index.
+            saved = messageRepository.insert(Message.system(roomId, eventId, system, occurredAt));
+        } catch (DuplicateKeyException e) {
+            return false;
+        }
+        events.publishEvent(new MessageCreatedEvent(saved));
+        return true;
+    }
+
     /**
      * A reply must point at a live message in the SAME room. MongoDB enforces
      * no such thing, so without this check a reply could quote a message from
@@ -82,6 +107,10 @@ public class MessageService {
 
         if (!target.getRoomId().equals(roomId)) {
             throw ApiException.badRequest("REPLY_WRONG_ROOM","Replied-to message belongs to a different room");
+        }
+
+        if (target.isSystem()) {
+            throw ApiException.badRequest("REPLY_SYSTEM", "Cannot reply to a system message");
         }
 
         if (target.isDeleted()) {
@@ -201,6 +230,10 @@ public class MessageService {
     public Message edit(String userId , String messageId, String content){
         Message message = loadVisible(userId, messageId);
 
+        // Checked first: a system message has no sender to compare with.
+        if (message.isSystem()) {
+            throw ApiException.forbidden("SYSTEM_MESSAGE", "Cannot edit a system message");
+        }
         if(!message.getSenderId().equals(userId)){
             throw ApiException.forbidden("NOT_SENDER", "Only the sender can edit this message");
         }
@@ -238,6 +271,10 @@ public class MessageService {
             throw ApiException.notFound("MESSAGE_NOT_FOUND" ,"message does not exist");
         }
 
+        // After the membership check (non-members still get 404), before the sender check.
+        if (message.isSystem()) {
+            throw ApiException.forbidden("SYSTEM_MESSAGE", "System messages cannot be deleted");
+        }
         boolean own = message.getSenderId().equals(userId);
         if (!own &&  !membership.canModerate()){
             throw ApiException.forbidden("NOT_ALLOWED", "Only the sender or a room admin can delete this message");

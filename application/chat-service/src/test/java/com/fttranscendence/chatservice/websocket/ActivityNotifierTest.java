@@ -24,6 +24,7 @@ import com.fttranscendence.chatservice.dto.MessageResponse;
 import com.fttranscendence.chatservice.exception.ApiException;
 import com.fttranscendence.chatservice.grpc.RoomMembersCache;
 import com.fttranscendence.chatservice.model.Message;
+import com.fttranscendence.chatservice.model.SystemEvent;
 import com.fttranscendence.chatservice.service.MessageCreatedEvent;
 import com.fttranscendence.chatservice.service.MessageDeletedEvent;
 import com.fttranscendence.chatservice.service.MessageEditedEvent;
@@ -129,5 +130,61 @@ class ActivityNotifierTest {
         notifier.onCreated(new MessageCreatedEvent(message(BOB)));
 
         verify(roomMembers).members(ROOM, BOB);
+    }
+
+    // ---- system messages: no sender, so someone still in the room is asked ----
+
+    private static Message system(String type, String actor, String target) {
+        return Message.system(ROOM, "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                new SystemEvent(type, actor, target, null, null, null, null),
+                Instant.parse("2026-10-22T10:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("system message: members are listed as the actor (kicker, adder, renamer...)")
+    void systemMessageAsksAsActor() {
+        when(roomMembers.members(ROOM, ALICE)).thenReturn(List.of(ALICE, CAROL));
+
+        notifier.onCreated(new MessageCreatedEvent(system("MEMBER_KICKED", ALICE, BOB)));
+
+        verify(roomMembers).members(ROOM, ALICE);
+        verify(sockets).sendToUser(eq(ALICE), eq(WsEvents.ROOM_ACTIVITY), any());
+        verify(sockets).sendToUser(eq(CAROL), eq(WsEvents.ROOM_ACTIVITY), any());
+        // The kicked user is no longer a member and gets no preview.
+        verify(sockets, never()).sendToUser(eq(BOB), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("ownership transfer: asks as the new owner, because the old owner just left")
+    void ownershipTransferAsksAsNewOwner() {
+        when(roomMembers.members(ROOM, BOB)).thenReturn(List.of(BOB, CAROL));
+
+        notifier.onCreated(new MessageCreatedEvent(system("OWNERSHIP_TRANSFERRED", ALICE, BOB)));
+
+        verify(roomMembers).members(ROOM, BOB);
+        verify(roomMembers, never()).members(ROOM, ALICE);
+    }
+
+    @Test
+    @DisplayName("member left: nobody who stayed is named, so no lookup and no preview (room.updated covers it)")
+    void memberLeftSkipsActivity() {
+        notifier.onCreated(new MessageCreatedEvent(system("MEMBER_LEFT", ALICE, ALICE)));
+
+        verify(roomMembers, never()).members(anyLong(), anyString());
+        verify(sockets, never()).sendToUser(anyString(), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("system message: the preview carries the system object, no sender")
+    void systemPreviewCarriesSystemObject() {
+        when(roomMembers.members(ROOM, ALICE)).thenReturn(List.of(CAROL));
+
+        notifier.onCreated(new MessageCreatedEvent(system("MEMBER_JOINED", ALICE, BOB)));
+
+        MessageResponse sent = (MessageResponse) dataSentTo(CAROL).get("message");
+        assertThat(sent.senderId()).isNull();
+        assertThat(sent.contentType()).isEqualTo("system");
+        assertThat(sent.system().type()).isEqualTo("MEMBER_JOINED");
+        assertThat(sent.system().targetId()).isEqualTo(BOB);
     }
 }

@@ -2,8 +2,8 @@ package com.fttranscendence.chatservice.websocket;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import org.slf4j.Logger;
@@ -16,12 +16,12 @@ import com.fttranscendence.chatservice.dto.MessageResponse;
 import com.fttranscendence.chatservice.exception.ApiException;
 import com.fttranscendence.chatservice.grpc.RoomMembersCache;
 import com.fttranscendence.chatservice.model.Message;
+import com.fttranscendence.chatservice.model.SystemEvent;
 import com.fttranscendence.chatservice.service.MessageCreatedEvent;
 import com.fttranscendence.chatservice.service.MessageDeletedEvent;
 import com.fttranscendence.chatservice.service.MessageEditedEvent;
 
 import jakarta.annotation.PreDestroy;
-
 /**
  * Tells every member of a room that something happened in it: room.activity.
  *
@@ -104,13 +104,36 @@ public class ActivityNotifier {
         executor.execute(() -> {
             List<String> members;
             try {
-                members = roomMembers.members(roomId, message.getSenderId());
+                String asker = memberToAsk(message);
+                if (asker == null) {
+                    log.debug("room.activity skipped for room={}: no remaining member named", roomId);
+                    return;
+                }
+                members = roomMembers.members(roomId, asker);
             } catch (ApiException e) {
                 log.warn("room.activity dropped for room={}: {}", roomId, e.getCode());
                 return;
             }
             members.forEach(userId -> sockets.sendToUser(userId, WsEvents.ROOM_ACTIVITY, data));
         });
+    }
+
+    /**
+     * Org lists a room's members only to one of them. A message's sender is a
+     * member; a system message has no sender, so use someone still in the room
+     * after the event. MEMBER_LEFT names nobody who stayed: the room.updated
+     * that org sends to the remaining members refreshes their lists anyway.
+     */
+    private static String memberToAsk(Message message) {
+        if (!message.isSystem()) {
+            return message.getSenderId();
+        }
+        SystemEvent system = message.getSystem();
+        return switch (system.type()) {
+            case "MEMBER_LEFT" -> null;
+            case "OWNERSHIP_TRANSFERRED" -> system.targetId(); // the old owner (actor) just left
+            default -> system.actorId();                       // creator, adder, kicker, renamer...
+        };
     }
 
     @PreDestroy

@@ -31,7 +31,9 @@ import com.fttranscendence.chatservice.exception.ApiException;
 import com.fttranscendence.chatservice.grpc.Membership;
 import com.fttranscendence.chatservice.grpc.OrgClient;
 import com.fttranscendence.chatservice.model.Message;
+import com.fttranscendence.chatservice.model.SystemEvent;
 import com.fttranscendence.chatservice.repository.MessageRepository;
+import org.springframework.dao.DuplicateKeyException;
 
 /**
  * Pure rules, no Spring and no database: which repository method is chosen,
@@ -828,5 +830,121 @@ class MessageServiceTest {
 
         assertThatThrownBy(() -> messageService.latestMessages(USER, List.of(ROOM)))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.getCode()).isEqualTo("ORG_UNAVAILABLE"));
+    }
+
+    // ---- system messages (room events from org) ----
+
+    private static final String TARGET = "b7c1d2e3-0000-4000-8000-000000000002";
+    private static final String EVENT_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+    private static final SystemEvent KICKED =
+            new SystemEvent("MEMBER_KICKED", USER, TARGET, null, null, null, null);
+
+    private Message storedSystemMessage(String id) {
+        Message message = Message.system(ROOM, EVENT_ID, KICKED, NOW);
+        org.springframework.test.util.ReflectionTestUtils.setField(message, "id", id);
+        return message;
+    }
+
+    @Test
+    @DisplayName("system event: inserted with no sender, then announced like a sent message")
+    void systemEventIsStoredThenAnnounced() {
+        when(messageRepository.insert(any(Message.class))).thenAnswer(call -> call.getArgument(0));
+
+        boolean stored = messageService.recordSystemEvent(ROOM, EVENT_ID, KICKED, NOW);
+
+        assertThat(stored).isTrue();
+        ArgumentCaptor<Message> inserted = ArgumentCaptor.forClass(Message.class);
+        verify(messageRepository).insert(inserted.capture());
+        Message message = inserted.getValue();
+        assertThat(message.isSystem()).isTrue();
+        assertThat(message.getRoomId()).isEqualTo(ROOM);
+        assertThat(message.getSenderId()).isNull();
+        assertThat(message.getContent()).isNull();
+        assertThat(message.getContentType()).isEqualTo(Message.SYSTEM_CONTENT_TYPE);
+        assertThat(message.getEventId()).isEqualTo(EVENT_ID);
+        assertThat(message.getSystem()).isEqualTo(KICKED);
+        assertThat(message.getCreatedAt()).isEqualTo(NOW);
+
+        // insert, never save: save would overwrite instead of failing on a duplicate event_id.
+        verify(messageRepository, never()).save(any());
+        ArgumentCaptor<Object> published = ArgumentCaptor.forClass(Object.class);
+        verify(events).publishEvent(published.capture());
+        assertThat(published.getValue()).isInstanceOfSatisfying(MessageCreatedEvent.class,
+                event -> assertThat(event.message()).isSameAs(message));
+        // Org already decided who is in the room: no membership lookup here.
+        verifyNoInteractions(orgClient);
+    }
+
+    @Test
+    @DisplayName("system event: a redelivered event is not stored or announced twice")
+    void duplicateSystemEventIsIgnored() {
+        when(messageRepository.insert(any(Message.class)))
+                .thenThrow(new DuplicateKeyException("E11000 duplicate key error: event_id"));
+
+        boolean stored = messageService.recordSystemEvent(ROOM, EVENT_ID, KICKED, NOW);
+
+        assertThat(stored).isFalse();
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    @DisplayName("system message: editing is refused with SYSTEM_MESSAGE, not a crash on the missing sender")
+    void systemMessageCannotBeEdited() {
+        String id = new ObjectId().toHexString();
+        when(messageRepository.findById(id)).thenReturn(Optional.of(storedSystemMessage(id)));
+        isMember(true);
+
+        assertThatThrownBy(() -> messageService.edit(USER, id, "rewritten"))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(e.getCode()).isEqualTo("SYSTEM_MESSAGE");
+                });
+        verify(messageRepository, never()).applyEditIfLive(any(), any(), any());
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    @DisplayName("system message: even an owner cannot delete it")
+    void systemMessageCannotBeDeleted() {
+        String id = new ObjectId().toHexString();
+        when(messageRepository.findById(id)).thenReturn(Optional.of(storedSystemMessage(id)));
+        when(orgClient.membership(USER, ROOM)).thenReturn(new Membership(true, "OWNER"));
+
+        assertThatThrownBy(() -> messageService.delete(USER, id))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(e.getCode()).isEqualTo("SYSTEM_MESSAGE");
+                });
+        verify(messageRepository, never()).markDeletedIfLive(any(), any());
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    @DisplayName("system message: a non-member still gets the same 404 as for any message")
+    void systemMessageHiddenFromNonMembers() {
+        String id = new ObjectId().toHexString();
+        when(messageRepository.findById(id)).thenReturn(Optional.of(storedSystemMessage(id)));
+        when(orgClient.membership(USER, ROOM)).thenReturn(Membership.NONE);
+
+        assertThatThrownBy(() -> messageService.delete(USER, id))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                    assertThat(e.getCode()).isEqualTo("MESSAGE_NOT_FOUND");
+                });
+    }
+
+    @Test
+    @DisplayName("system message: replying to it is refused with REPLY_SYSTEM")
+    void cannotReplyToSystemMessage() {
+        String id = new ObjectId().toHexString();
+        when(messageRepository.findById(id)).thenReturn(Optional.of(storedSystemMessage(id)));
+        isMember(true);
+
+        assertThatThrownBy(() -> messageService.send(USER, ROOM, "replying", id))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(e.getCode()).isEqualTo("REPLY_SYSTEM");
+                });
+        verify(messageRepository, never()).save(any());
     }
 }
