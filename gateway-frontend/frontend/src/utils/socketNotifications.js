@@ -30,7 +30,9 @@ export function socketNotification({ event, data }, { userId, activeRoomId, user
       dedupeMs: 5000,
       userIds: [],
       message: event === "room.added"
-        ? "A room is now available in your conversations."
+        ? room?.type === "dm"
+          ? "A new direct conversation is available."
+          : room?.name ? `You can now access ${room.name}.` : "You can now access a room."
         : "You no longer have access to a room.",
     };
   }
@@ -38,13 +40,23 @@ export function socketNotification({ event, data }, { userId, activeRoomId, user
   if (event !== "room.activity" || data.change !== "new") return null;
   const message = data.message;
   if (!message?.id || message.deleted || data.room_id == null) return null;
-  if (activeRoomId != null && String(data.room_id) === String(activeRoomId)) return null;
-
   const system = message.system;
+  const addedToRoom = system?.type === "MEMBER_JOINED" && system.target_id === userId;
+  if (!addedToRoom && activeRoomId != null && String(data.room_id) === String(activeRoomId)) return null;
+
   if (system) {
     if (system.actor_id === userId) return null;
-    // room.added already tells the newly added member about their room access.
-    if (system.type === "MEMBER_JOINED" && system.target_id === userId) return null;
+    if (addedToRoom) {
+      return {
+        // Enrich the access notification regardless of which socket event arrives first.
+        id: `room.added:${data.room_id}`,
+        destination: { type: "room", roomId: data.room_id },
+        dedupeMs: 5000,
+        enrichesExisting: true,
+        userIds: [system.actor_id].filter(Boolean),
+        message: `${username(system.actor_id)} added you to ${room?.name || "a room"}.`,
+      };
+    }
     return {
       id: `message:${message.id}`,
       destination: { type: "room", roomId: data.room_id },

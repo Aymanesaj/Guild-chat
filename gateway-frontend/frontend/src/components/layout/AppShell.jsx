@@ -15,6 +15,7 @@ import { connectChat, onRoomEvent } from "../../api/messages";
 import { getRoom, getRooms } from "../../api/rooms";
 import { useSocketNotifications } from "../../hooks/useSocketNotifications";
 import { useToast } from "../ui/ToastProvider";
+import { useMobileViewport } from "../../hooks/useMobileViewport";
 
 const AppShellRoot = styled.div`
   display: flex;
@@ -23,6 +24,14 @@ const AppShellRoot = styled.div`
      composer under it. dvh tracks the visible viewport instead. */
   height: 100dvh;
   overflow: hidden;
+
+  @media ${PHONE_QUERY} {
+    position: fixed;
+    top: var(--app-viewport-top, 0px);
+    left: 0;
+    right: 0;
+    height: var(--app-viewport-height, 100dvh);
+  }
 `;
 
 const MainContent = styled.main`
@@ -49,6 +58,7 @@ function AppShellContent({ onLogout }) {
   const [activeRoomId, setActiveRoomId] = useState(null);
 
   const isPhone = useMediaQuery(PHONE_QUERY);
+  const viewportRef = useMobileViewport(isPhone);
   const [isNavOpen, setIsNavOpen] = useState(false);
 
   const { currentUser, profile, profileNavigation, openProfile, closeProfile, previewUser, closeUserPreview } =
@@ -208,7 +218,7 @@ function AppShellContent({ onLogout }) {
   return (
     <NavDrawerProvider value={navDrawer}>
       <RoomNavigationProvider navigateToRoom={handleRoomChange}>
-        <AppShellRoot>
+        <AppShellRoot ref={viewportRef}>
           {/* Wrapped on both sides of the breakpoint and in the same tree slot:
               swapping the wrapper in and out would remount Sidebar on rotation. */}
           <SlidePanel

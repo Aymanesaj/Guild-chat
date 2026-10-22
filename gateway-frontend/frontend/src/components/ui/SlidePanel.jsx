@@ -19,8 +19,8 @@ const PanelRoot = styled.div`
     $asOverlay &&
     css`
       position: fixed;
-      top: 0;
-      bottom: 0;
+      top: var(--app-viewport-top, 0px);
+      height: var(--app-viewport-height, 100dvh);
       ${$side === "right" ? "right: 0;" : "left: 0;"}
       z-index: var(--z-drawer);
       display: flex;
