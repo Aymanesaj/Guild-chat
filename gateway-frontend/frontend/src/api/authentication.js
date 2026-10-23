@@ -1,4 +1,4 @@
-import { jsonBody, request, requestPublic } from "./http";
+import { jsonBody, LOGOUT_EVENT, request, requestPublic } from "./http";
 import { clearTokens, getRefreshToken, setTokens } from "./tokens";
 import { clearUserCache, normalizeUser, rememberUser } from "./users";
 
@@ -45,6 +45,7 @@ export async function logoutUser() {
   } finally {
     clearTokens();
     clearUserCache();
+    window.dispatchEvent(new Event(LOGOUT_EVENT));
   }
 }
 
