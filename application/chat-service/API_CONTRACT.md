@@ -1,6 +1,6 @@
 # chat-service API Contract
 
-**Status (2026-09-28): implemented and tested.** This file describes what the
+**Status (2026-10-23): implemented and tested.** This file describes what the
 code does today. Change it in the same commit as any endpoint change.
 
 chat-service stores messages and delivers them live. It owns **no** rooms,
@@ -42,6 +42,7 @@ Errors common to every REST endpoint:
 | 401 | `INVALID_TOKEN` | Token rejected by identity-service |
 | 503 | `IDENTITY_UNAVAILABLE` | identity-service unreachable (the token could not be checked; not a 401) |
 | 503 | `ORG_UNAVAILABLE` | org-service unreachable (membership could not be checked) |
+| 503 | `MEDIA_UNAVAILABLE` | media-service unreachable or not configured (image endpoints only) |
 | 400 | `MALFORMED_JSON` | Body is not valid JSON |
 | 400 | `INVALID_PARAMETER` | A path/query value has the wrong type, e.g. `/rooms/abc/messages` |
 | 404 / 405 / 415 | `NOT_FOUND` / `METHOD_NOT_ALLOWED` / `UNSUPPORTED_MEDIA_TYPE` | Unknown path, wrong method, wrong content type |
@@ -63,6 +64,7 @@ event: the same JSON on both.
   "created_at": "2026-09-22T10:00:00.123Z",
   "edited_at": null,
   "deleted": false,
+  "attachments": [],
   "system": null
 }
 ```
@@ -72,6 +74,9 @@ event: the same JSON on both.
 - A deleted message keeps its place in history with `"deleted": true` and
   `"content": null`. The text never leaves the server again.
 - `edited_at` is `null` until the first edit.
+- `content` is `null` on a message that has only images.
+- `attachments` is always an array: `[]` for text, system and deleted
+  messages. See [Images](#images-attachments).
 - `system` is `null` on every ordinary message.
 - Sender names and avatars are **not** included: resolve `sender_id` through
   identity-service.
@@ -95,6 +100,7 @@ the room, and `room.activity` with `change: "new"` for list previews.
   "created_at": "2026-10-22T10:00:00.123Z",
   "edited_at": null,
   "deleted": false,
+  "attachments": [],
   "system": {
     "type": "MEMBER_KICKED",
     "actor_id": "a215c5f8-d810-4518-ad4c-8d551eb6dfc4",
@@ -149,7 +155,87 @@ Rules for the client:
 - A user who was **removed** does not see their own `MEMBER_KICKED` line: they
   are unsubscribed and get `room.removed` instead.
 
+## Images (attachments)
+
+A message can carry up to **4 images** (JPEG, PNG or WebP, at most **10 MB**
+each). The file never passes through chat: the browser uploads it straight to
+storage (R2) with a signed URL, then sends the message with the upload ids.
+
+1. `POST /rooms/{roomId}/attachments/upload-url` with the file's type, once per
+   image → `upload_id` + `upload_url`.
+2. `PUT <upload_url>` with the file as the body and **exactly** the returned
+   `content_type` as `Content-Type`. No `Authorization` header: the URL is the
+   permission. Must start within `expires_in` seconds (5 minutes).
+3. `POST /rooms/{roomId}/messages` with `attachment_upload_ids: [...]`. Chat
+   has media-service check each file (real type, size, not animated), resize
+   it and convert it to WebP, then stores the message.
+
+An image in a message:
+
+```json
+{
+  "media_id": "3f0c6a4e-8a51-4d0e-9b0a-2c4f1e7d9a10",
+  "content_type": "image/webp",
+  "width": 1280,
+  "height": 720,
+  "url": "https://<bucket>.r2.cloudflarestorage.com/...&X-Amz-Signature=...",
+  "url_expires_at": "2026-10-23T10:05:00Z"
+}
+```
+
+- `content_type`, `width` and `height` describe the **processed** image, not
+  the uploaded file. Use `width` / `height` to reserve the space before it
+  loads, so the message list does not jump.
+- `url` is a signed read link: put it straight in `<img src>`, with no
+  `Authorization` header. It is valid until `url_expires_at` (at most 5
+  minutes, at least 60 seconds when chat returns it).
+- **Expired or failed link:** `GET /messages/{id}` returns the message with
+  fresh URLs. Do it when an `<img>` fails to load, not on a timer.
+- `url` (and `url_expires_at`) is `null` when media-service could not sign it
+  at that moment. The rest of the message is unaffected; fetch the message
+  again later.
+- **Where URLs are present:** history, send, `GET` / `PATCH /messages/{id}`,
+  `message.new` and `message.edited`. **Where they are `null`:** `room.activity`
+  and `GET /rooms/last-messages` (previews show "Image", not the picture).
+- Order is the order of `attachment_upload_ids`. Duplicate ids are attached
+  once.
+- Images cannot be added, removed or replaced after sending. Editing changes
+  the text only.
+- Deleting the message (or the room) deletes its images from storage. A
+  deleted message has `attachments: []`; a URL handed out before the delete
+  stops working within minutes at most.
+
 ## REST endpoints
+
+### `POST /rooms/{roomId}/attachments/upload-url`: start an image upload
+
+Members only. One call per image; the caller becomes the image's owner.
+
+```json
+{ "content_type": "image/png" }
+```
+
+`201` →
+
+```json
+{
+  "upload_id": "0b7f3c1e-1d2a-4c5b-9e8f-7a6b5c4d3e2f",
+  "upload_url": "https://<bucket>.r2.cloudflarestorage.com/...",
+  "content_type": "image/png",
+  "expires_in": 300
+}
+```
+
+Then `PUT` the file to `upload_url` with `Content-Type: <content_type>` (see
+[Images](#images-attachments)). An upload id can only be sent by the user who
+created it. Uploads that are never sent are removed by media-service.
+
+| Status | Code | When |
+|---|---|---|
+| 403 | `NOT_A_MEMBER` | Caller is not in the room (checked before media is called) |
+| 400 | `VALIDATION_ERROR` | `content_type` missing, or not `image/jpeg`, `image/png` or `image/webp` (`details.contentType`) |
+| 503 | `MEDIA_BUSY` | media-service is overloaded: retry |
+| 503 | `MEDIA_UNAVAILABLE` | media-service unreachable |
 
 ### `GET /rooms/{roomId}/messages`: history
 
@@ -175,12 +261,25 @@ included (see above).
 ### `POST /rooms/{roomId}/messages`: send
 
 ```json
-{ "content": "hello", "reply_to_id": "66f0c1a2b3c4d5e6f7a8b9c0" }
+{
+  "content": "hello",
+  "reply_to_id": "66f0c1a2b3c4d5e6f7a8b9c0",
+  "attachment_upload_ids": ["0b7f3c1e-1d2a-4c5b-9e8f-7a6b5c4d3e2f"]
+}
 ```
 
-- `content`: required, not blank, at most 4000 characters.
+- `content`: at most 4000 characters. Optional when images are attached;
+  blank text is stored as `null`.
 - `reply_to_id`: optional. Must be a live message in the **same** room.
+- `attachment_upload_ids`: optional, at most 4 `upload_id`s (UUIDs) from
+  `upload-url`, each already PUT to storage.
+- A message needs text, images, or both.
 - The sender is always the token's user; sender and room cannot be set in the body.
+
+Checks run in this order: membership, empty message, reply, then the images
+(processing them is the slow part). If an image fails, nothing is stored;
+the same `upload_id`s can be sent again (an image already processed is not
+processed twice).
 
 `201` → the stored message object. It is also broadcast as `message.new`,
 including to the sender's own sockets (dedupe by `id`).
@@ -188,16 +287,24 @@ including to the sender's own sockets (dedupe by `id`).
 | Status | Code | When |
 |---|---|---|
 | 403 | `NOT_A_MEMBER` | Caller is not in the room |
-| 400 | `VALIDATION_ERROR` | `content` blank or longer than 4000 |
+| 400 | `VALIDATION_ERROR` | `content` longer than 4000, more than 4 upload ids, or an id that is not a UUID (`details.attachmentUploadIds`) |
+| 400 | `EMPTY_MESSAGE` | No text (or only blanks) and no images |
 | 400 | `INVALID_REPLY_ID` | `reply_to_id` is not a valid message id |
 | 400 | `REPLY_NOT_FOUND` | Replied-to message does not exist |
 | 400 | `REPLY_WRONG_ROOM` | Replied-to message is in another room |
 | 400 | `REPLY_DELETED` | Replied-to message was deleted |
 | 400 | `REPLY_SYSTEM` | Replied-to message is a system message |
+| 404 | `ATTACHMENT_NOT_FOUND` | Unknown `upload_id`, or another user's (same answer on purpose) |
+| 400 | `INVALID_IMAGE` | The file is not a valid image, is animated, or is too large; `message` says which |
+| 409 | `ATTACHMENT_UNAVAILABLE` | The file was not PUT yet, or the upload expired or failed: upload it again |
+| 409 | `ATTACHMENT_NOT_READY` | Still being processed by another request: retry the same send |
+| 503 | `MEDIA_BUSY` | media-service is overloaded: retry the same send |
+| 503 | `MEDIA_UNAVAILABLE` | media-service unreachable |
 
 ### `GET /messages/{messageId}`: one message
 
-`200` → message object (deleted messages included, content hidden).
+`200` → message object (deleted messages included, content hidden), with
+freshly signed image URLs: this is how a client refreshes an expired one.
 
 | Status | Code | When |
 |---|---|---|
@@ -211,7 +318,9 @@ including to the sender's own sockets (dedupe by `id`).
 ```
 
 Sender only, and only while the message is younger than **15 minutes**
-(at exactly 15:00 it is refused). Same `content` rules as sending.
+(at exactly 15:00 it is refused). `content` is required here, not blank, at
+most 4000 characters: text can be added to an image-only message, but not
+removed from one. Images are kept as they are.
 
 `200` → the updated message object, also broadcast as `message.edited`.
 
@@ -230,6 +339,8 @@ Allowed for the sender, or a room `OWNER`/`ADMIN`. Deleting an already
 deleted message is not an error.
 
 `204` → no body. Only the **first** delete is broadcast as `message.deleted`.
+The message's images are then deleted from storage, in the background: the
+response never waits for media-service, and does not fail because of it.
 
 | Status | Code | When |
 |---|---|---|
@@ -237,6 +348,26 @@ deleted message is not an error.
 | 404 | `MESSAGE_NOT_FOUND` | Unknown, or caller not in the room |
 | 403 | `SYSTEM_MESSAGE` | It is a system message: nobody can delete it, owners included |
 | 403 | `NOT_ALLOWED` | Caller is neither the sender nor an owner/admin (checked even if already deleted) |
+
+### `GET /rooms/last-messages?ids=3,7,12`: previews
+
+The newest message of each room, for room and DM lists: one request instead
+of one history call per room. `ids` is comma-separated room ids; duplicates
+are ignored.
+
+```json
+{ "3": { "id": "...", "content": "hi", ... }, "7": null }
+```
+
+- A room the caller is in but with no messages maps to `null`.
+- A room the caller is **not** in is left out (not an error, so the answer
+  cannot be used to probe which rooms exist).
+- Same message object, but image `url`s are `null` (previews show "Image").
+
+| Status | Code | When |
+|---|---|---|
+| 400 | `MISSING_IDS` | No ids given |
+| 400 | `TOO_MANY_IDS` | More than 100 distinct ids |
 
 ### `GET /presence?ids=a,b,c`: online status
 
@@ -334,7 +465,7 @@ none). They keep room lists and DM previews live without polling.
 | `room.added` | `{ "room_id": 5 }` | You can now see this room: you created it, were added to it, or someone opened a DM with you |
 | `room.removed` | `{ "room_id": 5 }` | You can no longer see it: you left, were kicked, or it was deleted |
 | `room.updated` | `{ "room_id": 5 }` | A room you are in changed: renamed, a member joined or left, or a role changed |
-| `room.activity` | `{ "room_id": 5, "change": "new" \| "edited" \| "deleted", "message": <message object> }` | A message was sent, edited or deleted in any room you are in, the sender included |
+| `room.activity` | `{ "room_id": 5, "change": "new" \| "edited" \| "deleted", "message": <message object> }` | A message was sent, edited or deleted in any room you are in, the sender included. Image `url`s are `null`: it is a preview. |
 
 The `room.added` / `room.removed` / `room.updated` frames carry only the id:
 refetch the list over REST (org-service), which applies its own permission
@@ -400,6 +531,9 @@ All of these are best effort. Events sent while a socket is down are lost, so
   arrives. If that event is lost, they keep receiving the room's live events
   until their socket reconnects. REST refuses them immediately either way.
 - A socket is not closed when its token expires.
+- Image deletion is best effort. If media-service fails, the image stays in
+  storage (logged) while the message is deleted anyway. Signed URLs are cached
+  in memory per instance, like presence.
 - Subscriptions and presence are in memory: one chat-service instance only.
 - `room.activity` uses a member list cached in memory per room. It is
   refreshed when org reports a change to that room. If that report is lost
