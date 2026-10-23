@@ -1,6 +1,7 @@
 package com.fttranscendence.chatservice.dto;
 
 import java.time.Instant;
+import java.util.List;
 
 import com.fttranscendence.chatservice.model.Message;
 /**
@@ -18,6 +19,7 @@ public record MessageResponse(
         Instant createdAt,
         Instant editedAt,
         boolean deleted,
+        List<AttachmentResponse> attachments,
         SystemEventResponse system) {
 
     public static MessageResponse from(Message message) {
@@ -33,6 +35,7 @@ public record MessageResponse(
                 message.getCreatedAt(),
                 message.getEditedAt(),
                 deleted,
+                deleted ? List.of() : message.getAttachments().stream().map(AttachmentResponse::from).toList(),
                 SystemEventResponse.from(message.getSystem()));
     }
 }

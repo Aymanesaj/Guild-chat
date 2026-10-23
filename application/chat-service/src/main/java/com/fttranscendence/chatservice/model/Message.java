@@ -93,6 +93,22 @@ public class Message {
                 createdAt);
     }
 
+    /** A message with images. Text may be null when there are attachments. */
+    public static Message create(
+            Long roomId,
+            String senderId,
+            String replyToId,
+            String content,
+            String contentType,
+            Instant createdAt,
+            List<Attachment> attachments) {
+
+        Message message = new Message(roomId, senderId, replyToId, content, contentType, createdAt);
+        // No empty array in Mongo: text-only messages keep their old shape.
+        message.attachments = attachments == null || attachments.isEmpty() ? null : List.copyOf(attachments);
+        return message;
+    }
+
     public static final String SYSTEM_CONTENT_TYPE = "system";
 
     /**
@@ -114,6 +130,11 @@ public class Message {
 
     public SystemEvent getSystem() {
         return system;
+    }
+
+    /** Never null: empty for a text-only message. */
+    public List<Attachment> getAttachments() {
+        return attachments == null ? List.of() : attachments;
     }
 
     public String getEventId() {

@@ -30,6 +30,7 @@ import org.springframework.http.HttpStatus;
 import com.fttranscendence.chatservice.exception.ApiException;
 import com.fttranscendence.chatservice.grpc.Membership;
 import com.fttranscendence.chatservice.grpc.OrgClient;
+import com.fttranscendence.chatservice.model.Attachment;
 import com.fttranscendence.chatservice.model.Message;
 import com.fttranscendence.chatservice.model.SystemEvent;
 import com.fttranscendence.chatservice.repository.MessageRepository;
@@ -56,6 +57,10 @@ class MessageServiceTest {
 
     @Mock
     private ApplicationEventPublisher events;
+
+    /** A mock returns an empty list from finalizeAll: text-only sends need no stubbing. */
+    @Mock
+    private AttachmentService attachmentService;
 
     /** Fixed so created_at can be asserted exactly, with no sleeping. */
     private static final Instant NOW = Instant.parse("2026-09-21T10:00:00Z");
@@ -259,6 +264,76 @@ class MessageServiceTest {
         assertThatThrownBy(() -> messageService.send(USER, ROOM, "hello", null))
                 .isInstanceOf(RuntimeException.class);
 
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    @DisplayName("no text and no image is EMPTY_MESSAGE; blank text counts as no text")
+    void sendRejectsEmptyMessage() {
+        isMember(true);
+
+        for (String content : new String[] { null, "", "   " }) {
+            assertThatThrownBy(() -> messageService.send(USER, ROOM, content, null, null))
+                    .isInstanceOfSatisfying(ApiException.class, e -> {
+                        assertThat(e.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                        assertThat(e.getCode()).isEqualTo("EMPTY_MESSAGE");
+                    });
+        }
+        verifyNoInteractions(messageRepository, attachmentService, events);
+    }
+
+    @Test
+    @DisplayName("images only: uploads are finalized by the caller and stored on the message, text null")
+    void sendStoresFinalizedAttachments() {
+        isMember(true);
+        List<String> uploads = List.of("u1", "u2");
+        List<Attachment> images = List.of(
+                new Attachment("m1", USER, "image/webp", 1600, 1200),
+                new Attachment("m2", USER, "image/webp", 800, 600));
+        when(attachmentService.finalizeAll(USER, uploads)).thenReturn(images);
+        when(messageRepository.save(any(Message.class))).thenAnswer(i -> i.getArgument(0));
+
+        Message saved = messageService.send(USER, ROOM, "  ", null, uploads);
+
+        assertThat(saved.getContent()).isNull();
+        assertThat(saved.getAttachments()).isEqualTo(images);
+        verify(events).publishEvent(any(MessageCreatedEvent.class));
+    }
+
+    @Test
+    @DisplayName("a non-member's uploads are never finalized")
+    void nonMemberUploadsAreNotFinalized() {
+        isMember(false);
+
+        assertThatThrownBy(() -> messageService.send(USER, ROOM, null, null, List.of("u1")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getCode()).isEqualTo("NOT_A_MEMBER"));
+        verifyNoInteractions(attachmentService);
+    }
+
+    @Test
+    @DisplayName("a bad reply is rejected before any image is finalized (finalizing is the slow part)")
+    void badReplyStopsBeforeFinalize() {
+        isMember(true);
+        String replyId = new ObjectId().toHexString();
+        when(messageRepository.findById(replyId)).thenReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> messageService.send(USER, ROOM, null, replyId, List.of("u1")))
+                .isInstanceOf(ApiException.class);
+        verifyNoInteractions(attachmentService);
+    }
+
+    @Test
+    @DisplayName("a refused image stores and announces nothing")
+    void refusedImageStoresNothing() {
+        isMember(true);
+        when(attachmentService.finalizeAll(USER, List.of("u1")))
+                .thenThrow(ApiException.badRequest("INVALID_IMAGE", "Animated images are not supported"));
+
+        assertThatThrownBy(() -> messageService.send(USER, ROOM, "hi", null, List.of("u1")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getCode()).isEqualTo("INVALID_IMAGE"));
+        verify(messageRepository, never()).save(any());
         verifyNoInteractions(events);
     }
 

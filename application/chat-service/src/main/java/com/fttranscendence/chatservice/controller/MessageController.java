@@ -59,7 +59,7 @@ public class MessageController {
         @Valid @RequestBody SendMessageRequest request)
         {
             // Send the message and return the response
-            Message message = messageService.send(userId  , roomId , request.content() ,request.replyToId());
+            Message message = messageService.send(userId  , roomId , request.content() ,request.replyToId(), request.attachmentUploadIds());
 
             return MessageResponse.from(message);
         }

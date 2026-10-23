@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import com.fttranscendence.chatservice.model.Attachment;
 import com.fttranscendence.chatservice.model.Message;
 import com.fttranscendence.chatservice.model.SystemEvent;
 import com.fttranscendence.chatservice.support.MongoTestSupport;
@@ -66,6 +67,29 @@ class MessageRepositoryTest extends MongoTestSupport {
         assertThat(raw.get("sender_id")).isEqualTo(ALICE);
         assertThat(raw.getDate("created_at").toInstant()).isEqualTo(createdAt);
         assertThat(raw).doesNotContainKey("roomId");             // no camelCase leaked into the document
+    }
+
+    @Test
+    @DisplayName("attachments are stored in snake_case and read back; a text message has no attachments key")
+    void attachmentsRoundTrip() {
+        Attachment image = new Attachment("5d3c0000-0000-4000-8000-000000000001", ALICE, "image/webp", 1600, 1200);
+        Message withImage = repository.save(Message.create(ROOM, ALICE, null, null, "text",
+                Instant.parse("2026-09-20T12:56:51.179Z"), List.of(image)));
+        Message textOnly = repository.save(Message.create(ROOM, ALICE, null, "hi", "text",
+                Instant.parse("2026-09-20T12:56:52.179Z"), List.of()));
+
+        org.bson.Document raw = mongoTemplate.getCollection("messages")
+                .find(new org.bson.Document("_id", new ObjectId(withImage.getId()))).first();
+        org.bson.Document stored = raw.getList("attachments", org.bson.Document.class).get(0);
+        assertThat(stored.keySet()).containsExactlyInAnyOrder(
+                "media_id", "owner_id", "content_type", "width", "height");
+
+        assertThat(repository.findById(withImage.getId()).orElseThrow().getAttachments()).containsExactly(image);
+
+        org.bson.Document rawText = mongoTemplate.getCollection("messages")
+                .find(new org.bson.Document("_id", new ObjectId(textOnly.getId()))).first();
+        assertThat(rawText).doesNotContainKey("attachments");
+        assertThat(repository.findById(textOnly.getId()).orElseThrow().getAttachments()).isEmpty();
     }
 
     @Test

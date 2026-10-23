@@ -25,6 +25,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.fttranscendence.chatservice.auth.AuthenticationFilter;
 import com.fttranscendence.chatservice.exception.ApiException;
 import com.fttranscendence.chatservice.grpc.IdentityClient;
+import com.fttranscendence.chatservice.model.Attachment;
 import com.fttranscendence.chatservice.model.Message;
 import com.fttranscendence.chatservice.service.MessageService;
 
@@ -177,7 +178,7 @@ class MessageControllerTest {
     @Test
     @DisplayName("sending returns 201 with the created message in snake_case")
     void sendReturnsCreated() throws Exception {
-        when(messageService.send(eq(SENDER), eq(ROOM), eq("hello"), any()))
+        when(messageService.send(eq(SENDER), eq(ROOM), eq("hello"), any(), any()))
                 .thenReturn(message("hello"));
 
         mockMvc.perform(authenticatedPost("/rooms/42/messages", "{\"content\":\"hello\"}"))
@@ -191,7 +192,7 @@ class MessageControllerTest {
     @Test
     @DisplayName("reply_to_id from the body reaches the service")
     void sendPassesReplyToId() throws Exception {
-        when(messageService.send(eq(SENDER), eq(ROOM), eq("me too"), eq("6a75d60a586b1c7be1750ad3")))
+        when(messageService.send(eq(SENDER), eq(ROOM), eq("me too"), eq("6a75d60a586b1c7be1750ad3"), any()))
                 .thenReturn(message("me too"));
 
         mockMvc.perform(authenticatedPost("/rooms/42/messages",
@@ -199,13 +200,13 @@ class MessageControllerTest {
                 .andExpect(status().isCreated());
 
         org.mockito.Mockito.verify(messageService)
-                .send(SENDER, ROOM, "me too", "6a75d60a586b1c7be1750ad3");
+                .send(SENDER, ROOM, "me too", "6a75d60a586b1c7be1750ad3", null);
     }
 
     @Test
     @DisplayName("a sender_id in the body is ignored: the sender always comes from the token")
     void senderIdInBodyIsIgnored() throws Exception {
-        when(messageService.send(eq(SENDER), eq(ROOM), eq("spoof"), any()))
+        when(messageService.send(eq(SENDER), eq(ROOM), eq("spoof"), any(), any()))
                 .thenReturn(message("spoof"));
 
         mockMvc.perform(authenticatedPost("/rooms/42/messages",
@@ -213,26 +214,68 @@ class MessageControllerTest {
                 .andExpect(status().isCreated());
 
         // the service is called with the authenticated user, not the body value
-        org.mockito.Mockito.verify(messageService).send(SENDER, ROOM, "spoof", null);
+        org.mockito.Mockito.verify(messageService).send(SENDER, ROOM, "spoof", null, null);
     }
 
     @Test
-    @DisplayName("blank content is a 400 VALIDATION_ERROR naming the field")
-    void blankContentIsRejected() throws Exception {
+    @DisplayName("text is optional in the body: \"no text and no image\" is the service's EMPTY_MESSAGE")
+    void emptyMessageIsRejectedByService() throws Exception {
+        when(messageService.send(eq(SENDER), eq(ROOM), any(), any(), any()))
+                .thenThrow(ApiException.badRequest("EMPTY_MESSAGE", "A message needs text or an image"));
+
         mockMvc.perform(authenticatedPost("/rooms/42/messages", "{\"content\":\"  \"}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))
-                .andExpect(jsonPath("$.error.details.content").exists());
-
-        org.mockito.Mockito.verifyNoInteractions(messageService);
+                .andExpect(jsonPath("$.error.code").value("EMPTY_MESSAGE"));
+        mockMvc.perform(authenticatedPost("/rooms/42/messages", "{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("EMPTY_MESSAGE"));
     }
 
     @Test
-    @DisplayName("missing content is a 400, not a 500")
-    void missingContentIsRejected() throws Exception {
-        mockMvc.perform(authenticatedPost("/rooms/42/messages", "{}"))
+    @DisplayName("attachment_upload_ids reach the service; the message comes back with attachments")
+    void sendPassesUploadIdsAndReturnsAttachments() throws Exception {
+        String upload = "0b7f3c1e-1d2a-4c5b-9e8f-7a6b5c4d3e2f";
+        Message withImage = Message.create(ROOM, SENDER, null, null, "text",
+                Instant.parse("2026-09-20T12:56:51.179Z"),
+                List.of(new Attachment("5d3c0000-0000-4000-8000-000000000001", SENDER, "image/webp", 1600, 1200)));
+        when(messageService.send(SENDER, ROOM, null, null, List.of(upload))).thenReturn(withImage);
+
+        mockMvc.perform(authenticatedPost("/rooms/42/messages",
+                        "{\"attachment_upload_ids\":[\"" + upload + "\"]}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.content").doesNotExist())
+                .andExpect(jsonPath("$.attachments[0].media_id").value("5d3c0000-0000-4000-8000-000000000001"))
+                .andExpect(jsonPath("$.attachments[0].content_type").value("image/webp"))
+                .andExpect(jsonPath("$.attachments[0].width").value(1600))
+                .andExpect(jsonPath("$.attachments[0].height").value(1200))
+                // owner_id is internal: media needs it, the browser does not
+                .andExpect(jsonPath("$.attachments[0].owner_id").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("a text message has an empty attachments array, never null")
+    void textMessageHasEmptyAttachments() throws Exception {
+        when(messageService.send(eq(SENDER), eq(ROOM), eq("hello"), any(), any())).thenReturn(message("hello"));
+
+        mockMvc.perform(authenticatedPost("/rooms/42/messages", "{\"content\":\"hello\"}"))
+                .andExpect(jsonPath("$.attachments").isArray())
+                .andExpect(jsonPath("$.attachments").isEmpty());
+    }
+
+    @Test
+    @DisplayName("more than 4 images, or an id that is not an upload_id, is a 400 before the service")
+    void invalidUploadIdsAreRejected() throws Exception {
+        String id = "\"0b7f3c1e-1d2a-4c5b-9e8f-7a6b5c4d3e2f\"";
+        String five = String.join(",", id, id, id, id, id);
+
+        mockMvc.perform(authenticatedPost("/rooms/42/messages", "{\"attachment_upload_ids\":[" + five + "]}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+        mockMvc.perform(authenticatedPost("/rooms/42/messages", "{\"attachment_upload_ids\":[\"../etc\"]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+
+        org.mockito.Mockito.verifyNoInteractions(messageService);
     }
 
     @Test
@@ -251,7 +294,7 @@ class MessageControllerTest {
     @DisplayName("exactly 4000 characters is allowed (boundary)")
     void maximumContentIsAccepted() throws Exception {
         String atLimit = "x".repeat(4000);
-        when(messageService.send(eq(SENDER), eq(ROOM), eq(atLimit), any())).thenReturn(message(atLimit));
+        when(messageService.send(eq(SENDER), eq(ROOM), eq(atLimit), any(), any())).thenReturn(message(atLimit));
 
         mockMvc.perform(authenticatedPost("/rooms/42/messages", "{\"content\":\"" + atLimit + "\"}"))
                 .andExpect(status().isCreated());
@@ -260,7 +303,7 @@ class MessageControllerTest {
     @Test
     @DisplayName("a service rejection keeps the spec envelope (403 for a non-member)")
     void serviceRejectionUsesEnvelope() throws Exception {
-        when(messageService.send(eq(SENDER), eq(ROOM), any(), any()))
+        when(messageService.send(eq(SENDER), eq(ROOM), any(), any(), any()))
                 .thenThrow(new ApiException(HttpStatus.FORBIDDEN, "NOT_A_MEMBER",
                         "User is not a member of the room"));
 

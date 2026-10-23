@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import com.fttranscendence.chatservice.exception.ApiException;
 import com.fttranscendence.chatservice.grpc.Membership;
 import com.fttranscendence.chatservice.grpc.OrgClient;
+import com.fttranscendence.chatservice.model.Attachment;
 import com.fttranscendence.chatservice.model.Message;
 import com.fttranscendence.chatservice.model.SystemEvent;
 import com.fttranscendence.chatservice.repository.MessageRepository;
@@ -36,34 +37,43 @@ public class MessageService {
     private final OrgClient orgClient;
     private final Clock clock;
     private final ApplicationEventPublisher events;
+    private final AttachmentService attachmentService;
 
-    public MessageService(MessageRepository messageRepository, OrgClient orgClient, Clock clock , ApplicationEventPublisher events) {
+    public MessageService(MessageRepository messageRepository, OrgClient orgClient, Clock clock , ApplicationEventPublisher events , AttachmentService attachmentService) {
         this.messageRepository = messageRepository;
         this.orgClient = orgClient;
         this.clock = clock;
         this.events = events;
+        this.attachmentService = attachmentService;
     }
 
 
     private static final String DEFAULT_CONTENT_TYPE = "text";
-    /**
-     * Stores a message. The sender is the authenticated caller, never a value
-     * taken from the request body.
-     */
+    /** Text only. */
+    public Message send(String userId, Long roomId, String content, String replyToId) {
+        return send(userId, roomId, content, replyToId, List.of());
+    }
 
-    public Message send(String userId, Long roomId, String content,  String replyToId) {
-        if (!orgClient.isMember(userId, roomId)){
+    public Message send(String userId, Long roomId, String content, String replyToId, List<String> uploadIds) {
+        if (!orgClient.isMember(userId, roomId)) {
             throw ApiException.forbidden("NOT_A_MEMBER", "User is not a member of the room");
+        }
+        List<String> uploads = uploadIds == null ? List.of() : uploadIds;
+        String text = content == null || content.isBlank() ? null : content;
+        if (text == null && uploads.isEmpty()) {
+            throw ApiException.badRequest("EMPTY_MESSAGE", "A message needs text or an image");
         }
 
         String reply = resolveReplyToId(roomId, replyToId);
+        // After every cheap check: finalizing is the slow part (download, resize, upload).
+        List<Attachment> attachments = attachmentService.finalizeAll(userId, uploads);
 
-        Message message =  Message.create( roomId , userId ,  reply , content ,DEFAULT_CONTENT_TYPE , clock.instant());
+        Message message = Message.create(roomId, userId, reply, text, DEFAULT_CONTENT_TYPE,
+                clock.instant(), attachments);
         Message saved = messageRepository.save(message);
         events.publishEvent(new MessageCreatedEvent(saved));
-        return saved ;
+        return saved;
     }
-
 
     /**
      * Stores a room event from org (member joined, kicked, ...) as a system
