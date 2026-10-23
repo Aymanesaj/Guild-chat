@@ -32,7 +32,11 @@ export function useSocketNotifications(userId, activeRoomId, onNavigate, rooms =
     const displayed = new Set();
     const roomLookups = new Map();
     const notificationRoom = (frame) => {
-      if (frame.event !== "room.activity" || frame.data.message?.system) return undefined;
+      const system = frame.data.message?.system;
+      const needsRoom = frame.event === "room.added" || (frame.event === "room.activity" && (
+        !system || (system.type === "MEMBER_JOINED" && system.target_id === userId)
+      ));
+      if (!needsRoom) return undefined;
       const roomId = frame.data.room_id;
       const known = findRoom(roomId);
       if (known) return known;
@@ -65,21 +69,31 @@ export function useSocketNotifications(userId, activeRoomId, onNavigate, rooms =
       if (!candidate) return;
       const now = Date.now();
       const previous = seen.get(candidate.id);
-      if (previous != null && now - previous < (candidate.dedupeMs ?? Infinity)) return;
+      const duplicate = previous != null && now - previous.at < (candidate.dedupeMs ?? Infinity);
+      if (duplicate && !candidate.enrichesExisting) return;
       // Reserve before resolving names: redelivery may arrive while REST is in flight.
+      const delivery = { at: duplicate ? previous.at : now };
       seen.delete(candidate.id);
-      seen.set(candidate.id, now);
+      seen.set(candidate.id, delivery);
       if (seen.size > 500) seen.delete(seen.keys().next().value);
 
+      // Show the socket event immediately. Name/room lookups must not block
+      // delivery on a slow mobile connection; enrich the same toast afterward.
+      if (duplicate) toast.update(candidate.id, candidate.message);
+      else displayed.add(show(candidate));
       const [users, room] = await Promise.all([
         resolveUsers(candidate.userIds),
         notificationRoom(frame),
       ]);
-      if (!active) return;
+      // A later, richer membership event supersedes the access-only lookup.
+      if (!active || seen.get(candidate.id) !== delivery) return;
       // Recheck the current room after the lookup; the user may have navigated.
       const notification = describe(frame, users, room);
-      if (!notification) return;
-      displayed.add(show(notification));
+      if (!notification) {
+        toast.dismiss(candidate.id);
+        return;
+      }
+      toast.update(notification.id, notification.message);
     });
 
     return () => {

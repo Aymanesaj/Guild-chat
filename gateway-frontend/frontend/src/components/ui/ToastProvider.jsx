@@ -8,6 +8,7 @@ import { PHONE_QUERY } from "../../constants/breakpoints";
 const ToastContext = createContext(null);
 const MAX_TOASTS = 4;
 const EXIT_MS = 180;
+const DEFAULT_COMPOSER_HEIGHT = 88;
 
 /**
  * Shared feedback surface for actions and live notifications.
@@ -16,13 +17,57 @@ const EXIT_MS = 180;
  */
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
+  const [anchor, setAnchor] = useState(null);
+  const viewportRef = useRef(null);
   const nextId = useRef(0);
   const isPhone = useMediaQuery(PHONE_QUERY);
   // Only mounted toasts start their timers, so queued messages get time to be read.
   const visibleToasts = toasts.slice(0, isPhone ? 1 : MAX_TOASTS);
 
+  useEffect(() => {
+    if (!isPhone) return undefined;
+    const viewport = window.visualViewport;
+    const position = () => {
+      const visibleTop = viewport?.offsetTop ?? 0;
+      const visibleBottom = visibleTop + (viewport?.height ?? window.innerHeight);
+      const keyboardInset = Math.max(0, window.innerHeight - visibleBottom);
+      const bounds = anchor?.getBoundingClientRect();
+      const anchorVisible = bounds?.height > 0 && bounds.top < visibleBottom && bounds.bottom > visibleTop;
+      // Reserve the normal input area on every screen, including views with
+      // no composer. A taller reply bar can still move the toast farther up.
+      const bottom = Math.max(
+        keyboardInset + DEFAULT_COMPOSER_HEIGHT,
+        anchorVisible ? window.innerHeight - bounds.top : 0,
+      ) + 16;
+      viewportRef.current?.style.setProperty("--toast-bottom", `${bottom}px`);
+      viewportRef.current?.style.setProperty("--toast-max-height", `${Math.max(44, window.innerHeight - bottom - visibleTop - 16)}px`);
+    };
+    position();
+    // The reply bar changes the composer's height; mobile keyboards change
+    // the visual viewport even when the layout viewport stays the same size.
+    const observer = anchor ? new ResizeObserver(position) : null;
+    if (anchor) observer.observe(anchor);
+    window.addEventListener("resize", position);
+    viewport?.addEventListener("resize", position);
+    viewport?.addEventListener("scroll", position);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", position);
+      viewport?.removeEventListener("resize", position);
+      viewport?.removeEventListener("scroll", position);
+    };
+  }, [anchor, isPhone]);
+
   const dismiss = useCallback((id) => {
     setToasts((current) => current.filter((toast) => toast.id !== id));
+  }, []);
+
+  // Enrich an existing toast without resetting its timer or restoring a dismissed one.
+  const update = useCallback((id, message) => {
+    if (!message) return;
+    setToasts((current) => current.map((toast) =>
+      toast.id === id ? { ...toast, message } : toast,
+    ));
   }, []);
 
   const notify = useCallback(({ message, type = "success", duration, id, onActivate }) => {
@@ -46,14 +91,16 @@ export function ToastProvider({ children }) {
     error: (message, options) => notify({ ...options, message, type: "error" }),
     success: (message, options) => notify({ ...options, message, type: "success" }),
     info: (message, options) => notify({ ...options, message, type: "info" }),
+    update,
     dismiss,
-  }), [notify, dismiss]);
+    setAnchor,
+  }), [notify, update, dismiss, setAnchor]);
 
   return (
     <ToastContext.Provider value={api}>
       {children}
       {createPortal(
-        <Viewport aria-label="Notifications">
+        <Viewport ref={viewportRef} aria-label="Notifications">
           {visibleToasts.map((toast) => <Toast key={toast.id} toast={toast} onDismiss={dismiss} />)}
         </Viewport>,
         document.body,
@@ -96,8 +143,12 @@ function Toast({ toast, onDismiss }) {
     <ToastCard
       $type={toast.type}
       $exiting={exiting}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      // Touch browsers can leave compatibility mouse hover active after a tap,
+      // pinning this toast and blocking the phone's single-toast queue.
+      onPointerEnter={(event) => {
+        if (event.pointerType === "mouse") setHovered(true);
+      }}
+      onPointerLeave={() => setHovered(false)}
       onFocus={() => setFocused(true)}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
@@ -156,12 +207,14 @@ const Viewport = styled.section`
   }
 
   @media ${PHONE_QUERY} {
-    top: calc(72px + env(safe-area-inset-top));
-    bottom: auto;
+    top: auto;
+    bottom: max(var(--toast-bottom, 104px), calc(104px + env(safe-area-inset-bottom)));
     left: max(var(--space-4), env(safe-area-inset-left));
     right: max(var(--space-4), env(safe-area-inset-right));
     width: auto;
-    max-height: calc(100dvh - 88px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    max-width: 420px;
+    margin-inline: auto;
+    max-height: var(--toast-max-height, calc(100dvh - 32px));
   }
 `;
 
@@ -209,6 +262,10 @@ const ToastBody = styled.div`
   > span { min-width: 0; }
   &:hover > span { text-decoration: ${({ $actionable }) => $actionable ? "underline" : "none"}; }
   &:focus-visible { outline-color: var(--toast-color); }
+
+  @media ${PHONE_QUERY} {
+    min-height: 44px;
+  }
 `;
 
 const CloseButton = styled.button`
@@ -224,4 +281,9 @@ const CloseButton = styled.button`
   color: var(--text-secondary);
 
   &:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+  @media ${PHONE_QUERY} {
+    width: 44px;
+    height: 44px;
+  }
 `;

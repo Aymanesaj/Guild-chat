@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from "react";
+import { useCallback, useEffect, useId, useRef } from "react";
 import styled from "styled-components";
 import { useToast } from "../ui/ToastProvider";
 import { TbArrowBackUp, TbSend, TbX } from "react-icons/tb";
@@ -61,6 +61,11 @@ const ComposerInput = styled(Input)`
   flex: 1;
   border-radius: var(--radius-pill);
   background: var(--bg-surface);
+
+  @media (max-width: 700px) {
+    /* Avoid automatic input zoom changing the viewport while typing on iOS. */
+    font-size: 16px;
+  }
 `;
 
 const SendButton = styled(Button)`
@@ -78,6 +83,7 @@ function MessageComposer({
   replyingTo, onCancelReply, focusEnabled = true,
 }) {
   const toast = useToast();
+  const setToastAnchor = useCallback((element) => toast.setAnchor(element), [toast]);
   const inputRef = useRef(null);
   const submitting = useRef(false);
   const countId = useId();
@@ -114,7 +120,7 @@ function MessageComposer({
   }
 
   return (
-    <MessageComposerRoot>
+    <MessageComposerRoot ref={setToastAnchor}>
       {replyingTo && (
         <ReplyBanner>
           <TbArrowBackUp size={16} />
