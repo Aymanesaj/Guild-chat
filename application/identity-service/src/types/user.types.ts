@@ -16,6 +16,7 @@ export interface User {
   displayName: string;
   bio: string | null;
   avatarUrl: string | null;
+  avatarMediaId: string | null;
   authProvider: string;
   oauthProviderId: string | null;
   createdAt: Date;
@@ -34,5 +35,6 @@ export type PublicProfile = Pick<
   | "displayName"
   | "bio"
   | "avatarUrl"
+  | "avatarMediaId"
   | "createdAt"
 >;

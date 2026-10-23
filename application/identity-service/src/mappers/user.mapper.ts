@@ -21,6 +21,7 @@ export function toPublicProfile(
     displayName: user.displayName,
     bio: user.bio,
     avatarUrl: user.avatarUrl,
+    avatarMediaId: user.avatarMediaId,
     createdAt: user.createdAt,
   };
 }

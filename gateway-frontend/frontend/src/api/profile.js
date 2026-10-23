@@ -26,7 +26,19 @@ function avatarUrl(avatar) {
 }
 
 async function getAvatarBlob(avatar) {
-  const response = await authedFetch(avatarUrl(avatar));
+  let response;
+
+  if (avatar.startsWith("media:")) {
+    // Ask identity for a short-lived signed R2 link, then fetch the image from R2.
+    const [, userId] = avatar.split(":");
+    const signed = await request(`${API_BASE}/users/${userId}/avatar-url`, {}, "Failed to fetch avatar");
+    if (!signed?.downloadUrl) {
+      throw new ApiError("No avatar", 404, null);
+    }
+    response = await fetch(signed.downloadUrl); // no Authorization: the link is the permission
+  } else {
+    response = await authedFetch(avatarUrl(avatar));
+  }
 
   if (!response.ok) {
     throw new ApiError("Failed to fetch avatar", response.status, null);
@@ -96,14 +108,37 @@ function clearAvatarCache() {
 
 window.addEventListener(LOGOUT_EVENT, clearAvatarCache);
 
-export async function uploadAvatar(file) {
-  const formData = new FormData();
-  formData.append("file", file);
+const AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 
-  // No Content-Type header — the browser sets the multipart boundary.
+/** upload-url -> PUT straight to R2 -> confirm (media checks, resizes, converts to WebP). */
+export async function uploadAvatar(file) {
+  if (!AVATAR_TYPES.includes(file.type)) {
+    throw new ApiError("Only JPEG, PNG and WebP images are supported", 400, null);
+  }
+  if (file.size > AVATAR_MAX_BYTES) {
+    throw new ApiError("Avatar must be 5 MB or less", 400, null);
+  }
+
+  const ticket = await request(
+    `${API_BASE}/avatar/upload-url`,
+    { method: "POST", ...jsonBody({ contentType: file.type }) },
+    "Failed to start avatar upload",
+  );
+
+  // Exactly the Content-Type the URL was signed for, or R2 refuses the PUT.
+  const put = await fetch(ticket.uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": ticket.requiredContentType },
+    body: file,
+  });
+  if (!put.ok) {
+    throw new ApiError("Failed to upload avatar", put.status, null);
+  }
+
   return request(
-    `${API_BASE}/me/avatar`,
-    { method: "POST", body: formData },
-    "Failed to upload avatar",
-  ).then(normalizeUser);
+    `${API_BASE}/avatar/confirm`,
+    { method: "POST", ...jsonBody({ uploadId: ticket.uploadId }) },
+    "Failed to save avatar",
+  );
 }

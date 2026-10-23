@@ -2,6 +2,12 @@ import { buildQuery, LOGOUT_EVENT, request } from "./http";
 
 const API_BASE = "/api/users";
 
+/** The avatar cache key: changes whenever the user picks a new picture. */
+function avatarKey(user) {
+  if (user.avatarMediaId) return `media:${user.id}:${user.avatarMediaId}`;
+  return user.avatarUrl ?? null;
+}
+
 /**
  * identity-service speaks camelCase; the components were written against the
  * mock's snake_case. Keep both so neither side has to know about the other.
@@ -12,8 +18,11 @@ export function normalizeUser(user) {
   return {
     ...user,
     display_name: user.displayName ?? null,
-    avatar: user.avatarUrl ?? null,
-    avatar_file: user.avatarUrl ?? null,
+    // New avatars live in media (R2): "media:<userId>:<mediaId>". The mediaId
+    // changes on every upload, so the cache never serves an old picture.
+    // Old local avatars keep their path until replaced.
+    avatar: avatarKey(user),
+    avatar_file: avatarKey(user),
     status: user.status ?? "offline",
   };
 }
