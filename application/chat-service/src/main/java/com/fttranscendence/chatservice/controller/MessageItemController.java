@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.fttranscendence.chatservice.auth.AuthenticationFilter;
 import com.fttranscendence.chatservice.dto.EditMessageRequest;
 import com.fttranscendence.chatservice.dto.MessageResponse;
+import com.fttranscendence.chatservice.service.AttachmentUrls;
 import com.fttranscendence.chatservice.service.MessageService;
 
 import jakarta.validation.Valid;
@@ -30,16 +31,17 @@ import jakarta.validation.Valid;
 @RequestMapping("/messages/{messageId}")
 public class MessageItemController {
     private final MessageService messageService;
+    private final AttachmentUrls attachmentUrls;
 
-    public MessageItemController(MessageService messageService) {
+    public MessageItemController(MessageService messageService , AttachmentUrls attachmentUrls) {
         this.messageService = messageService;
+        this.attachmentUrls = attachmentUrls;
     }
     @GetMapping
     public MessageResponse get(
         @PathVariable String messageId,
         @RequestAttribute(AuthenticationFilter.USER_ID_ATTRIBUTE) String userId){
-            return MessageResponse.from(messageService.get(userId , messageId));
-
+            return MessageResponse.from(messageService.get(userId , messageId) , attachmentUrls::sign);
         }
 
     @PatchMapping
@@ -47,7 +49,7 @@ public class MessageItemController {
         @PathVariable String messageId,
         @RequestAttribute(AuthenticationFilter.USER_ID_ATTRIBUTE) String userId,
         @Valid @RequestBody EditMessageRequest request) {
-            return MessageResponse.from(messageService.edit(userId , messageId, request.content()));
+            return MessageResponse.from(messageService.edit(userId , messageId, request.content()) , attachmentUrls::sign);
         }
     @DeleteMapping
     @ResponseStatus(HttpStatus.NO_CONTENT)

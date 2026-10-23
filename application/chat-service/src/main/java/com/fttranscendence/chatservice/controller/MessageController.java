@@ -18,6 +18,7 @@ import com.fttranscendence.chatservice.auth.AuthenticationFilter;
 import com.fttranscendence.chatservice.dto.MessageResponse;
 import com.fttranscendence.chatservice.dto.SendMessageRequest;
 import com.fttranscendence.chatservice.model.Message;
+import com.fttranscendence.chatservice.service.AttachmentUrls;
 import com.fttranscendence.chatservice.service.MessageService;
 
 import jakarta.validation.Valid;
@@ -33,9 +34,11 @@ import jakarta.validation.Valid;
 public class MessageController {
 
     private final MessageService messageService;
+    private final AttachmentUrls attachmentUrls;
 
-    public MessageController(MessageService messageService) {
+    public MessageController(MessageService messageService , AttachmentUrls attachmentUrls) {
         this.messageService = messageService;
+        this.attachmentUrls = attachmentUrls;
     }
 
     @GetMapping
@@ -47,7 +50,7 @@ public class MessageController {
 
         return messageService.history(userId ,roomId, before, limit)
                 .stream()
-                .map(MessageResponse::from) // short hand .map(message -> MessageResponse.from(message))
+                .map(message -> MessageResponse.from(message, attachmentUrls::sign))
                 .toList();
     }
 
@@ -61,6 +64,6 @@ public class MessageController {
             // Send the message and return the response
             Message message = messageService.send(userId  , roomId , request.content() ,request.replyToId(), request.attachmentUploadIds());
 
-            return MessageResponse.from(message);
+            return MessageResponse.from(message, attachmentUrls::sign);
         }
 }

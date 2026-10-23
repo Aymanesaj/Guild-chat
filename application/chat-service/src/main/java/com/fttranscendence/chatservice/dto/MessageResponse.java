@@ -2,7 +2,9 @@ package com.fttranscendence.chatservice.dto;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.function.Function;
 
+import com.fttranscendence.chatservice.model.Attachment;
 import com.fttranscendence.chatservice.model.Message;
 /**
  * What the API returns. Separate from the Message document so that database
@@ -22,7 +24,13 @@ public record MessageResponse(
         List<AttachmentResponse> attachments,
         SystemEventResponse system) {
 
+    /** Images without URLs: previews (room.activity, last-messages). */
     public static MessageResponse from(Message message) {
+        return from(message, AttachmentResponse::from);
+    }
+
+    /** Images built by the caller, e.g. with signed URLs (AttachmentUrls::sign). */
+    public static MessageResponse from(Message message, Function<Attachment, AttachmentResponse> attachment) {
         boolean deleted = message.isDeleted();
 
         return new MessageResponse(
@@ -35,7 +43,7 @@ public record MessageResponse(
                 message.getCreatedAt(),
                 message.getEditedAt(),
                 deleted,
-                deleted ? List.of() : message.getAttachments().stream().map(AttachmentResponse::from).toList(),
+                deleted ? List.of() : message.getAttachments().stream().map(attachment).toList(),
                 SystemEventResponse.from(message.getSystem()));
     }
 }

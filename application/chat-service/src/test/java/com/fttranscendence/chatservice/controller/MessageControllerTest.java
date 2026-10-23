@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.Instant;
 import java.util.List;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -23,10 +24,12 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.fttranscendence.chatservice.auth.AuthenticationFilter;
+import com.fttranscendence.chatservice.dto.AttachmentResponse;
 import com.fttranscendence.chatservice.exception.ApiException;
 import com.fttranscendence.chatservice.grpc.IdentityClient;
 import com.fttranscendence.chatservice.model.Attachment;
 import com.fttranscendence.chatservice.model.Message;
+import com.fttranscendence.chatservice.service.AttachmentUrls;
 import com.fttranscendence.chatservice.service.MessageService;
 
 /**
@@ -67,6 +70,16 @@ class MessageControllerTest {
     /** @WebMvcTest includes Filter beans, so AuthenticationFilter's dependency must exist. */
     @MockBean
     private IdentityClient identityClient;
+
+    /** Signs every image with a fixed URL, so the controller's use of it is visible. */
+    @MockBean
+    private AttachmentUrls attachmentUrls;
+
+    @BeforeEach
+    void signImages() {
+        when(attachmentUrls.sign(any())).thenAnswer(i -> AttachmentResponse.from(
+                i.getArgument(0), "https://r2/signed", Instant.parse("2026-09-20T13:01:51Z")));
+    }
 
     private Message message(String content) {
         return Message.create(ROOM, SENDER, null, content, "text",
@@ -173,6 +186,20 @@ class MessageControllerTest {
         org.mockito.Mockito.verifyNoInteractions(messageService);
     }
 
+    @Test
+    @DisplayName("history images come back with signed URLs")
+    void historySignsImages() throws Exception {
+        Message withImage = Message.create(ROOM, SENDER, null, null, "text",
+                Instant.parse("2026-09-20T12:56:51.179Z"),
+                List.of(new Attachment("m1", SENDER, "image/webp", 1600, 1200)));
+        when(messageService.history(eq(SENDER), eq(ROOM), any(), any())).thenReturn(List.of(withImage));
+
+        mockMvc.perform(authenticatedGet("/rooms/42/messages"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].attachments[0].media_id").value("m1"))
+                .andExpect(jsonPath("$[0].attachments[0].url").value("https://r2/signed"));
+    }
+
     // ------------------------------------------------- POST /rooms/:id/messages
 
     @Test
@@ -248,6 +275,8 @@ class MessageControllerTest {
                 .andExpect(jsonPath("$.attachments[0].content_type").value("image/webp"))
                 .andExpect(jsonPath("$.attachments[0].width").value(1600))
                 .andExpect(jsonPath("$.attachments[0].height").value(1200))
+                .andExpect(jsonPath("$.attachments[0].url").value("https://r2/signed"))
+                .andExpect(jsonPath("$.attachments[0].url_expires_at").value("2026-09-20T13:01:51Z"))
                 // owner_id is internal: media needs it, the browser does not
                 .andExpect(jsonPath("$.attachments[0].owner_id").doesNotExist());
     }

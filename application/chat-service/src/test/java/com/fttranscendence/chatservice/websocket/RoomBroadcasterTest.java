@@ -9,7 +9,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -18,7 +21,10 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.web.socket.WebSocketSession;
 
 import com.fttranscendence.chatservice.dto.MessageResponse;
+import com.fttranscendence.chatservice.grpc.MediaClient;
+import com.fttranscendence.chatservice.model.Attachment;
 import com.fttranscendence.chatservice.model.Message;
+import com.fttranscendence.chatservice.service.AttachmentUrls;
 import com.fttranscendence.chatservice.service.MessageCreatedEvent;
 import com.fttranscendence.chatservice.service.MessageDeletedEvent;
 
@@ -31,16 +37,20 @@ class RoomBroadcasterTest {
     private static final long ROOM = 1L;
     private static final long OTHER_ROOM = 2L;
     private static final String ALICE = "a215c5f8-d810-4518-ad4c-8d551eb6dfc4";
+    private static final Instant NOW = Instant.parse("2026-09-22T10:00:00Z");
 
     private SubscriptionRegistry registry;
     private FrameSender frameSender;
+    private MediaClient media;
     private RoomBroadcaster broadcaster;
 
     @BeforeEach
     void setUp() {
         registry = new SubscriptionRegistry();
         frameSender = mock(FrameSender.class);
-        broadcaster = new RoomBroadcaster(registry, frameSender);
+        media = mock(MediaClient.class);
+        AttachmentUrls urls = new AttachmentUrls(media, Clock.fixed(NOW, ZoneOffset.UTC));
+        broadcaster = new RoomBroadcaster(registry, frameSender, urls);
     }
 
     private static WebSocketSession session(String id) {
@@ -118,5 +128,41 @@ class RoomBroadcasterTest {
             assertThat(dto.deleted()).isTrue();
             assertThat(dto.content()).as("deleted content never leaves the server").isNull();
         });
+    }
+
+    @Test
+    @DisplayName("message.new carries signed image URLs, like the REST response")
+    void newMessageHasSignedUrls() {
+        registry.subscribe(ROOM, session("s1"));
+        when(media.downloadUrl("m1", ALICE)).thenReturn(new MediaClient.SignedUrl("https://r2/m1?sig", 300));
+        Message withImage = Message.create(ROOM, ALICE, null, null, "text", NOW,
+                List.of(new Attachment("m1", ALICE, "image/webp", 1600, 1200)));
+
+        broadcaster.onCreated(new MessageCreatedEvent(withImage));
+
+        ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
+        verify(frameSender).send(any(), eq(WsEvents.MESSAGE_NEW), payload.capture());
+        assertThat(payload.getValue()).isInstanceOfSatisfying(MessageResponse.class, dto -> {
+            assertThat(dto.attachments()).hasSize(1);
+            assertThat(dto.attachments().get(0).url()).isEqualTo("https://r2/m1?sig");
+            assertThat(dto.attachments().get(0).urlExpiresAt()).isEqualTo(NOW.plusSeconds(300));
+        });
+    }
+
+    @Test
+    @DisplayName("a deleted message's images are neither signed nor sent")
+    void deletedMessageSignsNothing() {
+        registry.subscribe(ROOM, session("s1"));
+        Message withImage = Message.create(ROOM, ALICE, null, null, "text", NOW,
+                List.of(new Attachment("m1", ALICE, "image/webp", 1600, 1200)));
+        withImage.markDeleted(NOW.plusSeconds(60));
+
+        broadcaster.onDelete(new MessageDeletedEvent(withImage));
+
+        ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
+        verify(frameSender).send(any(), eq(WsEvents.MESSAGE_DELETED), payload.capture());
+        assertThat(payload.getValue()).isInstanceOfSatisfying(MessageResponse.class,
+                dto -> assertThat(dto.attachments()).isEmpty());
+        verifyNoInteractions(media);
     }
 }

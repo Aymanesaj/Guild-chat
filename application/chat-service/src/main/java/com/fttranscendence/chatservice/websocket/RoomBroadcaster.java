@@ -11,9 +11,10 @@ import org.springframework.web.socket.WebSocketSession;
 
 import com.fttranscendence.chatservice.dto.MessageResponse;
 import com.fttranscendence.chatservice.model.Message;
+import com.fttranscendence.chatservice.service.AttachmentUrls;
 import com.fttranscendence.chatservice.service.MessageCreatedEvent;
-import com.fttranscendence.chatservice.service.MessageEditedEvent;
 import com.fttranscendence.chatservice.service.MessageDeletedEvent;
+import com.fttranscendence.chatservice.service.MessageEditedEvent;
 
 /**
  * Pushes stored messages to every socket subscribed to their room.
@@ -33,18 +34,19 @@ public class RoomBroadcaster {
 
     private final SubscriptionRegistry subscriptionRegistry;
     private final FrameSender frameSender;
+    private final AttachmentUrls attachmentUrls;
 
-
-    public RoomBroadcaster(SubscriptionRegistry subscriptionRegistry , FrameSender frameSender) {
+    public RoomBroadcaster(SubscriptionRegistry subscriptionRegistry , FrameSender frameSender , AttachmentUrls attachmentUrls) {
         this.subscriptionRegistry = subscriptionRegistry;
         this.frameSender = frameSender;
+        this.attachmentUrls = attachmentUrls;
     }
 
     /** Same DTO as the REST response, so a message looks identical on both. */
     @EventListener
     public void onCreated(MessageCreatedEvent event) {
         Message message = event.message();
-        broadcast(message.getRoomId()  ,WsEvents.MESSAGE_NEW, MessageResponse.from(message));
+        broadcast(message.getRoomId()  ,WsEvents.MESSAGE_NEW, MessageResponse.from(message, attachmentUrls::sign));
     }
 
     private void broadcast(Long roomId, String event,Object data) {
@@ -57,7 +59,7 @@ public class RoomBroadcaster {
     @EventListener
     public void onEdited(MessageEditedEvent event) {
         Message message = event.message();
-        broadcast(message.getRoomId(), WsEvents.MESSAGE_EDITED, MessageResponse.from(message));
+        broadcast(message.getRoomId(), WsEvents.MESSAGE_EDITED, MessageResponse.from(message, attachmentUrls::sign));
     }
 
     @EventListener

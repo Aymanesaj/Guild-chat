@@ -16,6 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Instant;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,9 +29,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import com.fttranscendence.chatservice.auth.AuthenticationFilter;
+import com.fttranscendence.chatservice.dto.AttachmentResponse;
 import com.fttranscendence.chatservice.exception.ApiException;
 import com.fttranscendence.chatservice.grpc.IdentityClient;
+import com.fttranscendence.chatservice.model.Attachment;
 import com.fttranscendence.chatservice.model.Message;
+import com.fttranscendence.chatservice.service.AttachmentUrls;
 import com.fttranscendence.chatservice.service.MessageService;
 
 /**
@@ -60,9 +64,35 @@ class MessageItemControllerTest {
     @MockBean
     private IdentityClient identityClient;
 
+    /** Signs every image with a fixed URL, so the controller's use of it is visible. */
+    @MockBean
+    private AttachmentUrls attachmentUrls;
+
+    @BeforeEach
+    void signImages() {
+        when(attachmentUrls.sign(any())).thenAnswer(i -> AttachmentResponse.from(
+                i.getArgument(0), "https://r2/signed", Instant.parse("2026-09-20T13:01:51Z")));
+    }
+
     private Message message(String content) {
         return Message.create(ROOM, USER, null, content, "text",
                 Instant.parse("2026-09-20T12:56:51.179Z"));
+    }
+
+    @Test
+    @DisplayName("GET returns the images with fresh signed URLs: how the client refreshes an expired link")
+    void getSignsImages() throws Exception {
+        Message withImage = Message.create(ROOM, USER, null, null, "text",
+                Instant.parse("2026-09-20T12:56:51.179Z"),
+                java.util.List.of(new Attachment("m1", USER, "image/webp", 1600, 1200)));
+        when(messageService.get(USER, MESSAGE_ID)).thenReturn(withImage);
+
+        mockMvc.perform(authenticatedGet("/messages/" + MESSAGE_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.attachments[0].media_id").value("m1"))
+                .andExpect(jsonPath("$.attachments[0].url").value("https://r2/signed"))
+                .andExpect(jsonPath("$.attachments[0].url_expires_at").value("2026-09-20T13:01:51Z"))
+                .andExpect(jsonPath("$.attachments[0].owner_id").doesNotExist());
     }
 
     @Test
