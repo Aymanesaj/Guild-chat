@@ -1,6 +1,7 @@
 package com.fttranscendence.chatservice.model;
 
 import java.time.Instant;
+import java.util.List;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -40,6 +41,9 @@ public class Message {
     /** Set only on system messages: what happened in the room. */
     @Field("system")
     private SystemEvent system;
+
+    @Field("attachments")
+    private List<Attachment> attachments;
 
     @Field("event_id")
     private String eventId;
