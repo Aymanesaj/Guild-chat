@@ -70,6 +70,25 @@ class MessageRepositoryTest extends MongoTestSupport {
     }
 
     @Test
+    @DisplayName("room cleanup finds only live messages of that room that have images")
+    void findsLiveMessagesWithImages() {
+        Instant at = Instant.parse("2026-09-20T12:56:51.179Z");
+        Attachment image = new Attachment("m1", ALICE, "image/webp", 10, 10);
+        Message withImage = repository.save(Message.create(ROOM, ALICE, null, null, "text", at, List.of(image)));
+        repository.save(Message.create(ROOM, ALICE, null, "text only", "text", at));
+        Message deleted = Message.create(ROOM, ALICE, null, null, "text", at,
+                List.of(new Attachment("m2", ALICE, "image/webp", 10, 10)));
+        deleted.markDeleted(at);
+        repository.save(deleted);
+        repository.save(Message.create(OTHER_ROOM, ALICE, null, null, "text", at,
+                List.of(new Attachment("m3", ALICE, "image/webp", 10, 10))));
+
+        assertThat(repository.findByRoomIdAndAttachmentsIsNotNullAndDeletedAtIsNull(ROOM))
+                .extracting(Message::getId)
+                .containsExactly(withImage.getId());
+    }
+
+    @Test
     @DisplayName("attachments are stored in snake_case and read back; a text message has no attachments key")
     void attachmentsRoundTrip() {
         Attachment image = new Attachment("5d3c0000-0000-4000-8000-000000000001", ALICE, "image/webp", 1600, 1200);

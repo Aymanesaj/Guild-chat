@@ -61,4 +61,8 @@ public interface MessageRepository extends MongoRepository<Message , String> {
 
 
     long deleteByRoomId(Long roomId);
+
+
+    /** Live messages of a room that carry images: what a room deletion must clean up in media. */
+    List<Message> findByRoomIdAndAttachmentsIsNotNullAndDeletedAtIsNull(Long roomId);
 }

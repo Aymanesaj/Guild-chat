@@ -12,7 +12,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fttranscendence.chatservice.config.RabbitMQConfig;
 import com.fttranscendence.chatservice.grpc.RoomMembersCache;
+import com.fttranscendence.chatservice.model.Attachment;
 import com.fttranscendence.chatservice.repository.MessageRepository;
+import com.fttranscendence.chatservice.service.AttachmentCleaner;
 import com.fttranscendence.chatservice.websocket.ChatWebSocketHandler;
 
 class RoomChangedConsumerTest {
@@ -21,7 +23,8 @@ class RoomChangedConsumerTest {
     final ChatWebSocketHandler sockets = mock(ChatWebSocketHandler.class);
     final RoomMembersCache cache = mock(RoomMembersCache.class);
     final MessageRepository messages = mock(MessageRepository.class);
-    final RoomChangedConsumer consumer = new RoomChangedConsumer(sockets, cache, messages);
+    final AttachmentCleaner cleaner = mock(AttachmentCleaner.class);
+    final RoomChangedConsumer consumer = new RoomChangedConsumer(sockets, cache, messages, cleaner);
 
     private RoomChangedMessage convert(String json) {
         var properties = new MessageProperties();
@@ -63,7 +66,7 @@ class RoomChangedConsumerTest {
                 assertThatThrownBy(() -> consumer.consume(payload)).isInstanceOf(IllegalArgumentException.class);
             }
         }
-        verifyNoInteractions(sockets, cache, messages);
+        verifyNoInteractions(sockets, cache, messages, cleaner);
     }
 
     @Test
@@ -129,8 +132,10 @@ class RoomChangedConsumerTest {
     @Test
     void deletionCanHaveNoRecipientsAndUsesNumericRoomId() {
         consumer.consume(new RoomChangedMessage("42", RoomChange.ROOM_REMOVED, List.of(), true));
+        verify(messages).findByRoomIdAndAttachmentsIsNotNullAndDeletedAtIsNull(42L);
         verify(messages).deleteByRoomId(42L);
         verifyNoMoreInteractions(messages);
+        verify(cleaner).deleteAll(List.of());
         verify(cache).invalidate(42L);
         // The room is gone: every subscription to it ends, whoever holds it.
         verify(sockets).closeRoom(42L);
@@ -152,7 +157,7 @@ class RoomChangedConsumerTest {
                 new RoomChangedMessage("42", RoomChange.ROOM_UPDATED, null, false))) {
             assertThatThrownBy(() -> consumer.consume(invalid)).isInstanceOf(IllegalArgumentException.class);
         }
-        verifyNoInteractions(sockets, cache, messages);
+        verifyNoInteractions(sockets, cache, messages, cleaner);
     }
 
     @Test
@@ -161,5 +166,32 @@ class RoomChangedConsumerTest {
         assertThatThrownBy(() -> consumer.consume(new RoomChangedMessage("42", RoomChange.ROOM_REMOVED, List.of(ALICE), true)))
                 .isInstanceOf(IllegalStateException.class);
         verifyNoInteractions(sockets, cache);
+        // Messages still exist, so their images must stay: the redelivery cleans both.
+        verifyNoInteractions(cleaner);
+    }
+
+    @Test
+    void deletionCleansTheImagesOfLiveMessagesAfterDeletingThem() {
+        var first = new Attachment("m1", ALICE, "image/webp", 10, 10);
+        var second = new Attachment("m2", ALICE, "image/webp", 10, 10);
+        var third = new Attachment("m3", BOB, "image/webp", 10, 10);
+        var now = java.time.Instant.parse("2026-10-23T10:00:00Z");
+        when(messages.findByRoomIdAndAttachmentsIsNotNullAndDeletedAtIsNull(42L)).thenReturn(List.of(
+                com.fttranscendence.chatservice.model.Message.create(42L, ALICE, null, null, "text", now, List.of(first, second)),
+                com.fttranscendence.chatservice.model.Message.create(42L, BOB, null, "hi", "text", now, List.of(third))));
+
+        consumer.consume(new RoomChangedMessage("42", RoomChange.ROOM_REMOVED, List.of(), true));
+
+        // Read the ids first, delete the messages, then the images.
+        var order = inOrder(messages, cleaner);
+        order.verify(messages).findByRoomIdAndAttachmentsIsNotNullAndDeletedAtIsNull(42L);
+        order.verify(messages).deleteByRoomId(42L);
+        order.verify(cleaner).deleteAll(List.of(first, second, third));
+    }
+
+    @Test
+    void ordinaryRemovalTouchesNoImages() {
+        consumer.consume(new RoomChangedMessage("42", RoomChange.ROOM_REMOVED, List.of(ALICE), false));
+        verifyNoInteractions(messages, cleaner);
     }
 }

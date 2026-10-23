@@ -12,7 +12,9 @@ import org.springframework.stereotype.Component;
 
 import com.fttranscendence.chatservice.config.RabbitMQConfig;
 import com.fttranscendence.chatservice.grpc.RoomMembersCache;
+import com.fttranscendence.chatservice.model.Attachment;
 import com.fttranscendence.chatservice.repository.MessageRepository;
+import com.fttranscendence.chatservice.service.AttachmentCleaner;
 import com.fttranscendence.chatservice.websocket.ChatWebSocketHandler;
 import com.fttranscendence.chatservice.websocket.WsEvents;
 
@@ -28,16 +30,19 @@ public class RoomChangedConsumer {
     private final ChatWebSocketHandler sockets;
     private final RoomMembersCache roomMembers;
     private final MessageRepository messageRepository;
+    private final AttachmentCleaner attachmentCleaner;
 
 
     public RoomChangedConsumer(
         ChatWebSocketHandler sockets,
         RoomMembersCache roomMembers,
-        MessageRepository messageRepository
+        MessageRepository messageRepository,
+        AttachmentCleaner attachmentCleaner
     ) {
         this.sockets = sockets;
         this.roomMembers = roomMembers;
         this.messageRepository = messageRepository;
+        this.attachmentCleaner = attachmentCleaner;
     }
 
     @RabbitListener(queues = RabbitMQConfig.CHAT_ROOM_EVENTS_QUEUE)
@@ -47,11 +52,17 @@ public class RoomChangedConsumer {
         Long roomId = Long.valueOf(message.roomId());
         String event = eventFor(message.change());
 
-
         // Permanent deletion is authorized only by an explicit committed room deletion.
         if (message.roomDeleted()) {
+            // Read the images before the messages that hold their ids are gone.
+            List<Attachment> images = messageRepository
+                    .findByRoomIdAndAttachmentsIsNotNullAndDeletedAtIsNull(roomId)
+                    .stream()
+                    .flatMap(stored -> stored.getAttachments().stream())
+                    .toList();
             long deleted = messageRepository.deleteByRoomId(roomId);
-            logger.info("Deleted messages for room={} count={}", roomId, deleted);
+            attachmentCleaner.deleteAll(images);
+            logger.info("Deleted messages for room={} count={} images={}", roomId, deleted, images.size());
         }
 
         // Force the next membership lookup to query org-service again.
