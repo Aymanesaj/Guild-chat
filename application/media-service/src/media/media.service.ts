@@ -11,20 +11,11 @@ import {
   DOWNLOAD_URL_TTL_SECONDS,
 } from "../storage/r2.storage.js";
 
-import {
-  createCandidateKey,
-  createMediaKeys,
-} from "./media-keys.js";
+import { createCandidateKey, createMediaKeys } from "./media-keys.js";
 
-import {
-  getMaxUploadBytes,
-  validateUploadRequest,
-} from "./media-policy.js";
+import { getMaxUploadBytes, validateUploadRequest } from "./media-policy.js";
 
-import type {
-  CallerService,
-  MediaPurpose,
-} from "./media-policy.js";
+import type { CallerService, MediaPurpose } from "./media-policy.js";
 
 import { withFinalizationSlot } from "./finalization-limit.js";
 
@@ -86,9 +77,7 @@ export async function getDownloadUrl(
     throw new Error("Media is not available for download");
   }
 
-  const downloadUrl = await createPresignedDownloadUrl(
-    upload.finalKey,
-  );
+  const downloadUrl = await createPresignedDownloadUrl(upload.finalKey);
 
   return {
     mediaId: upload.id,
@@ -108,19 +97,11 @@ export async function createUpload(
     input.contentType,
   );
 
-  const { id, temporaryKey } = createMediaKeys(
-    input.purpose,
-    input.ownerId,
-  );
+  const { id, temporaryKey } = createMediaKeys(input.purpose, input.ownerId);
 
-  const expiresAt = new Date(
-    Date.now() + UPLOAD_URL_TTL_SECONDS * 1000,
-  );
+  const expiresAt = new Date(Date.now() + UPLOAD_URL_TTL_SECONDS * 1000);
 
-  const uploadUrl = await createPresignedUploadUrl(
-    temporaryKey,
-    contentType,
-  );
+  const uploadUrl = await createPresignedUploadUrl(temporaryKey, contentType);
 
   await prisma.mediaUpload.create({
     data: {
@@ -150,8 +131,14 @@ export async function finalizeUpload(
   caller: CallerService,
   input: FinalizeUploadInput,
 ) {
-  return withFinalizationSlot(() =>
-    finalizeUploadInternal(caller, input),
+  return withFinalizationSlot(() => finalizeUploadInternal(caller, input));
+}
+
+// HeadObject answers a missing key with "NotFound"; GetObject with "NoSuchKey".
+function isMissingObject(error: unknown) {
+  return (
+    error instanceof Error &&
+    (error.name === "NotFound" || error.name === "NoSuchKey")
   );
 }
 
@@ -237,12 +224,29 @@ async function finalizeUploadInternal(
 
   const maxBytes = getMaxUploadBytes(upload.purpose);
 
-  const object = await getObjectInfo(temporaryKey);
+  let object: Awaited<ReturnType<typeof getObjectInfo>>;
 
-  if (
-    object.sizeBytes !== undefined &&
-    object.sizeBytes > maxBytes
-  ) {
+  try {
+    object = await getObjectInfo(temporaryKey);
+  } catch (error) {
+    if (isMissingObject(error)) {
+      // Finalize came before the client's PUT: give the claim back so the
+      // client can upload and retry, instead of locking it for the lease.
+      await prisma.mediaUpload.updateMany({
+        where: processingWhere,
+        data: {
+          status: "PENDING",
+          processingToken: null,
+          processingStartedAt: null,
+        },
+      });
+      throw new Error("Upload file has not been received");
+    }
+
+    throw error;
+  }
+
+  if (object.sizeBytes !== undefined && object.sizeBytes > maxBytes) {
     await rejectUpload("IMAGE_TOO_LARGE");
     throw new Error("Image exceeds the upload size limit");
   }
@@ -411,9 +415,7 @@ export async function deleteMedia(
   };
 }
 
-async function cleanupTemporaryObject(
-  temporaryKey: string,
-): Promise<void> {
+async function cleanupTemporaryObject(temporaryKey: string): Promise<void> {
   try {
     await deleteObject(temporaryKey);
   } catch {

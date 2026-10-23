@@ -50,6 +50,7 @@ const knownErrors = new Map<string, status>([
   ],
   ["Upload has expired", status.FAILED_PRECONDITION],
   ["Upload is PROCESSING", status.ABORTED],
+  ["Upload file has not been received", status.FAILED_PRECONDITION],
   ["Upload is FAILED", status.FAILED_PRECONDITION],
   ["Upload is EXPIRED", status.FAILED_PRECONDITION],
   ["Upload is DELETED", status.FAILED_PRECONDITION],
