@@ -1,3 +1,4 @@
+import { useState } from "react";
 import styled from "styled-components";
 import { TbHash, TbMessageCircle, TbUsers } from "react-icons/tb";
 import { Button } from "../ui";
@@ -40,7 +41,17 @@ const MembersButton = styled(Button)`
   }
 `;
 
-function RoomHeader({ roomName, isDm, onToggleMembers }) {
+function RoomHeader({ roomName, isDm, onToggleMembers, onHideDm }) {
+  const [removing, setRemoving] = useState(false);
+  const removeConversation = async () => {
+    if (removing) return;
+    setRemoving(true);
+    try {
+      await onHideDm();
+    } finally {
+      setRemoving(false);
+    }
+  };
   const TitleIcon = isDm ? TbMessageCircle : TbHash;
 
   return (
@@ -50,6 +61,13 @@ function RoomHeader({ roomName, isDm, onToggleMembers }) {
         <TitleIcon size={20} />
         <h2>{roomName}</h2>
       </HeaderTitle>
+
+      {isDm && onHideDm && (
+        <Button type="button" $variant="ghost" $size="sm"
+          disabled={removing} onClick={removeConversation}>
+          Remove conversation
+        </Button>
+      )}
 
       {/* A DM has exactly two members and no roster to manage. */}
       {!isDm && (

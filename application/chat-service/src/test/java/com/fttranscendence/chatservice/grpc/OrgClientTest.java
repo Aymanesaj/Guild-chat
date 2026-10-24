@@ -80,6 +80,26 @@ class OrgClientTest {
     }
 
     @Test
+    void revealSendsSenderAndRoomIds() throws Exception {
+        AtomicReference<com.fttranscendence.org.grpc.RevealDmRequest> captured = new AtomicReference<>();
+        String name = InProcessServerBuilder.generateName();
+        server = InProcessServerBuilder.forName(name)
+                .addService(new OrgServiceGrpc.OrgServiceImplBase() {
+                    @Override
+                    public void revealDm(com.fttranscendence.org.grpc.RevealDmRequest request,
+                            StreamObserver<com.fttranscendence.org.grpc.RevealDmResponse> observer) {
+                        captured.set(request);
+                        observer.onNext(com.fttranscendence.org.grpc.RevealDmResponse.getDefaultInstance());
+                        observer.onCompleted();
+                    }
+                }).build().start();
+        channel = InProcessChannelBuilder.forName(name).build();
+        new OrgClient(channel, 500).revealDm(USER_ID, ROOM);
+        assertThat(captured.get().getUserId()).isEqualTo(USER_ID);
+        assertThat(captured.get().getRoomId()).isEqualTo("42");
+    }
+
+    @Test
     @DisplayName("member: true, and the room id is sent as a string")
     void returnsTrueForMember() throws Exception {
         AtomicReference<CheckMembershipRequest> captured = new AtomicReference<>();

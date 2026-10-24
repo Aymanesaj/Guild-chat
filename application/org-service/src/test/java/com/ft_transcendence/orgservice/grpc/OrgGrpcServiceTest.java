@@ -57,6 +57,30 @@ class OrgGrpcServiceTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void revealParsesIdsAndCompletes() {
+        StreamObserver<com.fttranscendence.org.grpc.RevealDmResponse> observer = mock(StreamObserver.class);
+        grpcService.revealDm(com.fttranscendence.org.grpc.RevealDmRequest.newBuilder()
+                .setRoomId("42").setUserId(USER.toString()).build(), observer);
+        verify(roomService).revealDm(ROOM, USER);
+        verify(observer).onNext(com.fttranscendence.org.grpc.RevealDmResponse.getDefaultInstance());
+        verify(observer).onCompleted();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void revealRejectsMalformedIds() {
+        StreamObserver<com.fttranscendence.org.grpc.RevealDmResponse> observer = mock(StreamObserver.class);
+        grpcService.revealDm(com.fttranscendence.org.grpc.RevealDmRequest.newBuilder()
+                .setRoomId("bad").setUserId(USER.toString()).build(), observer);
+        ArgumentCaptor<Throwable> error = ArgumentCaptor.forClass(Throwable.class);
+        verify(observer).onError(error.capture());
+        assertThat(io.grpc.Status.fromThrowable(error.getValue()).getCode())
+                .isEqualTo(io.grpc.Status.Code.INVALID_ARGUMENT);
+        org.mockito.Mockito.verifyNoInteractions(roomService);
+    }
+
+    @Test
     @DisplayName("a member gets is_member=true and their role name")
     void memberGetsRole() {
         for (RoleName role : RoleName.values()) {

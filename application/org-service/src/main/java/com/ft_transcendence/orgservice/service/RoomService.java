@@ -97,6 +97,7 @@ public class RoomService {
         List<RoomMember> roomMembers = roomMemberRepository.findByUserId(userId);
         return roomMembers.stream()
                 .filter(roomMember -> roomMember.getRoom().getType() == RoomType.DM)
+                .filter(roomMember -> roomMember.getHiddenAt() == null)
                 .map(roomMember -> {
                     Room room = roomMember.getRoom();
                     UUID otherUserId = room.getDmUser1().equals(userId) ? room.getDmUser2() : room.getDmUser1();
@@ -140,6 +141,42 @@ public class RoomService {
         return roles.stream()
                 .map(Role::getName)
                 .toList();
+    }
+
+    @Transactional
+    public void hideDirectMessage(Long roomId, UUID userId) {
+        Room room = lockRoom(roomId);
+        RoomMember member = roomMemberRepository.findByRoomIdAndUserId(roomId, userId)
+                .orElseThrow(() -> new NotFoundException("User is not a member of this room"));
+        if (room.getType() != RoomType.DM) {
+            throw new BadRequestException("Only direct messages can be hidden");
+        }
+        if (member.getHiddenAt() == null) {
+            member.setHiddenAt(Instant.now());
+            roomMemberRepository.save(member);
+            publishRoomChange(roomId, RoomChange.ROOM_REMOVED, List.of(userId));
+        }
+    }
+
+    @Transactional
+    public void revealDm(Long roomId, UUID senderId) {
+        Room room = lockRoom(roomId);
+        if (!isUserInRoom(roomId, senderId)) {
+            throw new NotFoundException("User is not a member of this room");
+        }
+        // Normal group messages use the same RPC; their visibility is unchanged.
+        if (room.getType() != RoomType.DM) {
+            return;
+        }
+        Set<UUID> revealed = roomMemberRepository.findByRoomId(roomId).stream()
+                .filter(member -> member.getHiddenAt() != null)
+                .map(member -> {
+                    member.setHiddenAt(null);
+                    roomMemberRepository.save(member);
+                    return member.getUserId();
+                })
+                .collect(Collectors.toSet());
+        publishRoomChange(roomId, RoomChange.ROOM_ADDED, revealed);
     }
 
     @Transactional
@@ -511,6 +548,7 @@ public class RoomService {
 
         if (isExistingRoom.isPresent()) {
             Room room = isExistingRoom.get();
+            directMessageCreationService.reopenDirectMessage(room.getId(), creatorId);
 
             return new RoomResponse(
                     room.getId(),
@@ -546,6 +584,7 @@ public class RoomService {
                     )
                     .orElseThrow(() -> e);
 
+            directMessageCreationService.reopenDirectMessage(existingRoom.getId(), creatorId);
             return new RoomResponse(
                     existingRoom.getId(),
                     existingRoom.getName(), existingRoom.getDescription(),

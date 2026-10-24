@@ -4,7 +4,7 @@ import { useToast } from "../ui/ToastProvider";
 import { TbSend, TbUsersGroup, TbX } from "react-icons/tb";
 
 import { getFriendsList } from "../../api/friends";
-import { openDm } from "../../api/rooms";
+import { getOrCreateDm } from "../../api/rooms";
 import { usePresence } from "../../hooks/usePresence";
 import { useNavDrawer } from "../layout/NavDrawerContext";
 import { useRoomNavigation } from "../layout/RoomNavigationContext";
@@ -137,7 +137,7 @@ function FriendsSidebar({ onClose }) {
     setOpeningId(friend.id);
 
     try {
-      const room = await openDm(friend);
+      const room = await getOrCreateDm(friend.id);
       navigateToRoom(room);
     } catch (error) {
       toast.error(error?.message || `Couldn't open a chat with ${friend.username}.`);

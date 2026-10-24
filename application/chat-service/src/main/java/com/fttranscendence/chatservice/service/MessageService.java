@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Map;
 
 import org.bson.types.ObjectId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Limit;
@@ -28,6 +30,8 @@ import com.fttranscendence.chatservice.repository.MessageRepository;
 
 @Service
 public class MessageService {
+
+    private static final Logger log = LoggerFactory.getLogger(MessageService.class);
 
     static final int DEFAULT_LIMIT = 50;
     static final int MAX_LIMIT = 100;
@@ -71,6 +75,12 @@ public class MessageService {
         Message message = Message.create(roomId, userId, reply, text, DEFAULT_CONTENT_TYPE,
                 clock.instant(), attachments);
         Message saved = messageRepository.save(message);
+        // Visibility synchronization must never fail an already persisted message.
+        try {
+            orgClient.revealDm(userId, roomId);
+        } catch (RuntimeException e) {
+            log.warn("Could not restore DM visibility for room {}", roomId, e);
+        }
         events.publishEvent(new MessageCreatedEvent(saved));
         return saved;
     }

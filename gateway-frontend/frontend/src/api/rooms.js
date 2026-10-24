@@ -117,7 +117,15 @@ export async function leaveRoom(roomId) {
   );
 }
 
-/** Read-only: reuse an existing DM, or open a local conversation until Send. */
+export async function hideDm(roomId) {
+  return request(
+    `${DM_ROOMS}/${encodeURIComponent(roomId)}`,
+    { method: "DELETE" },
+    "Failed to remove conversation",
+  );
+}
+
+/** Read-only discovery for an existing local draft; explicit opens use getOrCreateDm. */
 export async function openDm(peer) {
   const rooms = await getDmRooms();
   const existing = rooms.find((room) => (room.peer_id ?? room.peer?.id) === peer.id);
@@ -133,7 +141,7 @@ export async function openDm(peer) {
   };
 }
 
-/** Creates (or reuses) the DM when the user sends a message. */
+/** Creates or reveals the existing DM on explicit open or first send. */
 export async function getOrCreateDm(userId) {
   const room = await request(
     DM_ROOMS,

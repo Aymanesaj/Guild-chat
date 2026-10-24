@@ -1,6 +1,7 @@
 package com.ft_transcendence.orgservice.service;
 
 import com.ft_transcendence.orgservice.dto.RoomResponse;
+import com.ft_transcendence.orgservice.exception.NotFoundException;
 import com.ft_transcendence.orgservice.model.MemberRole;
 import com.ft_transcendence.orgservice.model.RoleName;
 import com.ft_transcendence.orgservice.model.Room;
@@ -35,6 +36,20 @@ public class DirectMessageCreationService {
         this.roomRepository = roomRepository;
         this.roomMemberRepository = roomMemberRepository;
         this.memberRoleRepository = memberRoleRepository;
+    }
+
+    // Separate transaction from get-or-create, including its uniqueness-race recovery.
+    @Transactional
+    public void reopenDirectMessage(Long roomId, UUID userId) {
+        roomRepository.findByIdForUpdate(roomId)
+                .orElseThrow(() -> new NotFoundException("Room not found"));
+        RoomMember member = roomMemberRepository.findByRoomIdAndUserId(roomId, userId)
+                .orElseThrow(() -> new NotFoundException("User is not a member of this room"));
+        if (member.getHiddenAt() != null) {
+            member.setHiddenAt(null);
+            roomMemberRepository.save(member);
+            events.publishEvent(new RoomChangedEvent(roomId, RoomChange.ROOM_ADDED, Set.of(userId)));
+        }
     }
 
     @Transactional

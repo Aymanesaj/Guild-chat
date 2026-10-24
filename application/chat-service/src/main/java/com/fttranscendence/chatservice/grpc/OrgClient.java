@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import com.fttranscendence.chatservice.exception.ApiException;
 import com.fttranscendence.org.grpc.CheckMembershipRequest;
+import com.fttranscendence.org.grpc.RevealDmRequest;
 import com.fttranscendence.org.grpc.CheckMembershipResponse;
 import com.fttranscendence.org.grpc.ListRoomMembersRequest;
 import com.fttranscendence.org.grpc.ListRoomMembersResponse;
@@ -126,6 +127,12 @@ import jakarta.annotation.PreDestroy;
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "ORG_UNAVAILABLE", "org-service is unavailable");
         }
     }
+    public void revealDm(String userId, Long roomId) {
+        stub.withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
+                .revealDm(RevealDmRequest.newBuilder()
+                        .setUserId(userId).setRoomId(String.valueOf(roomId)).build());
+    }
+
   @PreDestroy
   void shutdown() {
   if (ownedChannel != null) {

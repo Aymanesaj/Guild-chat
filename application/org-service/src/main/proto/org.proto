@@ -7,6 +7,7 @@ option java_package = "com.fttranscendence.org.grpc";
 option java_outer_classname = "OrgProto";
 
 service OrgService {
+  rpc RevealDm(RevealDmRequest) returns (RevealDmResponse);
   rpc CheckMembership(CheckMembershipRequest) returns (CheckMembershipResponse);
   rpc GetRoom(GetRoomRequest) returns (RoomResponse);
   rpc ListRoomMembers(ListRoomMembersRequest) returns (ListRoomMembersResponse);
@@ -65,3 +66,10 @@ message MemberResponse {
   string user_id = 1;
   string role = 2;
 }
+
+message RevealDmRequest {
+  string room_id = 1;
+  string user_id = 2;
+}
+
+message RevealDmResponse {}

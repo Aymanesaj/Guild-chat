@@ -36,7 +36,7 @@ import {
   removeFriend,
 } from "../../api/friends";
 
-import { openDm } from "../../api/rooms";
+import { getOrCreateDm } from "../../api/rooms";
 
 import {
   Button as KitButton,
@@ -503,7 +503,7 @@ export default function ProfileOverlay({ user, onClose, initialTab = "friends" }
     setOpeningDmId(friend.id);
 
     try {
-      const room = await openDm(friend);
+      const room = await getOrCreateDm(friend.id);
 
       navigateToRoom(room);
       onClose();

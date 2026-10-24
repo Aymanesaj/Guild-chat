@@ -39,6 +39,17 @@ public class RoomMember {
     @Column(name = "last_read_at")
     private Instant lastReadAt;
 
+    @Column(name = "hidden_at")
+    private Instant hiddenAt;
+
+    public Instant getHiddenAt() {
+        return hiddenAt;
+    }
+
+    public void setHiddenAt(Instant hiddenAt) {
+        this.hiddenAt = hiddenAt;
+    }
+
     // setters
     public void setRoom(Room room) {
         this.room = room;

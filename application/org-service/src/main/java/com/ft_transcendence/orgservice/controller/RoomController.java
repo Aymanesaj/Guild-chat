@@ -33,6 +33,12 @@ public class RoomController {
         this.roomService = roomService;        
     }
 
+    @DeleteMapping("/dm/{roomId}")
+    public ResponseEntity<Void> hideDirectMessage(@PathVariable Long roomId, Principal principal) {
+        roomService.hideDirectMessage(roomId, UUID.fromString(principal.getName()));
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/dm")
     public List<RoomResponse> getDirectMessageRooms(Principal principal) {
         UUID userId = UUID.fromString(principal.getName());

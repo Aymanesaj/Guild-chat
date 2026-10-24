@@ -1,6 +1,10 @@
 package com.ft_transcendence.orgservice.grpc;
 
 import io.grpc.stub.StreamObserver;
+import io.grpc.Status;
+import com.fttranscendence.org.grpc.RevealDmRequest;
+import com.fttranscendence.org.grpc.RevealDmResponse;
+import com.ft_transcendence.orgservice.exception.NotFoundException;
 import org.springframework.stereotype.Service;
 import com.ft_transcendence.orgservice.service.RoomService;
 import com.fttranscendence.org.grpc.CheckMembershipRequest;
@@ -24,6 +28,21 @@ public class OrgGrpcService extends OrgServiceGrpc.OrgServiceImplBase {
 
     public OrgGrpcService(RoomService roomService) {
         this.roomService = roomService;
+    }
+
+    @Override
+    public void revealDm(RevealDmRequest request, StreamObserver<RevealDmResponse> observer) {
+        try {
+            roomService.revealDm(Long.parseLong(request.getRoomId()), UUID.fromString(request.getUserId()));
+            observer.onNext(RevealDmResponse.getDefaultInstance());
+            observer.onCompleted();
+        } catch (IllegalArgumentException e) {
+            observer.onError(Status.INVALID_ARGUMENT.withDescription("Invalid room or user id").asRuntimeException());
+        } catch (NotFoundException e) {
+            observer.onError(Status.NOT_FOUND.withDescription(e.getMessage()).asRuntimeException());
+        } catch (RuntimeException e) {
+            observer.onError(Status.INTERNAL.withDescription("DM visibility update failed").withCause(e).asRuntimeException());
+        }
     }
 
     @Override

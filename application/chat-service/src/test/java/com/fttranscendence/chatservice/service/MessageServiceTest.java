@@ -81,6 +81,48 @@ class MessageServiceTest {
     }
 
     @Test
+    void savedMessageRevealsDmAndPublishesExistingEventEvenWhenRevealFails() {
+        isMember(true);
+        when(messageRepository.save(any())).thenAnswer(call -> call.getArgument(0));
+        org.mockito.Mockito.doThrow(new RuntimeException("org unavailable"))
+                .when(orgClient).revealDm(USER, ROOM);
+
+        Message saved = messageService.send(USER, ROOM, "hello", null);
+
+        assertThat(saved.getContent()).isEqualTo("hello");
+        var order = org.mockito.Mockito.inOrder(messageRepository, orgClient, events);
+        order.verify(orgClient).isMember(USER, ROOM);
+        order.verify(messageRepository).save(saved);
+        order.verify(orgClient).revealDm(USER, ROOM);
+        ArgumentCaptor<MessageCreatedEvent> event = ArgumentCaptor.forClass(MessageCreatedEvent.class);
+        order.verify(events).publishEvent(event.capture());
+        assertThat(event.getValue().message()).isSameAs(saved);
+        verify(messageRepository, never()).delete(any());
+    }
+
+    @Test
+    void successfulSendRevealsDmAfterPersistence() {
+        isMember(true);
+        when(messageRepository.save(any())).thenAnswer(call -> call.getArgument(0));
+        Message saved = messageService.send(USER, ROOM, "hello", null);
+        var order = org.mockito.Mockito.inOrder(messageRepository, orgClient, events);
+        order.verify(orgClient).isMember(USER, ROOM);
+        order.verify(messageRepository).save(saved);
+        order.verify(orgClient).revealDm(USER, ROOM);
+        order.verify(events).publishEvent(any(MessageCreatedEvent.class));
+    }
+
+    @Test
+    void failedSaveDoesNotRevealOrPublish() {
+        isMember(true);
+        when(messageRepository.save(any())).thenThrow(new IllegalStateException("storage unavailable"));
+        assertThatThrownBy(() -> messageService.send(USER, ROOM, "hello", null))
+                .isInstanceOf(IllegalStateException.class);
+        verify(orgClient, never()).revealDm(any(), any());
+        verifyNoInteractions(events);
+    }
+
+    @Test
     @DisplayName("no cursor: reads the newest page with the default limit of 50")
     void newestPageUsesDefaultLimit() {
         isMember(true);

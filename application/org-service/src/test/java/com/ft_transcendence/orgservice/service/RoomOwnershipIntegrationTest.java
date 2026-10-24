@@ -95,6 +95,49 @@ class RoomOwnershipIntegrationTest {
     }
 
     @Test
+    void dmVisibilityPersistsWithoutChangingRoomMembershipOrRoles() {
+        UUID peer = UUID.randomUUID();
+        long dm = service.createDirectMessageRoom(owner, peer).id();
+        long membershipCount = members.count();
+        long roleCount = assignments.count();
+        delivered.clear();
+
+        service.hideDirectMessage(dm, owner);
+        service.hideDirectMessage(dm, owner);
+        assertThat(members.findByRoomIdAndUserId(dm, owner).orElseThrow().getHiddenAt()).isNotNull();
+        assertThat(members.findByRoomIdAndUserId(dm, peer).orElseThrow().getHiddenAt()).isNull();
+        assertThat(service.getDirectMessageRoomsByUserId(owner)).extracting(r -> r.id()).doesNotContain(dm);
+        assertThat(service.getDirectMessageRoomsByUserId(peer)).extracting(r -> r.id()).contains(dm);
+        assertThat(delivered).singleElement().satisfies(event -> {
+            assertThat(event.change()).isEqualTo(RoomChange.ROOM_REMOVED);
+            assertThat(event.userIds()).containsExactly(owner);
+        });
+        delivered.clear();
+
+        assertThat(service.createDirectMessageRoom(owner, peer).id()).isEqualTo(dm);
+        assertThat(service.createDirectMessageRoom(owner, peer).id()).isEqualTo(dm);
+        assertThat(members.findByRoomIdAndUserId(dm, owner).orElseThrow().getHiddenAt()).isNull();
+        assertThat(delivered).singleElement().satisfies(event -> {
+            assertThat(event.change()).isEqualTo(RoomChange.ROOM_ADDED);
+            assertThat(event.userIds()).containsExactly(owner);
+        });
+
+        service.hideDirectMessage(dm, owner);
+        service.hideDirectMessage(dm, peer);
+        delivered.clear();
+        service.revealDm(dm, peer);
+        service.revealDm(dm, peer);
+        assertThat(members.findByRoomId(dm)).allSatisfy(member -> assertThat(member.getHiddenAt()).isNull());
+        assertThat(delivered).singleElement().satisfies(event -> {
+            assertThat(event.change()).isEqualTo(RoomChange.ROOM_ADDED);
+            assertThat(event.userIds()).containsExactlyInAnyOrder(owner, peer);
+        });
+        assertThat(members.count()).isEqualTo(membershipCount);
+        assertThat(assignments.count()).isEqualTo(roleCount);
+        assertThat(rooms.findById(dm)).isPresent();
+    }
+
+    @Test
     void descriptionPersistsAndIsReturnedByRoomEndpoints() {
         String description = "d".repeat(500);
         var created = service.createRoom(new CreateRoomRequest("described", description), owner);
