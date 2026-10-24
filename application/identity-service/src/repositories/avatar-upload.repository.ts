@@ -266,6 +266,16 @@ export async function removeCurrentAvatar(
   userId: string,
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
+    // Lock the user's row before reading it. Otherwise a confirmation
+    // committing between our read and our update publishes an avatar we
+    // never saw: we would clear it without queueing its cleanup.
+    await tx.user.updateMany({
+      where: { id: userId },
+      data: {
+        avatarRevision: { increment: 0 },
+      },
+    });
+
     const user = await tx.user.findUnique({
       where: { id: userId },
       select: {
