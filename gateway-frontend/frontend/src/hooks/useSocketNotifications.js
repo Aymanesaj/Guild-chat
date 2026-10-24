@@ -28,16 +28,12 @@ export function useSocketNotifications(userId, activeRoomId, onNavigate, rooms =
 
   useEffect(() => {
     let active = true;
-    const seen = new Map();
+    const seen = new Set();
     const displayed = new Set();
     const roomLookups = new Map();
     const notificationRoom = (frame) => {
-      const system = frame.data.message?.system;
-      const needsRoom = frame.event === "room.added" || (frame.event === "room.activity" && (
-        !system || (system.type === "MEMBER_JOINED" && system.target_id === userId)
-      ));
-      if (!needsRoom) return undefined;
-      const roomId = frame.data.room_id;
+      const roomId = frame.data?.room_id;
+      if (roomId == null) return undefined;
       const known = findRoom(roomId);
       if (known) return known;
       const key = String(roomId);
@@ -63,37 +59,25 @@ export function useSocketNotifications(userId, activeRoomId, onNavigate, rooms =
       if (frame.event === "friend.request.received") {
         rememberFriendRequestDirection(frame.data?.friendship_id, "incoming", userId);
       }
-      if (frame.event === "friend.added") await pendingRequests;
+      if (frame.event === "friend.added"
+        && !getFriendRequestDirection(frame.data?.friendship_id)) await pendingRequests;
       if (!active) return;
       const candidate = describe(frame);
       if (!candidate) return;
-      const now = Date.now();
-      const previous = seen.get(candidate.id);
-      const duplicate = previous != null && now - previous.at < (candidate.dedupeMs ?? Infinity);
-      if (duplicate && !candidate.enrichesExisting) return;
-      // Reserve before resolving names: redelivery may arrive while REST is in flight.
-      const delivery = { at: duplicate ? previous.at : now };
-      seen.delete(candidate.id);
-      seen.set(candidate.id, delivery);
-      if (seen.size > 500) seen.delete(seen.keys().next().value);
+      if (seen.has(candidate.id)) return;
+      // Reserve before resolving names so redelivery cannot create two toasts.
+      seen.add(candidate.id);
+      if (seen.size > 500) seen.delete(seen.values().next().value);
 
-      // Show the socket event immediately. Name/room lookups must not block
-      // delivery on a slow mobile connection; enrich the same toast afterward.
-      if (duplicate) toast.update(candidate.id, candidate.message);
-      else displayed.add(show(candidate));
+      // Resolve names before showing the exact text, without a generic first toast.
       const [users, room] = await Promise.all([
         resolveUsers(candidate.userIds),
         notificationRoom(frame),
       ]);
-      // A later, richer membership event supersedes the access-only lookup.
-      if (!active || seen.get(candidate.id) !== delivery) return;
+      if (!active) return;
       // Recheck the current room after the lookup; the user may have navigated.
       const notification = describe(frame, users, room);
-      if (!notification) {
-        toast.dismiss(candidate.id);
-        return;
-      }
-      toast.update(notification.id, notification.message);
+      if (notification) displayed.add(show(notification));
     });
 
     return () => {

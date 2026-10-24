@@ -1,39 +1,20 @@
-import { describeSystemMessage } from "./systemMessage.js";
-
-/** Convert notification candidates to display text; all other frames stay quiet. */
+/** Only external friend requests, acceptances, room additions and new messages notify. */
 export function socketNotification({ event, data }, { userId, activeRoomId, users = new Map(), requestDirection, room }) {
   if (!userId || !data) return null;
   const username = (id) => users.get(id)?.username ?? "Someone";
 
   if (event === "friend.request.received" || event === "friend.added") {
     if (!data.friendship_id || !data.user_id || data.user_id === userId) return null;
-    // Suppress the accepting side; a missing cache must not drop a real friendship event.
-    if (event === "friend.added" && requestDirection === "incoming") return null;
+    // Direction is recorded when sending, receiving or loading pending requests.
+    // Keep the accepting side silent, including when direction is unknown.
+    if (event === "friend.added" && requestDirection !== "outgoing") return null;
     return {
       id: `${event}:${data.friendship_id}`,
       destination: { type: "profile", tab: event === "friend.request.received" ? "requests" : "friends" },
-      userIds: [data.user_id],
+      userIds: event === "friend.added" ? [data.user_id] : [],
       message: event === "friend.request.received"
-        ? `${username(data.user_id)} sent you a friend request.`
-        : requestDirection === "outgoing"
-          ? `${username(data.user_id)} accepted your friend request.`
-          : `You and ${username(data.user_id)} are now friends.`,
-    };
-  }
-
-  if (event === "room.added" || event === "room.removed") {
-    if (data.room_id == null) return null;
-    return {
-      id: `${event}:${data.room_id}`,
-      destination: event === "room.added" ? { type: "room", roomId: data.room_id } : { type: "conversations" },
-      // Access changes have no unique event ID. A later rejoin/removal is legitimate.
-      dedupeMs: 5000,
-      userIds: [],
-      message: event === "room.added"
-        ? room?.type === "dm"
-          ? "A new direct conversation is available."
-          : room?.name ? `You can now access ${room.name}.` : "You can now access a room."
-        : "You no longer have access to a room.",
+        ? "you got a new friend request"
+        : `${username(data.user_id)} accepted your friend request.`,
     };
   }
 
@@ -45,27 +26,12 @@ export function socketNotification({ event, data }, { userId, activeRoomId, user
   if (!addedToRoom && activeRoomId != null && String(data.room_id) === String(activeRoomId)) return null;
 
   if (system) {
-    if (system.actor_id === userId) return null;
-    if (addedToRoom) {
-      return {
-        // Enrich the access notification regardless of which socket event arrives first.
-        id: `room.added:${data.room_id}`,
-        destination: { type: "room", roomId: data.room_id },
-        dedupeMs: 5000,
-        enrichesExisting: true,
-        userIds: [system.actor_id].filter(Boolean),
-        message: `${username(system.actor_id)} added you to ${room?.name || "a room"}.`,
-      };
-    }
+    if (!addedToRoom || !system.actor_id || system.actor_id === userId) return null;
     return {
-      id: `message:${message.id}`,
+      id: `room.added:${message.id}`,
       destination: { type: "room", roomId: data.room_id },
-      userIds: [system.actor_id, system.target_id].filter(Boolean),
-      message: describeSystemMessage({
-        ...system,
-        actor_username: username(system.actor_id),
-        target_username: username(system.target_id),
-      }, userId),
+      userIds: [system.actor_id],
+      message: `${username(system.actor_id)} added you to room ${room?.name || data.room_id}.`,
     };
   }
 
@@ -75,7 +41,7 @@ export function socketNotification({ event, data }, { userId, activeRoomId, user
     destination: { type: "room", roomId: data.room_id },
     userIds: [message.sender_id],
     message: room?.type === "group"
-      ? room.name ? `New message in ${room.name}.` : "New message in a room."
-      : room?.type === "dm" ? `${username(message.sender_id)} sent a new message.` : "New message.",
+      ? `You have a new message from room ${room.name || data.room_id}.`
+      : `You have a new message from ${username(message.sender_id)}.`,
   };
 }
