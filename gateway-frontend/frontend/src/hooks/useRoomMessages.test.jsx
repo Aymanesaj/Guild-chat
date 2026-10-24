@@ -100,8 +100,12 @@ describe("useRoomMessages images", () => {
     const fresh = { ...IMAGE, url: "https://r2/fresh" };
     api.getMessage.mockResolvedValue(stored({ attachments: [fresh] }));
 
-    await act(() => hook.refreshImages("a1"));
+    let returned;
+    await act(async () => {
+      returned = await hook.refreshImages("a1");
+    });
 
+    expect(returned.attachments).toEqual([fresh]);
     expect(api.getMessage).toHaveBeenCalledWith("a1");
     expect(hook.messages[0].attachments).toEqual([fresh]);
     expect(hook.messages[1]).toBe(other);
