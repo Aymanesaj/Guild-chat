@@ -58,8 +58,8 @@ function AppShellContent({ onLogout }) {
   const [activeRoomId, setActiveRoomId] = useState(null);
 
   const isPhone = useMediaQuery(PHONE_QUERY);
-  const viewportRef = useMobileViewport(isPhone);
   const [isNavOpen, setIsNavOpen] = useState(false);
+  const viewportRef = useMobileViewport(isPhone, isNavOpen);
 
   const { currentUser, profile, profileNavigation, openProfile, closeProfile, previewUser, closeUserPreview } =
     useProfileOverlay();
