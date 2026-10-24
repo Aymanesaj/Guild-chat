@@ -342,6 +342,9 @@ function connect() {
       }
     }
 
+    // Logout may have cleared the session while the refresh was in flight.
+    if (!wantsSocket() || socket) return;
+
     attempt += 1;
     const delay = Math.min(1000 * 2 ** (attempt - 1), 15000);
     timer = setTimeout(connect, delay);
@@ -357,7 +360,13 @@ function disconnect() {
 
   const current = socket;
   socket = null;
-  current?.close(1000);
+  if (current?.readyState === WebSocket.CONNECTING) {
+    // Finish the handshake before closing to avoid a browser console error.
+    // The socket is already detached, so it cannot deliver frames or reconnect.
+    current.onopen = () => current.close(1000);
+  } else {
+    current?.close(1000);
+  }
 }
 
 window.addEventListener(LOGOUT_EVENT, () => {

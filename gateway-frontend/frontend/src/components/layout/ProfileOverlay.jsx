@@ -987,6 +987,11 @@ export default function ProfileOverlay({ user, onClose, initialTab = "friends" }
                 )}
 
                 <ManagementContent>
+                  {managementSection === "notifications" && (
+                    <EmptyState>
+                      This feature is under development.
+                    </EmptyState>
+                  )}
                   {managementSection === "friends" && (
                     loadingSection ? (
                       <EmptyState>

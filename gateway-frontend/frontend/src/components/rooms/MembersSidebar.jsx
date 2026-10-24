@@ -21,7 +21,7 @@ import UserAvatar from "../profile/UserAvatar";
 
 const MembersSidebarRoot = styled.aside`
   display: flex;
-  width: 260px;
+  width: 300px;
   flex-direction: column;
   flex-shrink: 0;
   min-height: 0;
@@ -55,7 +55,7 @@ const HeaderActions = styled.div`
 const MembersTitle = styled.h3`
   margin: 0;
   color: var(--text-secondary);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -64,9 +64,10 @@ const MembersTitle = styled.h3`
 const FriendRow = styled.div`
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: 6px var(--space-2);
-  border-radius: var(--radius-sm);
+  gap: var(--space-3);
+  min-height: 60px;
+  padding: 10px var(--space-2);
+  border-radius: var(--radius-md);
   transition: background var(--dur-fast) var(--ease);
 
   &:hover {
@@ -78,7 +79,8 @@ const FriendName = styled.span`
   flex: 1;
   min-width: 0;
   color: var(--text-primary);
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -256,7 +258,7 @@ function MembersSidebar({ roomId, onClose }) {
           {(view !== "members" || canAddMembers) && (
             <IconButton
               type="button"
-              $size={26}
+              $size={36}
               onClick={() =>
                 setView(view === "members" ? "friends" : "members")
               }
@@ -268,9 +270,9 @@ function MembersSidebar({ roomId, onClose }) {
               title={view === "members" ? "Add friends" : "Back to members"}
             >
               {view === "members" ? (
-                <TbUserPlus size={18} />
+                <TbUserPlus size={20} />
               ) : (
-                <TbArrowLeft size={18} />
+                <TbArrowLeft size={20} />
               )}
             </IconButton>
           )}
@@ -280,12 +282,12 @@ function MembersSidebar({ roomId, onClose }) {
           {isPhone && (
             <IconButton
               type="button"
-              $size={26}
+              $size={36}
               onClick={onClose}
               aria-label="Close members"
               title="Close members"
             >
-              <TbX size={18} />
+              <TbX size={20} />
             </IconButton>
           )}
         </HeaderActions>
@@ -325,19 +327,19 @@ function MembersSidebar({ roomId, onClose }) {
 
                   return (
                     <FriendRow key={friend.id}>
-                      <UserAvatar avatar={friend.avatar} name={friend.username} $size={28} />
+                      <UserAvatar avatar={friend.avatar} name={friend.username} $size={40} />
 
                       <FriendName>{friend.username}</FriendName>
 
                       <IconButton
                         type="button"
-                        $size={26}
+                        $size={36}
                         onClick={() => handleAdd(friend)}
                         disabled={isAdding}
                         aria-label={`Add ${friend.username} to the room`}
                         title={`Add ${friend.username}`}
                       >
-                        <TbUserPlus size={16} />
+                        <TbUserPlus size={20} />
                       </IconButton>
                     </FriendRow>
                   );
