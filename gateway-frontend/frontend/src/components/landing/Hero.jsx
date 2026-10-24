@@ -95,7 +95,7 @@ function Hero({ isAuth }) {
         </Tagline>
 
         <Actions>
-          <Button as={Link} to={isAuth ? "/app" : "/auth"} $size="md">
+          <Button as={Link} to={isAuth ? "/app" : "/auth?view=signup"} $size="md">
             {isAuth ? "Open app" : "Get started"}
             <TbArrowRight size={16} />
           </Button>

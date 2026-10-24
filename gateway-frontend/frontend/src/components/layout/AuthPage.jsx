@@ -1,7 +1,7 @@
 import styled from "styled-components";
 import { useToast } from "../ui/ToastProvider";
 import { useId, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { TbEye, TbEyeOff } from "react-icons/tb";
 import { loginUser, registerUser } from "../../api/authentication.js";
 import { getRegistrationPasswordError } from "../../utils/passwordValidation.js";
@@ -310,7 +310,12 @@ function SignupView({ setView, onSignup, values, onChange, loading }) {
 }
 
 function AuthPage( { onLogin } ) {
-  const [view, setView] = useState("login");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const view = searchParams.get("view") === "signup" ? "signup" : "login";
+  const setView = (nextView) => setSearchParams(
+    nextView === "signup" ? { view: "signup" } : {},
+    { replace: true },
+  );
   const [form, setForm] = useState({
     username: "",
     email: "",

@@ -70,7 +70,7 @@ function Landing({ isAuth }) {
             It takes about a minute to set up. Pick a name, and start talking.
           </ClosingLead>
           <ClosingActions>
-            <Button as={Link} to={target} $size="md">
+            <Button as={Link} to={isAuth ? "/app" : "/auth?view=signup"} $size="md">
               {label}
             </Button>
           </ClosingActions>
