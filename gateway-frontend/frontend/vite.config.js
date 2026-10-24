@@ -16,4 +16,7 @@ export default defineConfig({
 	  '/ws': { target: GATEWAY, changeOrigin: true, ws: true },
 	},
   },
+  test: {
+	environment: 'jsdom',
+  },
 })

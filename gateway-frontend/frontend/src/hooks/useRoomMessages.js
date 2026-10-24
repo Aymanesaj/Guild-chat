@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   deleteMessage,
   editMessage,
+  getMessage,
   listMessages,
   sendMessage,
   subscribeToRoom,
+  uploadImage,
 } from "../api/messages";
 
 const HISTORY_PAGE_SIZE = 50;
@@ -46,7 +48,9 @@ export function useRoomMessages(roomId) {
   /** Same idea for deletes: our own DELETE and the message.deleted frame both land here. */
   const applyDelete = useCallback((id) => {
     setMessages((previous) =>
-      previous.map((item) => (item.id === id ? { ...item, content: null, deleted: true } : item)),
+      previous.map((item) =>
+        item.id === id ? { ...item, content: null, deleted: true, attachments: [] } : item,
+      ),
     );
   }, []);
 
@@ -142,20 +146,33 @@ export function useRoomMessages(roomId) {
     }
   }, [roomId]);
 
+  /**
+   * Images are uploaded first, in parallel, then sent with the text in one
+   * POST. Throws if any step fails, so the composer keeps the text and images.
+   */
   const send = useCallback(
-    async (content, replyToId) => {
+    async (content, replyToId, files = []) => {
       const text = (content || "").trim();
-      if (!text) return;
+      if (!text && !files.length) return;
 
       setSending(true);
       try {
-        appendMessage(await sendMessage(roomId, text, replyToId));
+        const uploadIds = await Promise.all(files.map((file) => uploadImage(roomId, file)));
+        appendMessage(await sendMessage(roomId, text, replyToId, uploadIds));
       } finally {
         setSending(false);
       }
     },
     [roomId, appendMessage],
   );
+
+  /** Image links expire after a few minutes: the message again, with fresh ones. */
+  const refreshImages = useCallback(async (messageId) => {
+    const fresh = await getMessage(messageId);
+    setMessages((previous) =>
+      previous.map((item) => (item.id === fresh.id ? { ...item, attachments: fresh.attachments } : item)),
+    );
+  }, []);
 
   /**
    * Throws on refusal (EDIT_WINDOW_EXPIRED, NOT_SENDER) so the row can show
@@ -191,7 +208,7 @@ export function useRoomMessages(roomId) {
   );
 
   return {
-    messages, messagesById, state, sending, send, edit, remove,
+    messages, messagesById, state, sending, send, edit, remove, refreshImages,
     hasOlder, loadingOlder, olderError, loadOlder,
   };
 }

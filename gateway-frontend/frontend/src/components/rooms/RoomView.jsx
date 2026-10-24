@@ -58,13 +58,13 @@ function RoomView({ roomId, roomName, roomDescription, isDm, peer, draft, onDraf
   const setReplyingTo = (message) => setReply({ roomId, message });
 
   const {
-    messages, messagesById, state, sending, send, edit, remove,
+    messages, messagesById, state, sending, send, edit, remove, refreshImages,
     hasOlder, loadingOlder, olderError, loadOlder,
   } = useRoomMessages(roomId);
 
   const [initializingDm, setInitializingDm] = useState(false);
-  const handleSend = async (content, replyToId) => {
-    if (!onSendDraft) return send(content, replyToId);
+  const handleSend = async (content, replyToId, files) => {
+    if (!onSendDraft) return send(content, replyToId, files);
     setInitializingDm(true);
     try {
       await onSendDraft(content);
@@ -119,6 +119,7 @@ function RoomView({ roomId, roomName, roomDescription, isDm, peer, draft, onDraf
           onEdit={edit}
           canModerate={canModerate}
           onDelete={remove}
+          onRefreshImages={refreshImages}
         />
         <MessageComposer
           roomId={roomId}
@@ -128,6 +129,8 @@ function RoomView({ roomId, roomName, roomDescription, isDm, peer, draft, onDraf
           onTextChange={onDraftChange}
           focusEnabled={!profile && !previewUser && !isMembersOpen && !(isPhone && isNavOpen)}
           onSend={handleSend}
+          // A DM draft has no room yet, and images are uploaded to a room: text first.
+          canAttach={Boolean(roomId)}
           disabled={sending || initializingDm}
           replyingTo={replyingTo}
           onCancelReply={() => setReplyingTo(null)}

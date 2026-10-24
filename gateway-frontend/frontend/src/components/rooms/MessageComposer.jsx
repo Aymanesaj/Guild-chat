@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useId, useRef } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import styled from "styled-components";
 import { useToast } from "../ui/ToastProvider";
-import { TbArrowBackUp, TbSend, TbX } from "react-icons/tb";
+import { TbArrowBackUp, TbPhoto, TbSend, TbX } from "react-icons/tb";
 import { Button, IconButton, Input } from "../ui";
 import MessageByteCount from "../ui/MessageByteCount";
 import { MAX_MESSAGE_BYTES, MAX_MESSAGE_INPUT_BYTES, MESSAGE_SIZE_ERROR, limitMessageInput, messageByteLength } from "../../utils/messageContent";
+import { IMAGE_TYPES, MAX_IMAGES, messagePreviewText, pickImages } from "../../utils/attachments";
 
 const MessageComposerRoot = styled.div`
   display: flex;
@@ -56,6 +57,46 @@ const ReplyBannerText = styled.span`
   }
 `;
 
+const ImageTray = styled.ul`
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-2) var(--space-4) 0;
+  padding: 0;
+  list-style: none;
+`;
+
+const ImageThumb = styled.li`
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-surface);
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  button {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    background: var(--bg-elevated);
+  }
+`;
+
+const ComposerField = styled.div`
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+`;
+
 const ComposerInput = styled(Input)`
   min-width: 0;
   flex: 1;
@@ -80,16 +121,52 @@ const SendButton = styled(Button)`
 
 function MessageComposer({
   roomId, roomName, isDm, text, onTextChange, onSend, disabled,
-  replyingTo, onCancelReply, focusEnabled = true,
+  replyingTo, onCancelReply, focusEnabled = true, canAttach = false,
 }) {
   const toast = useToast();
   const setToastAnchor = useCallback((element) => toast.setAnchor(element), [toast]);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const submitting = useRef(false);
   const countId = useId();
   const label = isDm ? `Message ${roomName}` : `Message #${roomName}`;
   const bytes = messageByteLength(text);
   const overLimit = bytes > MAX_MESSAGE_BYTES;
+  // Picked, not uploaded yet: { file, url } where url is a local object URL for the thumbnail.
+  const [images, setImages] = useState([]);
+  const objectUrls = useRef(new Set());
+  const canSend = Boolean(text.trim()) || images.length > 0;
+
+  // The composer is remounted per room, so this frees every thumbnail left behind.
+  useEffect(() => {
+    const urls = objectUrls.current;
+    return () => {
+      urls.forEach((url) => URL.revokeObjectURL(url));
+      urls.clear();
+    };
+  }, []);
+
+  function addImages(picked) {
+    if (!canAttach || disabled) return;
+    const { accepted, error } = pickImages(picked, images.length);
+    if (error) toast.error(error);
+    if (!accepted.length) return;
+
+    const added = accepted.map((file) => {
+      const url = URL.createObjectURL(file);
+      objectUrls.current.add(url);
+      return { file, url };
+    });
+    setImages((current) => [...current, ...added]);
+  }
+
+  function releaseImages(released) {
+    released.forEach(({ url }) => {
+      URL.revokeObjectURL(url);
+      objectUrls.current.delete(url);
+    });
+    setImages((current) => current.filter((image) => !released.includes(image)));
+  }
 
   // Covers opening a room, picking a reply and re-enabling the input after send.
   useEffect(() => {
@@ -100,7 +177,8 @@ function MessageComposer({
     event.preventDefault();
 
     const trimmed = text.trim();
-    if (!trimmed || disabled || submitting.current) return;
+    const sent = images;
+    if ((!trimmed && !sent.length) || disabled || submitting.current) return;
     if (overLimit) {
       toast.error(MESSAGE_SIZE_ERROR);
       return;
@@ -108,9 +186,10 @@ function MessageComposer({
 
     submitting.current = true;
     try {
-      await onSend(trimmed, replyingTo?.id);
+      await onSend(trimmed, replyingTo?.id, sent.map((image) => image.file));
       // A late response must not erase a newer draft written after revisiting this room.
       onTextChange((current) => current === text ? "" : current);
+      releaseImages(sent);
       onCancelReply?.();
     } catch (error) {
       toast.error(error?.message || "Couldn't send your message. Please try again.");
@@ -126,7 +205,7 @@ function MessageComposer({
           <TbArrowBackUp size={16} />
           <ReplyBannerText>
             Replying to <strong>{replyingTo.sender_username ?? "Unknown user"}</strong>
-            {replyingTo.content ? ` — ${replyingTo.content}` : ""}
+            {messagePreviewText(replyingTo) ? ` — ${messagePreviewText(replyingTo)}` : ""}
           </ReplyBannerText>
           <IconButton
             type="button"
@@ -140,26 +219,80 @@ function MessageComposer({
         </ReplyBanner>
       )}
 
-      <MessageComposerForm onSubmit={handleSubmit}>
-        <ComposerInput
-          ref={inputRef}
-          type="text"
-          value={text}
-          onChange={(event) => onTextChange(limitMessageInput(event.target.value))}
-          maxLength={MAX_MESSAGE_INPUT_BYTES}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") onCancelReply?.();
-          }}
-          placeholder={label}
-          aria-label={label}
-          aria-describedby={countId}
-          aria-invalid={overLimit}
-          $invalid={overLimit}
-          autoFocus={focusEnabled}
-          disabled={disabled}
-        />
+      {images.length > 0 && (
+        <ImageTray aria-label="Images to send">
+          {images.map((image) => (
+            <ImageThumb key={image.url}>
+              <img src={image.url} alt={image.file.name} />
+              <IconButton
+                type="button"
+                $size={22}
+                $round
+                onClick={() => releaseImages([image])}
+                disabled={disabled}
+                aria-label={`Remove ${image.file.name}`}
+                title="Remove"
+              >
+                <TbX size={14} />
+              </IconButton>
+            </ImageThumb>
+          ))}
+        </ImageTray>
+      )}
 
-        <SendButton type="submit" $pill disabled={disabled || !text.trim() || overLimit}>
+      <MessageComposerForm onSubmit={handleSubmit}>
+        <ComposerField>
+          {canAttach && (
+            <>
+              <IconButton
+                type="button"
+                $round
+                onClick={() => fileInputRef.current?.click()}
+                disabled={disabled || images.length >= MAX_IMAGES}
+                aria-label="Attach images"
+                title={images.length >= MAX_IMAGES ? `Up to ${MAX_IMAGES} images` : "Attach images"}
+              >
+                <TbPhoto size={18} />
+              </IconButton>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={IMAGE_TYPES.join(",")}
+                multiple
+                hidden
+                onChange={(event) => {
+                  addImages([...event.target.files]);
+                  event.target.value = ""; // picking the same file again still fires change
+                }}
+              />
+            </>
+          )}
+          <ComposerInput
+            ref={inputRef}
+            type="text"
+            value={text}
+            onChange={(event) => onTextChange(limitMessageInput(event.target.value))}
+            maxLength={MAX_MESSAGE_INPUT_BYTES}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") onCancelReply?.();
+            }}
+            onPaste={(event) => {
+              const pasted = [...event.clipboardData.files];
+              if (!canAttach || !pasted.length) return;
+              event.preventDefault();
+              addImages(pasted);
+            }}
+            placeholder={label}
+            aria-label={label}
+            aria-describedby={countId}
+            aria-invalid={overLimit}
+            $invalid={overLimit}
+            autoFocus={focusEnabled}
+            disabled={disabled}
+          />
+        </ComposerField>
+
+        <SendButton type="submit" $pill disabled={disabled || !canSend || overLimit}>
           <TbSend size={18} />
           <span>Send</span>
         </SendButton>

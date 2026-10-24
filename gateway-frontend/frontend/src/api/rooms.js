@@ -2,6 +2,7 @@ import { buildQuery, jsonBody, request } from "./http";
 import { getCurrentUserId } from "./tokens";
 import { resolveUsers } from "./users";
 import { validateRoomDetails } from "../utils/roomValidation";
+import { messagePreviewText } from "../utils/attachments";
 
 /**
  * Rooms, DMs, members and roles are owned by org-service (gateway prefix
@@ -254,7 +255,7 @@ async function fetchLastMessages(roomIds) {
             ? {
                 // id: lets a room.activity edit or delete find the preview it changes.
                 id: last.id,
-                content: last.deleted ? "Message deleted" : last.content,
+                content: messagePreviewText(last),
                 sent_at: last.created_at,
               }
             : null,

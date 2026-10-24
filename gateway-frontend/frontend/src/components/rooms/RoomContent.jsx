@@ -8,6 +8,7 @@ import {
   TbArrowBarToUp,
   TbCornerDownRight,
   TbPencil,
+  TbPhotoOff,
   TbTrash,
 } from "react-icons/tb";
 import { ProfileName } from "../layout/Sidebar";
@@ -19,6 +20,7 @@ import MessageByteCount from "../ui/MessageByteCount";
 import ConversationIntro from "./ConversationIntro";
 import { MAX_MESSAGE_BYTES, MAX_MESSAGE_INPUT_BYTES, MESSAGE_SIZE_ERROR, limitMessageInput, messageByteLength } from "../../utils/messageContent";
 import { describeSystemMessage } from "../../utils/systemMessage";
+import { imageAspectRatio, messagePreviewText } from "../../utils/attachments";
 
 const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
 const MESSAGE_GROUP_GAP = 60 * 60 * 1000;
@@ -298,6 +300,53 @@ const MessageContent = styled.p`
   }
 `;
 
+const ImageGrid = styled.div`
+  display: grid;
+  grid-template-columns: ${({ $count }) => $count === 1 ? "minmax(0, 1fr)" : "repeat(2, minmax(0, 1fr))"};
+  gap: 4px;
+  width: 360px;
+  max-width: 100%;
+`;
+
+/** The ratio is set before the image loads, so the list doesn't jump when it does. */
+const imageTile = css`
+  display: block;
+  max-height: 360px;
+  aspect-ratio: ${({ $ratio }) => $ratio};
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--bg-base);
+`;
+
+const ImageLink = styled.a`
+  ${imageTile}
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+`;
+
+const ImagePlaceholder = styled.button`
+  ${imageTile}
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  border: 1px dashed var(--border-strong);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+
+  &:disabled {
+    cursor: progress;
+  }
+`;
+
 const ReplyQuote = styled.button`
   display: flex;
   gap: var(--space-2);
@@ -381,6 +430,7 @@ function RoomContent({
   onEdit,
   canModerate,
   onDelete,
+  onRefreshImages,
 }) {
   const [editingId, setEditingId] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
@@ -487,6 +537,7 @@ function RoomContent({
                       onJumpToReply={jumpToReply}
                       onEdit={onEdit}
                       onStartDelete={() => setPendingDelete(message)}
+                      onRefreshImages={onRefreshImages}
                     />
                     )}
                   </Fragment>
@@ -552,6 +603,7 @@ function MessageItem({
   onJumpToReply,
   onEdit,
   onStartDelete,
+  onRefreshImages,
 }) {
   const openPreview = useOpenUserPreview();
   const sender = { id: message.sender_id, username: message.sender_username };
@@ -617,9 +669,13 @@ function MessageItem({
             </ReplyQuote>
           )}
 
+          {!message.deleted && message.attachments?.length > 0 && (
+            <MessageImages messageId={message.id} images={message.attachments} onRefresh={onRefreshImages} />
+          )}
+
           {isEditing ? (
             <MessageEditor message={message} onSave={onEdit} onClose={onStopEdit} />
-          ) : (
+          ) : (message.deleted || message.content) && (
             <MessageContent>
               {message.deleted ? <em>Message deleted</em> : message.content}
               {message.edited_at && !message.deleted && <small> (edited)</small>}
@@ -682,12 +738,79 @@ function MessageItem({
   );
 }
 
+/**
+ * A message's images. Signed links expire after a few minutes: the first one
+ * that fails to load fetches the message again for fresh links. After that,
+ * or when media could not sign a link (url null), a placeholder offers a retry,
+ * so a broken image never refetches in a loop.
+ */
+function MessageImages({ messageId, images, onRefresh }) {
+  // Links that failed to load; a refreshed message brings new ones.
+  const [failed, setFailed] = useState(() => new Set());
+  const [refreshing, setRefreshing] = useState(false);
+  const renewedOnError = useRef(false);
+  const ratio = (image) => images.length === 1 ? imageAspectRatio(image) : "1 / 1";
+
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      await onRefresh?.(messageId);
+    } catch {
+      // the placeholder and its retry stay
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  function handleError(url) {
+    setFailed((current) => new Set(current).add(url));
+    if (!renewedOnError.current) {
+      renewedOnError.current = true;
+      refresh();
+    }
+  }
+
+  return (
+    <ImageGrid $count={images.length}>
+      {images.map((image) => image.url && !failed.has(image.url) ? (
+        <ImageLink
+          key={image.media_id}
+          href={image.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          $ratio={ratio(image)}
+          title="Open image"
+        >
+          <img
+            src={image.url}
+            width={image.width || undefined}
+            height={image.height || undefined}
+            alt="Attached image"
+            onError={() => handleError(image.url)}
+          />
+        </ImageLink>
+      ) : (
+        <ImagePlaceholder
+          key={image.media_id}
+          type="button"
+          $ratio={ratio(image)}
+          onClick={refresh}
+          disabled={refreshing}
+        >
+          <TbPhotoOff size={20} aria-hidden="true" />
+          {refreshing ? "Loading..." : "Image unavailable. Retry"}
+        </ImagePlaceholder>
+      ))}
+    </ImageGrid>
+  );
+}
+
 /** The quoted line. The target may be deleted, or older than the loaded page. */
 function replyPreview(repliedTo) {
   if (!repliedTo) return "Original message";
   if (repliedTo.deleted) return "Replying to a deleted message";
 
-  return repliedTo.content ?? "";
+  return messagePreviewText(repliedTo);
 }
 
 /**

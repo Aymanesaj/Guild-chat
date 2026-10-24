@@ -1,4 +1,5 @@
 import {
+  ApiError,
   buildQuery,
   ensureFreshToken,
   jsonBody,
@@ -13,6 +14,7 @@ import {
 } from "./tokens";
 import { resolveUsers } from "./users";
 import { assertMessageSize } from "../utils/messageContent";
+import { messagePreviewText } from "../utils/attachments";
 
 /**
  * Messages. History, sending, editing and deleting over REST; live updates
@@ -53,6 +55,8 @@ function normalizeMessage(message, users) {
     sent_at: message.created_at,
     edited_at: message.edited_at ?? null,
     deleted: Boolean(message.deleted),
+    // [{ media_id, content_type, width, height, url, url_expires_at }]; url can be null.
+    attachments: message.attachments ?? [],
   };
 }
 
@@ -98,16 +102,55 @@ export async function listMessages(roomId, { before, limit = 50 } = {}) {
   return withUsernames([...(page || [])].reverse());
 }
 
-/** The stored message, as the server returned it (201). */
-export async function sendMessage(roomId, content, replyToId) {
+/**
+ * One chat image: upload-url -> PUT straight to R2. Returns the upload_id to
+ * send with the message; media checks, resizes and converts the file when the
+ * message is sent, not here.
+ */
+export async function uploadImage(roomId, file) {
+  const ticket = await request(
+    `${CHAT}/rooms/${roomId}/attachments/upload-url`,
+    { method: "POST", ...jsonBody({ content_type: file.type }) },
+    "Failed to start image upload",
+  );
+
+  // Exactly the Content-Type the URL was signed for, or R2 refuses the PUT.
+  // No Authorization header: the signed URL is the permission.
+  const put = await fetch(ticket.upload_url, {
+    method: "PUT",
+    headers: { "Content-Type": ticket.content_type },
+    body: file,
+  });
+  if (!put.ok) {
+    throw new ApiError("Failed to upload image", put.status, null);
+  }
+  return ticket.upload_id;
+}
+
+/** The stored message, as the server returned it (201). Text, images (upload ids) or both. */
+export async function sendMessage(roomId, content, replyToId, uploadIds = []) {
   assertMessageSize(content);
   const saved = await request(
     `${CHAT}/rooms/${roomId}/messages`,
-    { method: "POST", ...jsonBody({ content, reply_to_id: replyToId }) },
+    {
+      method: "POST",
+      ...jsonBody({
+        content,
+        reply_to_id: replyToId,
+        attachment_upload_ids: uploadIds.length ? uploadIds : undefined,
+      }),
+    },
     "Failed to send message",
   );
   const [message] = await withUsernames([saved]);
   return message;
+}
+
+/** One message, with freshly signed image URLs: how an expired image link is renewed. */
+export async function getMessage(messageId) {
+  const message = await request(`${CHAT}/messages/${messageId}`, {}, "Failed to load message");
+  const [normalized] = await withUsernames([message]);
+  return normalized;
 }
 
 /** Sender only, within 15 minutes of sending. */
@@ -212,7 +255,7 @@ function emitRoomEvent(event) {
 function toPreview(message) {
   return {
     id: message.id,
-    content: message.deleted ? "Message deleted" : message.content,
+    content: messagePreviewText(message),
     sent_at: message.created_at,
   };
 }
