@@ -190,7 +190,7 @@ services:
     networks:
       - private
     depends_on:
-      media-postgres:
+      postgres_db:
         condition: service_healthy
     restart: "no"
 
@@ -219,7 +219,7 @@ services:
     depends_on:
       media-migrate:
         condition: service_completed_successfully
-      media-postgres:
+      postgres_db:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8084/health"]
@@ -255,26 +255,6 @@ services:
   # DATABASES
   # ============================================================
 
-  media-postgres:
-    mem_limit: 256m
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: media
-      POSTGRES_DB: media
-      POSTGRES_PASSWORD: ${MEDIA_POSTGRES_PASSWORD:-}
-    volumes:
-      - media_database:/var/lib/postgresql/data
-    expose:
-      - "5432"
-    networks:
-      - private
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U media -d media"]
-      interval: 5s
-      timeout: 3s
-      retries: 15
-    restart: unless-stopped
-
   postgres_db:
     mem_limit: 512m
     image: postgres:16-alpine
@@ -286,9 +266,13 @@ services:
       ORG_POSTGRES_USER: ${ORG_POSTGRES_USER}
       ORG_POSTGRES_PASSWORD: ${ORG_POSTGRES_PASSWORD}
       ORG_POSTGRES_DB: ${ORG_POSTGRES_DB}
+      MEDIA_POSTGRES_USER: ${MEDIA_POSTGRES_USER:-media}
+      MEDIA_POSTGRES_PASSWORD: ${MEDIA_POSTGRES_PASSWORD:-}
+      MEDIA_POSTGRES_DB: ${MEDIA_POSTGRES_DB:-media}
     volumes:
       - database:/var/lib/postgresql/data
       - ./databases/postgres/init-org.sh:/docker-entrypoint-initdb.d/10-init-org.sh:ro
+      - ./databases/postgres/init-media.sh:/docker-entrypoint-initdb.d/20-init-media.sh:ro
     expose:
       - "5432"
     healthcheck:
@@ -504,7 +488,6 @@ services:
 # ============================================================
 
 volumes:
-  media_database:
   rabbitmq_data:
     name: "rabbitmq_data"
   nginx_tls:

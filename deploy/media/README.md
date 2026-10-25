@@ -41,9 +41,29 @@ docker compose config -q
 docker compose up -d --build media-service
 ```
 
-Media and its PostgreSQL container use the existing `private` network alongside
-Identity/Chat. Neither Media nor its database publishes host ports, and Nginx
+Media uses the shared `postgres_db` container alongside Identity and Organization,
+with its own `media` database and role in the `database` volume. Set
+`MEDIA_DATABASE_URL` to use `postgres_db:5432`, and keep its credentials/database
+consistent with `MEDIA_POSTGRES_USER`, `MEDIA_POSTGRES_PASSWORD`, and
+`MEDIA_POSTGRES_DB`. All services use the existing `private` network.
+Neither Media nor its database publishes host ports, and Nginx
 has no Media route. This network also permits outbound R2 HTTPS.
+
+On a fresh volume, `databases/postgres/init-media.sh` creates the media role and
+database automatically. For an existing `database` volume, initialize them before
+starting Media (recreating `postgres_db` loads the new environment and script):
+
+```bash
+docker compose up -d postgres_db
+docker compose exec -T postgres_db sh /docker-entrypoint-initdb.d/20-init-media.sh
+docker compose up -d --build media-service
+```
+
+The script only creates missing objects; it preserves existing data and passwords.
+If the former `media-postgres` container has metadata to keep, stop Media writes,
+dump that database and restore it into the shared instance before starting Media.
+The old `media_database` volume is not copied or deleted by this change; retain it
+until the transfer is verified, then remove the old container.
 
 This is a runnable Fastify starter. R2 operations, database access, upload routes
 and gRPC still need implementation; no gRPC server runs yet.
