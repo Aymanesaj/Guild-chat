@@ -5,7 +5,7 @@ import { getOrCreateDm, openDm } from "../../api/rooms";
 import { onRoomEvent, sendMessage } from "../../api/messages";
 import { assertMessageSize } from "../../utils/messageContent";
 
-function MainPanel({ activeView, onRoomInitialized, onHideDm }) {
+function MainPanel({ activeView, onRoomInitialized }) {
   // Kept above RoomView so drafts survive room switches and visits to the DM list.
   // This state is discarded with the signed-in app on logout.
   const [drafts, setDrafts] = useState({});
@@ -82,8 +82,6 @@ function MainPanel({ activeView, onRoomInitialized, onHideDm }) {
       roomName={roomName}
       roomDescription={activeView.description}
       isDm={isDm}
-      onHideDm={isDm && !activeView.isDraft && !String(activeView.id).startsWith("draft-dm:")
-        ? () => onHideDm(activeView.id) : undefined}
       peer={activeView.peer}
       draft={drafts[roomKey] ?? ""}
       onDraftChange={updateDraft}

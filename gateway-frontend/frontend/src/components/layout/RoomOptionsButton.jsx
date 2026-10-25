@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import styled from "styled-components";
-import { TbDots, TbEdit, TbLogout, TbPencil } from "react-icons/tb";
+import { TbCheck, TbDots, TbEdit, TbLogout, TbPencil } from "react-icons/tb";
+import { listMessages } from "../../api/messages";
 import { getMyRoomRole, leaveRoom } from "../../api/rooms";
 import MemberActionsMenu from "../rooms/MemberActionsMenu";
 import { ConfirmDialog, IconButton } from "../ui";
 import { useToast } from "../ui/ToastProvider";
 import RoomDetailsDialog from "./RoomDetailsDialog";
+import { useUnread } from "./UnreadContext";
 
 const Trigger = styled(IconButton)`
   position: absolute;
@@ -42,6 +44,7 @@ function RoomOptionsButton({ room, onRoomUpdated, onRoomLeft }) {
   const triggerRef = useRef(null);
   const actionLayerRef = useRef(null);
   const toast = useToast();
+  const { markRead } = useUnread();
 
   // Resolve permissions only when requested. A new room snapshot also refreshes
   // an open menu after a role change; old permissions never apply to that snapshot.
@@ -86,6 +89,20 @@ function RoomOptionsButton({ room, onRoomUpdated, onRoomLeft }) {
     return () => document.removeEventListener("keydown", handleEscape, true);
   }, [menuRect]);
 
+  async function handleMarkRead() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const messages = await listMessages(room.id, { limit: 1 });
+      const newestId = messages.at(-1)?.id;
+      if (newestId) markRead(room.id, newestId);
+    } catch (err) {
+      toast.error(err?.message || "Failed to mark room as read");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleLeave() {
     if (busy) return;
     setBusy(true);
@@ -103,7 +120,9 @@ function RoomOptionsButton({ room, onRoomUpdated, onRoomLeft }) {
 
   const role = permission?.room === room ? permission.role : null;
   const canEdit = role === "owner" || role === "admin";
-  const actions = [];
+  const actions = [
+    { key: "read", label: "Mark as read", icon: TbCheck, onSelect: handleMarkRead },
+  ];
   if (canEdit) {
     actions.push(
       { key: "rename", label: "Rename room", icon: TbPencil, onSelect: () => setAction("rename") },
@@ -126,6 +145,7 @@ function RoomOptionsButton({ room, onRoomUpdated, onRoomLeft }) {
         title={`Options for ${room.name}`}
         aria-haspopup="menu"
         aria-expanded={Boolean(menuRect)}
+        disabled={busy}
         onClick={(event) => {
           setPermission(null);
           setMenuRect(event.currentTarget.getBoundingClientRect());

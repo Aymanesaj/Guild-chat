@@ -1,11 +1,11 @@
 import { useEffect } from "react";
 import styled from "styled-components";
-import { TbHash, TbX } from "react-icons/tb";
+import { TbHash } from "react-icons/tb";
 import { useUnread } from "./UnreadContext";
 import { useRoomNavigation } from "./RoomNavigationContext";
 import { UnreadBadge } from "./NotificationBell";
 import UserAvatar from "../profile/UserAvatar";
-import { Button, IconButton, Spinner } from "../ui";
+import { Button, Spinner } from "../ui";
 import {
   describeNotification,
   formatUnread,
@@ -18,28 +18,6 @@ const Panel = styled.section`
   flex: 1;
   min-height: 0;
   flex-direction: column;
-`;
-
-const PanelHeader = styled.header`
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--border-subtle);
-
-  h2 {
-    margin: 0;
-    font-size: var(--text-md);
-    font-weight: 700;
-  }
-`;
-
-const HeaderActions = styled.div`
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
 `;
 
 const PanelBody = styled.div`
@@ -118,7 +96,7 @@ const Centered = styled.div`
   padding: var(--space-3);
 `;
 
-function NotificationsPanel({ feed, rooms, onNavigate, onClose, showCloseButton = false }) {
+function NotificationsPanel({ feed, rooms, onNavigate, onClose }) {
   const { unreadConversations } = useUnread();
   const { navigateToRoom } = useRoomNavigation();
   const { load, state } = feed;
@@ -144,25 +122,6 @@ function NotificationsPanel({ feed, rooms, onNavigate, onClose, showCloseButton 
 
   return (
     <Panel aria-label="Notifications">
-      <PanelHeader>
-        <h2>Notifications</h2>
-        <HeaderActions>
-          <Button
-            type="button"
-            $variant="ghost"
-            $size="sm"
-            onClick={feed.markAllRead}
-            disabled={feed.unread === 0}
-          >
-            Mark all read
-          </Button>
-          {showCloseButton && (
-            <IconButton type="button" onClick={onClose} aria-label="Close notifications">
-              <TbX size={20} />
-            </IconButton>
-          )}
-        </HeaderActions>
-      </PanelHeader>
       <PanelBody>
         {unreadConversations.length > 0 && (
           <>

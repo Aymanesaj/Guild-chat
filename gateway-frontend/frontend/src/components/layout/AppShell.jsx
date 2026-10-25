@@ -12,7 +12,7 @@ import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { PHONE_QUERY } from "../../constants/breakpoints";
 import { connectChat, onRoomEvent } from "../../api/messages";
-import { getRoom, getRooms, hideDm } from "../../api/rooms";
+import { getRoom, getRooms } from "../../api/rooms";
 import { useNotificationFeed } from "../../hooks/useNotificationFeed";
 import { useSocketNotifications } from "../../hooks/useSocketNotifications";
 import { useToast } from "../ui/ToastProvider";
@@ -171,18 +171,6 @@ function AppShellContent({ onLogout }) {
     setIsNavOpen(false);
   }, []);
 
-  const handleHideDm = async (roomId) => {
-    const seq = navigationSeq.current;
-    try {
-      await hideDm(roomId);
-      // A successful hide returns to the list, which refetches visible DMs.
-      // Do not interrupt navigation that happened while DELETE was pending.
-      if (seq === navigationSeq.current) handleDirectMessages();
-    } catch (error) {
-      toast.error(error?.message || "Couldn't remove this conversation.");
-    }
-  };
-
   // Hiding on another tab/device also closes the active DM here.
   useEffect(() => onRoomEvent((event) => {
     if (event.type === "removed" && !isDirectMessages && activeRoomId?.type === "dm"
@@ -291,7 +279,6 @@ function AppShellContent({ onLogout }) {
               <MainPanel
                 activeView={isDirectMessages ? true : activeRoom}
                 onRoomInitialized={handleRoomInitialized}
-                onHideDm={handleHideDm}
               />
             </MainContent>
           </AppShellRoot>

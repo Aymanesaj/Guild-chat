@@ -4,13 +4,23 @@ import { useRoomNavigation } from "../layout/RoomNavigationContext";
 import { StatusDot } from "../ui";
 import UserAvatar from "../profile/UserAvatar";
 import { UnreadBadge } from "../layout/NotificationBell";
-import { useUnreadCount } from "../layout/UnreadContext";
+import { useUnread, useUnreadCount } from "../layout/UnreadContext";
+import DmOptionsButton from "./DmOptionsButton";
 import { formatUnread } from "../../utils/notifications";
 
 const DmItemRoot = styled.li`
   display: flex;
+  align-items: center;
+  gap: var(--space-3);
   width: 100%;
   min-width: 0;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  transition: background var(--dur-fast) var(--ease);
+
+  &:hover {
+    background: var(--bg-hover);
+  }
 `;
 
 const DmItemButton = styled.button`
@@ -21,15 +31,10 @@ const DmItemButton = styled.button`
   gap: var(--space-3);
   border: 0;
   border-radius: var(--radius-md);
-  padding: 10px;
+  padding: 0;
   background: transparent;
   color: var(--text-primary);
   text-align: left;
-  transition: background var(--dur-fast) var(--ease);
-
-  &:hover {
-    background: var(--bg-hover);
-  }
 `;
 
 const DmAvatarWrap = styled.span`
@@ -78,6 +83,7 @@ const DmDetails = styled.div`
 
 const DmTimestamp = styled.time`
   flex-shrink: 0;
+  white-space: nowrap;
   color: ${({ $unread }) => ($unread ? "var(--accent-400)" : "var(--text-tertiary)")};
   font-size: var(--text-xs);
 `;
@@ -90,20 +96,29 @@ const DmPreview = styled.span`
   }
 `;
 
-/** Time on top, unread count under it. */
+/** Time on top, unread count and conversation options directly below it. */
 const DmMeta = styled.div`
   display: flex;
+  flex-shrink: 0;
   align-self: flex-start;
   flex-direction: column;
   align-items: flex-end;
   gap: var(--space-1);
 `;
 
-function DmItem({ conversation }) {
+const DmActions = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+`;
+
+function DmItem({ conversation, onDelete }) {
   const openPreview = useOpenUserPreview();
   const { navigateToRoom } = useRoomNavigation();
   const peer = { id: conversation.userId, username: conversation.username };
   const unread = useUnreadCount(conversation.id);
+  const { markRead } = useUnread();
 
   function openConversation() {
     navigateToRoom({
@@ -140,11 +155,17 @@ function DmItem({ conversation }) {
           </DmPreview>
         </DmDetails>
 
-        <DmMeta>
-          <DmTimestamp $unread={unread > 0}>{conversation.timestamp}</DmTimestamp>
-          {unread > 0 && <UnreadBadge aria-label={`${unread} unread`}>{formatUnread(unread)}</UnreadBadge>}
-        </DmMeta>
       </DmItemButton>
+      <DmMeta>
+        <DmTimestamp $unread={unread > 0}>{conversation.timestamp}</DmTimestamp>
+        <DmActions>
+          {unread > 0 && <UnreadBadge aria-label={`${unread} unread`}>{formatUnread(unread)}</UnreadBadge>}
+          <DmOptionsButton
+            onDelete={() => onDelete(conversation.id)}
+            onMarkRead={conversation.lastMessageId ? () => markRead(conversation.id, conversation.lastMessageId) : undefined}
+          />
+        </DmActions>
+      </DmMeta>
     </DmItemRoot>
   );
 }
