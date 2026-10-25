@@ -102,13 +102,6 @@ public class RoomController {
         return roomService.getRoomById(id, userId);
     }
 
-    @PostMapping("/{roomId}/read")
-    public ResponseEntity<Void> markRoomAsRead(@PathVariable Long roomId, Principal principal) {
-        UUID userId = UUID.fromString(principal.getName());
-        roomService.markRoomAsRead(roomId, userId);
-        return ResponseEntity.noContent().build();
-    }
-
     @PostMapping("/dm")
     public RoomResponse createDirectMessageRoom(
             @Valid @RequestBody CreateDirectMessageRequest request,

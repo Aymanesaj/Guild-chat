@@ -180,21 +180,6 @@ public class RoomService {
     }
 
     @Transactional
-    public void markRoomAsRead(Long roomId, UUID userId) {
-        lockRoom(roomId);
-        RoomMember roomMember = roomMemberRepository
-                .findByRoomIdAndUserId(roomId, userId)
-                .orElseThrow(() ->
-                        new NotFoundException(
-                                "User is not a member of this room"
-                        )
-                );
-
-        roomMember.setLastReadAt(java.time.Instant.now());
-        roomMemberRepository.save(roomMember);
-    }
-
-    @Transactional
     public void updateMemberRole(Long roomId, UUID targetUserId, RoleName newRoleName, UUID actorId) {
         Room room = lockRoom(roomId);
         if (!isUserInRoom(roomId, actorId)) {
