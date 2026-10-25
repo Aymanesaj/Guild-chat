@@ -14,6 +14,8 @@ import { useRoomNavigation } from "./RoomNavigationContext";
 import { useAvatarUrl } from "../../hooks/useAvatarUrl";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { PHONE_QUERY } from "../../constants/breakpoints";
+import NotificationsPanel from "./NotificationsPanel";
+import NotificationsOverlay from "./NotificationsOverlay";
 import UserAvatar from "../profile/UserAvatar";
 import FriendRequestForm from "../profile/FriendRequestForm";
 import MessageByteCount from "../ui/MessageByteCount";
@@ -36,7 +38,7 @@ import {
   removeFriend,
 } from "../../api/friends";
 
-import { getOrCreateDm } from "../../api/rooms";
+import { openDm } from "../../api/rooms";
 
 import {
   Button as KitButton,
@@ -130,7 +132,9 @@ function useUsernameAvailability(username, currentUsername) {
 // Component
 // -----------------------------------------------------------------------------
 
-export default function ProfileOverlay({ user, onClose, initialTab = "friends" }) {
+export default function ProfileOverlay({
+  user, onClose, initialTab = "friends", notificationFeed, rooms, onNavigateNotification,
+}) {
   const toast = useToast();
   const isPhone = useMediaQuery(PHONE_QUERY);
   const {
@@ -187,9 +191,14 @@ export default function ProfileOverlay({ user, onClose, initialTab = "friends" }
   // ---------------------------------------------------------------------------
 
   // Main section and friends sub-tabs.
-  const [managementSection, setManagementSection] = useState("friends");
+  const [managementSection, setManagementSection] = useState(initialTab === "notifications" ? "notifications" : "friends");
   const [managementTab, setManagementTab] =
-    useState(initialTab);
+    useState(initialTab === "notifications" ? "friends" : initialTab);
+
+  const { markFriendRequestsRead } = notificationFeed;
+  useEffect(() => {
+    if (managementSection === "friends") markFriendRequestsRead();
+  }, [managementSection, markFriendRequestsRead]);
 
 
   // ---------------------------------------------------------------------------
@@ -389,6 +398,7 @@ export default function ProfileOverlay({ user, onClose, initialTab = "friends" }
   // Whichever sub-tab is active loads from page 1.
 
   useEffect(() => {
+    if (managementSection !== "friends") return;
     if (managementTab === "friends") {
       loadFriendsPage(true);
     } else if (managementTab === "requests") {
@@ -397,7 +407,7 @@ export default function ProfileOverlay({ user, onClose, initialTab = "friends" }
       loadSentPage(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [managementTab, user.id]);
+  }, [managementSection, managementTab, user.id]);
 
 
   // ---------------------------------------------------------------------------
@@ -503,7 +513,7 @@ export default function ProfileOverlay({ user, onClose, initialTab = "friends" }
     setOpeningDmId(friend.id);
 
     try {
-      const room = await getOrCreateDm(friend.id);
+      const room = await openDm(friend);
 
       navigateToRoom(room);
       onClose();
@@ -725,6 +735,17 @@ export default function ProfileOverlay({ user, onClose, initialTab = "friends" }
   // ---------------------------------------------------------------------------
   // JSX
   // ---------------------------------------------------------------------------
+
+  if (isPhone && managementSection === "notifications") {
+    return (
+      <NotificationsOverlay
+        feed={notificationFeed}
+        rooms={rooms}
+        onNavigate={onNavigateNotification}
+        onClose={onClose}
+      />
+    );
+  }
 
   return (
     <Overlay onClick={onClose}>
@@ -988,9 +1009,12 @@ export default function ProfileOverlay({ user, onClose, initialTab = "friends" }
 
                 <ManagementContent>
                   {managementSection === "notifications" && (
-                    <EmptyState>
-                      This feature is under development.
-                    </EmptyState>
+                    <NotificationsPanel
+                      feed={notificationFeed}
+                      rooms={rooms}
+                      onNavigate={onNavigateNotification}
+                      onClose={onClose}
+                    />
                   )}
                   {managementSection === "friends" && (
                     loadingSection ? (

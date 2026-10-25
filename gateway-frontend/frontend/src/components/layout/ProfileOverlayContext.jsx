@@ -17,11 +17,12 @@ export function ProfileOverlayProvider({ user, children }) {
     return user;
   }
 
-  async function refreshProfile() {
+  async function refreshProfile({ tab } = {}) {
     setLoadingProfile(true);
 
     try {
       const user = await fetchCurrentUser();
+      if (tab) setProfileNavigation((previous) => ({ tab, id: previous.id + 1 }));
       setProfile(user);
       return user;
     } finally {
@@ -30,8 +31,7 @@ export function ProfileOverlayProvider({ user, children }) {
   }
 
   async function openProfile({ tab = "friends" } = {}) {
-    await refreshProfile();
-    setProfileNavigation((previous) => ({ tab, id: previous.id + 1 }));
+    await refreshProfile({ tab });
   }
 
   function closeProfile() {

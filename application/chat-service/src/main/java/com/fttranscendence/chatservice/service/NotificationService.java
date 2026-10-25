@@ -16,6 +16,7 @@ import com.fttranscendence.chatservice.model.Message;
 import com.fttranscendence.chatservice.model.Notification;
 import com.fttranscendence.chatservice.model.SystemEvent;
 import com.fttranscendence.chatservice.repository.NotificationStore;
+import com.fttranscendence.chatservice.repository.ReadStateStore;
 
 /**
  * Notifications: friend requests and what happens to the user in rooms.
@@ -41,11 +42,14 @@ public class NotificationService {
     public record ReadResult(List<String> ids, boolean all, int unread) {}
 
     private final NotificationStore store;
+    private final ReadStateStore readStates;
     private final Clock clock;
     private final ApplicationEventPublisher events;
 
-    public NotificationService(NotificationStore store, Clock clock, ApplicationEventPublisher events) {
+    public NotificationService(NotificationStore store, ReadStateStore readStates, Clock clock,
+            ApplicationEventPublisher events) {
         this.store = store;
+        this.readStates = readStates;
         this.clock = clock;
         this.events = events;
     }
@@ -112,6 +116,17 @@ public class NotificationService {
         return store.unreadCount(userId);
     }
 
+    @EventListener
+    public void onRoomRead(RoomReadEvent event) {
+        markRoomRead(event.userId(), event.read().roomId(), event.read().lastReadId());
+    }
+
+    private void markRoomRead(String userId, Long roomId, String lastReadId) {
+        if (lastReadId == null) return;
+        List<String> ids = store.markRoomRead(userId, roomId, lastReadId, clock.instant());
+        if (!ids.isEmpty()) announce(userId, new ReadResult(ids, false, store.unreadCount(userId)));
+    }
+
     /** Marks these read. Ids that are not the user's, or already read, are ignored. */
     public ReadResult markRead(String userId, List<String> ids) {
         List<String> wanted = ids == null ? List.of() : ids.stream().distinct().toList();
@@ -133,6 +148,12 @@ public class NotificationService {
         return announce(userId, new ReadResult(null, true, store.unreadCount(userId)));
     }
 
+    /** Opening the profile's Friends section acknowledges incoming requests on every page. */
+    public ReadResult markFriendRequestsRead(String userId) {
+        List<String> ids = store.markFriendRequestsRead(userId, clock.instant());
+        return announce(userId, new ReadResult(ids, false, store.unreadCount(userId)));
+    }
+
     private ReadResult announce(String userId, ReadResult read) {
         events.publishEvent(new NotificationsReadEvent(userId, read));
         return read;
@@ -140,8 +161,15 @@ public class NotificationService {
 
     private void record(Notification notification) {
         try {
-            store.insert(notification)
-                    .ifPresent(saved -> events.publishEvent(new NotificationCreatedEvent(saved)));
+            store.insert(notification).ifPresent(saved -> {
+                events.publishEvent(new NotificationCreatedEvent(saved));
+                // A room read can race notification insertion. Recheck AFTER insert
+                // so either this check or the room-read listener sees the new row.
+                if (saved.roomId() != null) {
+                    String mark = readStates.lastRead(saved.userId(), List.of(saved.roomId())).get(saved.roomId());
+                    markRoomRead(saved.userId(), saved.roomId(), mark);
+                }
+            });
         } catch (DataAccessException e) {
             log.warn("notification {} for user={} not stored: {}",
                     notification.type(), notification.userId(), e.getMessage());

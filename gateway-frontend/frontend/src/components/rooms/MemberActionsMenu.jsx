@@ -52,6 +52,7 @@ function MemberActionsMenu({ anchorRect, actions, onClose }) {
             type="button"
             role="menuitem"
             $danger={action.danger}
+            disabled={action.disabled}
             onClick={() => {
               action.onSelect();
               onClose();
@@ -108,7 +109,12 @@ const MenuItem = styled.button`
   text-align: left;
   transition: background var(--dur-fast) var(--ease);
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: var(--bg-hover);
+  }
+
+  &:disabled {
+    color: var(--text-tertiary);
+    cursor: default;
   }
 `;

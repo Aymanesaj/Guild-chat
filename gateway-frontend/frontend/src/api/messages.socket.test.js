@@ -41,14 +41,14 @@ afterAll(() => {
 });
 
 describe("chat socket frames for unread badges and notifications", () => {
-  it("room.read reaches room listeners as { type: 'read', roomId, unread }", () => {
+  it("room.read reaches room listeners as { type: 'read', roomId, lastReadId, unread }", () => {
     const events = [];
     const off = onRoomEvent((event) => events.push(event));
 
     FakeSocket.last.receive("room.read", { room_id: 5, last_read_id: "m1", unread: 2 });
     off();
 
-    expect(events).toEqual([{ type: "read", roomId: 5, unread: 2 }]);
+    expect(events).toEqual([{ type: "read", roomId: 5, lastReadId: "m1", unread: 2 }]);
   });
 
   it("room.activity says who sent the message and whether it is a room event", () => {

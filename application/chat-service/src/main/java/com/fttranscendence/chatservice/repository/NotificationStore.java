@@ -68,6 +68,27 @@ public class NotificationStore {
         return markRead(Criteria.where("user_id").is(userId), now);
     }
 
+    /** Room notifications use the system message id as their source. */
+    public List<String> markRoomRead(String userId, Long roomId, String lastReadId, Instant now) {
+        return markMatchingRead(userId, Criteria.where("user_id").is(userId)
+                .and("room_id").is(roomId)
+                .and("type").in(Notification.ROOM_ADDED, Notification.ROOM_REMOVED, Notification.ROLE_CHANGED)
+                .and("source_id").lte(lastReadId), now);
+    }
+
+    public List<String> markFriendRequestsRead(String userId, Instant now) {
+        return markMatchingRead(userId, Criteria.where("user_id").is(userId)
+                .and("type").is(Notification.FRIEND_REQUEST), now);
+    }
+
+    private List<String> markMatchingRead(String userId, Criteria criteria, Instant now) {
+        Query query = new Query(criteria.and("read_at").is(null));
+        query.fields().include("_id");
+        List<String> ids = mongoTemplate.find(query, Notification.class).stream().map(Notification::id).toList();
+        if (!ids.isEmpty()) markRead(userId, ids, now);
+        return ids;
+    }
+
     private long markRead(Criteria criteria, Instant now) {
         // Only unread ones: read_at keeps the time of the first read.
         Query query = new Query(criteria.and("read_at").is(null));

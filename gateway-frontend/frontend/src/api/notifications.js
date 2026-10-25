@@ -84,3 +84,8 @@ export function markNotificationsRead(ids) {
 export function markAllNotificationsRead() {
   return request(`${CHAT}/notifications/read-all`, { method: "PUT" }, "Failed to mark notifications read");
 }
+
+/** Acknowledges incoming friend-request notifications, including those on older pages. */
+export function markFriendRequestNotificationsRead() {
+  return request(`${CHAT}/notifications/read-friend-requests`, { method: "PUT" }, "Failed to mark friend requests read");
+}
