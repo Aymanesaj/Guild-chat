@@ -371,6 +371,59 @@ are ignored.
 | 400 | `MISSING_IDS` | No ids given |
 | 400 | `TOO_MANY_IDS` | More than 100 distinct ids |
 
+### `PUT /rooms/{roomId}/read`: mark a room read
+
+```json
+{ "message_id": "66f0c1a2b3c4d5e6f7a8b9c0" }
+```
+
+Marks the room read up to this message: send the **newest** message the user
+has seen. The mark only moves forward: an older `message_id` (for example
+from another tab) changes nothing and is not an error.
+
+`200` →
+
+```json
+{ "room_id": 5, "last_read_id": "66f0c1a2b3c4d5e6f7a8b9c0", "unread": 0 }
+```
+
+`last_read_id` is the mark after the call (it can be newer than the one
+sent). `unread` counts what is left after it, as in `GET /rooms/unread`.
+The same object is sent to the user's sockets as `room.read`.
+
+| Status | Code | When |
+|---|---|---|
+| 403 | `NOT_A_MEMBER` | Caller is not in the room (checked first) |
+| 400 | `VALIDATION_ERROR` | `message_id` missing (`details.message_id`) |
+| 400 | `INVALID_MESSAGE_ID` | `message_id` is not a valid message id |
+| 404 | `MESSAGE_NOT_FOUND` | Unknown message, or a message of another room |
+
+### `GET /rooms/unread?ids=3,7,12`: unread counts
+
+For badges in room and DM lists. `ids` is comma-separated room ids;
+duplicates are ignored.
+
+```json
+{ "3": 5, "7": 0 }
+```
+
+- **Counted:** messages from **other** people, newer than the user's mark,
+  not deleted. Room events (system messages) and the user's own messages
+  are not counted.
+- A room the user has **never read** counts all of its messages.
+- Counts stop at **100**: show "99+" from there.
+- A room the caller is **not** in is left out (not an error), as for
+  `last-messages`.
+- Keeping badges live: add 1 on `room.activity` with `change: "new"` from
+  someone else in a room that is not open; set the room's count to the
+  `unread` of `room.read`. Refetch after a reconnect.
+
+| Status | Code | When |
+|---|---|---|
+| 400 | `MISSING_IDS` | No ids given |
+| 400 | `TOO_MANY_IDS` | More than 100 distinct ids |
+| 400 | `INVALID_PARAMETER` | An id is not a number |
+
 ### `GET /presence?ids=a,b,c`: online status
 
 Any authenticated user may ask about any user. `ids` is comma-separated
@@ -468,6 +521,7 @@ none). They keep room lists and DM previews live without polling.
 | `room.removed` | `{ "room_id": 5 }` | You can no longer see it: you left, were kicked, or it was deleted |
 | `room.updated` | `{ "room_id": 5 }` | A room you are in changed: renamed, a member joined or left, or a role changed |
 | `room.activity` | `{ "room_id": 5, "change": "new" \| "edited" \| "deleted", "message": <message object> }` | A message was sent, edited or deleted in any room you are in, the sender included. Image `url`s are `null`: it is a preview. |
+| `room.read` | `{ "room_id": 5, "last_read_id": "66f0...", "unread": 0 }` | You marked a room read (`PUT /rooms/{id}/read`), in this tab or another: update its badge |
 
 The `room.added` / `room.removed` / `room.updated` frames carry only the id:
 refetch the list over REST (org-service), which applies its own permission
@@ -533,6 +587,8 @@ All of these are best effort. Events sent while a socket is down are lost, so
   arrives. If that event is lost, they keep receiving the room's live events
   until their socket reconnects. REST refuses them immediately either way.
 - A socket is not closed when its token expires.
+- Read marks are kept when a member leaves or is removed, and deleted with the
+  room. A user who comes back to a room starts from their old mark.
 - Image deletion is best effort. If media-service fails, the image stays in
   storage (logged) while the message is deleted anyway. Signed URLs are cached
   in memory per instance, like presence.

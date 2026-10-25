@@ -15,6 +15,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.index.IndexInfo;
 import com.fttranscendence.chatservice.support.MongoTestSupport;
 import com.fttranscendence.chatservice.model.Message;
+import com.fttranscendence.chatservice.model.ReadState;
 import com.fttranscendence.chatservice.model.SystemEvent;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -129,6 +130,21 @@ class MongoIndexConfigTest extends MongoTestSupport {
         mongoTemplate.insert(Message.create(ROOM, ALICE, null, "two", "text", Instant.now()));
         assertThat(mongoTemplate.count(new Query(Criteria.where("event_id").is(eventId)),
                 MongoIndexConfig.COLLECTION)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("creates a unique (user_id, room_id) index on read_states")
+    void createsReadStateIndex() {
+        indexConfig.createIndexes();
+
+        IndexInfo index = mongoTemplate.indexOps(ReadState.COLLECTION).getIndexInfo().stream()
+                .filter(info -> MongoIndexConfig.READ_STATE_INDEX.equals(info.getName()))
+                .findFirst()
+                .orElse(null);
+
+        assertThat(index).as("index %s must exist", MongoIndexConfig.READ_STATE_INDEX).isNotNull();
+        assertThat(index.getIndexFields()).extracting(field -> field.getKey()).containsExactly("user_id", "room_id");
+        assertThat(index.isUnique()).isTrue();
     }
 
     private IndexInfo roomHistoryIndex() {

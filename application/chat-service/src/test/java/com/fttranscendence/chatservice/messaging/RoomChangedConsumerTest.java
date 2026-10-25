@@ -14,6 +14,7 @@ import com.fttranscendence.chatservice.config.RabbitMQConfig;
 import com.fttranscendence.chatservice.grpc.RoomMembersCache;
 import com.fttranscendence.chatservice.model.Attachment;
 import com.fttranscendence.chatservice.repository.MessageRepository;
+import com.fttranscendence.chatservice.repository.ReadStateStore;
 import com.fttranscendence.chatservice.service.AttachmentCleaner;
 import com.fttranscendence.chatservice.websocket.ChatWebSocketHandler;
 
@@ -24,7 +25,8 @@ class RoomChangedConsumerTest {
     final RoomMembersCache cache = mock(RoomMembersCache.class);
     final MessageRepository messages = mock(MessageRepository.class);
     final AttachmentCleaner cleaner = mock(AttachmentCleaner.class);
-    final RoomChangedConsumer consumer = new RoomChangedConsumer(sockets, cache, messages, cleaner);
+    final ReadStateStore readStates = mock(ReadStateStore.class);
+    final RoomChangedConsumer consumer = new RoomChangedConsumer(sockets, cache, messages, cleaner, readStates);
 
     private RoomChangedMessage convert(String json) {
         var properties = new MessageProperties();
@@ -134,6 +136,7 @@ class RoomChangedConsumerTest {
         consumer.consume(new RoomChangedMessage("42", RoomChange.ROOM_REMOVED, List.of(), true));
         verify(messages).findByRoomIdAndAttachmentsIsNotNullAndDeletedAtIsNull(42L);
         verify(messages).deleteByRoomId(42L);
+        verify(readStates).deleteByRoomId(42L);
         verifyNoMoreInteractions(messages);
         verify(cleaner).deleteAll(List.of());
         verify(cache).invalidate(42L);

@@ -14,6 +14,7 @@ import com.fttranscendence.chatservice.config.RabbitMQConfig;
 import com.fttranscendence.chatservice.grpc.RoomMembersCache;
 import com.fttranscendence.chatservice.model.Attachment;
 import com.fttranscendence.chatservice.repository.MessageRepository;
+import com.fttranscendence.chatservice.repository.ReadStateStore;
 import com.fttranscendence.chatservice.service.AttachmentCleaner;
 import com.fttranscendence.chatservice.websocket.ChatWebSocketHandler;
 import com.fttranscendence.chatservice.websocket.WsEvents;
@@ -31,18 +32,21 @@ public class RoomChangedConsumer {
     private final RoomMembersCache roomMembers;
     private final MessageRepository messageRepository;
     private final AttachmentCleaner attachmentCleaner;
+    private final ReadStateStore readStates;
 
 
     public RoomChangedConsumer(
         ChatWebSocketHandler sockets,
         RoomMembersCache roomMembers,
         MessageRepository messageRepository,
-        AttachmentCleaner attachmentCleaner
+        AttachmentCleaner attachmentCleaner,
+        ReadStateStore readStates
     ) {
         this.sockets = sockets;
         this.roomMembers = roomMembers;
         this.messageRepository = messageRepository;
         this.attachmentCleaner = attachmentCleaner;
+        this.readStates = readStates;
     }
 
     @RabbitListener(queues = RabbitMQConfig.CHAT_ROOM_EVENTS_QUEUE)
@@ -61,6 +65,7 @@ public class RoomChangedConsumer {
                     .flatMap(stored -> stored.getAttachments().stream())
                     .toList();
             long deleted = messageRepository.deleteByRoomId(roomId);
+            readStates.deleteByRoomId(roomId);
             attachmentCleaner.deleteAll(images);
             logger.info("Deleted messages for room={} count={} images={}", roomId, deleted, images.size());
         }
