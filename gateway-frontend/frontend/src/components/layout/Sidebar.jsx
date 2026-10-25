@@ -9,6 +9,9 @@ import CreateRoomInput from "./CreateRoomInput";
 import RoomOptionsButton from "./RoomOptionsButton";
 import { useAvatarUrl } from "../../hooks/useAvatarUrl";
 import { Avatar, IconButton, InlineError, StatusText } from "../ui";
+import NotificationBell, { UnreadBadge } from "./NotificationBell";
+import { useUnread, useUnreadCount } from "./UnreadContext";
+import { formatUnread } from "../../utils/notifications";
 
 const SidebarRoot = styled.aside`
   display: flex;
@@ -21,6 +24,9 @@ const SidebarRoot = styled.aside`
 `;
 
 const SidebarHeaderBox = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding-bottom: var(--space-4);
   border-bottom: 1px solid var(--border-subtle);
 `;
@@ -120,6 +126,11 @@ const NavItemButton = styled.button`
   }
 `;
 
+/** Pushed to the end of a nav row, before the room options button. */
+const RowBadge = styled(UnreadBadge)`
+  margin-left: auto;
+`;
+
 const DirectMessagesSection = styled.section`
   padding-top: var(--space-4);
 `;
@@ -208,7 +219,8 @@ function Sidebar({
   onRoomLeft,
   onRoomChange,
   onDirectMessages,
-  onLogout
+  onLogout,
+  onNavigateNotification,
 }) {
   const [createOpen, setCreateOpen] = useState(false);
   const toast = useToast();
@@ -229,7 +241,7 @@ function Sidebar({
 
   return (
     <SidebarRoot>
-      <SidebarHeader />
+      <SidebarHeader rooms={rooms} onNavigateNotification={onNavigateNotification} />
 
       <DirectMessagesButton
         isDirectMessages={isDirectMessages}
@@ -261,10 +273,11 @@ function Sidebar({
   );
 }
 
-function SidebarHeader() {
+function SidebarHeader({ rooms, onNavigateNotification }) {
   return (
     <SidebarHeaderBox>
       <SidebarTitle>GuildChat</SidebarTitle>
+      <NotificationBell rooms={rooms} onNavigate={onNavigateNotification} />
     </SidebarHeaderBox>
   );
 }
@@ -331,6 +344,7 @@ function SectionTitle({ title, actionLabel, onCreate }) {
 }
 
 function RoomButton({ room, active, onClick, onRoomUpdated, onRoomLeft }) {
+  const unread = useUnreadCount(room.id);
   return (
     <RoomRow>
       <NavItemButton
@@ -342,6 +356,10 @@ function RoomButton({ room, active, onClick, onRoomUpdated, onRoomLeft }) {
       >
         <TbHash size={18} />
         <span>{room.name}</span>
+        {/* The open room is being read: its count is about to clear. */}
+        {!active && unread > 0 && (
+          <RowBadge aria-label={`${unread} unread`}>{formatUnread(unread)}</RowBadge>
+        )}
       </NavItemButton>
       <RoomOptionsButton room={room} onRoomUpdated={onRoomUpdated} onRoomLeft={onRoomLeft} />
     </RoomRow>
@@ -349,6 +367,9 @@ function RoomButton({ room, active, onClick, onRoomUpdated, onRoomLeft }) {
 }
 
 function DirectMessagesButton({ isDirectMessages, onDirectMessages }) {
+  const { counts, dmRooms } = useUnread();
+  // Conversations, not messages: "2" means two DMs are waiting.
+  const waiting = dmRooms.filter((room) => counts.get(String(room.id)) > 0).length;
   return (
     <DirectMessagesSection>
       <NavItemButton
@@ -360,6 +381,9 @@ function DirectMessagesButton({ isDirectMessages, onDirectMessages }) {
       >
         <TbMessageCircle size={18} />
         <span>Direct Messages</span>
+        {waiting > 0 && (
+          <RowBadge aria-label={`${waiting} unread conversations`}>{formatUnread(waiting)}</RowBadge>
+        )}
       </NavItemButton>
     </DirectMessagesSection>
   );

@@ -3,6 +3,9 @@ import { useOpenUserPreview } from "../../hooks/useOpenUserPreview";
 import { useRoomNavigation } from "../layout/RoomNavigationContext";
 import { StatusDot } from "../ui";
 import UserAvatar from "../profile/UserAvatar";
+import { UnreadBadge } from "../layout/NotificationBell";
+import { useUnreadCount } from "../layout/UnreadContext";
+import { formatUnread } from "../../utils/notifications";
 
 const DmItemRoot = styled.li`
   display: flex;
@@ -74,16 +77,33 @@ const DmDetails = styled.div`
 `;
 
 const DmTimestamp = styled.time`
-  align-self: flex-start;
   flex-shrink: 0;
-  color: var(--text-tertiary);
+  color: ${({ $unread }) => ($unread ? "var(--accent-400)" : "var(--text-tertiary)")};
   font-size: var(--text-xs);
+`;
+
+/** An unread conversation's preview stands out. && outranks DmDetails' span rule. */
+const DmPreview = styled.span`
+  && {
+    color: ${({ $unread }) => ($unread ? "var(--text-primary)" : "var(--text-secondary)")};
+    font-weight: ${({ $unread }) => ($unread ? 600 : 400)};
+  }
+`;
+
+/** Time on top, unread count under it. */
+const DmMeta = styled.div`
+  display: flex;
+  align-self: flex-start;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
 `;
 
 function DmItem({ conversation }) {
   const openPreview = useOpenUserPreview();
   const { navigateToRoom } = useRoomNavigation();
   const peer = { id: conversation.userId, username: conversation.username };
+  const unread = useUnreadCount(conversation.id);
 
   function openConversation() {
     navigateToRoom({
@@ -113,14 +133,17 @@ function DmItem({ conversation }) {
 
         <DmDetails>
           <strong onClick={openPreview(peer)}>{conversation.username}</strong>
-          <span>
+          <DmPreview $unread={unread > 0}>
             {conversation.lastMessage.length < 42
               ? conversation.lastMessage
               : `${conversation.lastMessage.substring(0, 39)}...`}
-          </span>
+          </DmPreview>
         </DmDetails>
 
-        <DmTimestamp>{conversation.timestamp}</DmTimestamp>
+        <DmMeta>
+          <DmTimestamp $unread={unread > 0}>{conversation.timestamp}</DmTimestamp>
+          {unread > 0 && <UnreadBadge aria-label={`${unread} unread`}>{formatUnread(unread)}</UnreadBadge>}
+        </DmMeta>
       </DmItemButton>
     </DmItemRoot>
   );

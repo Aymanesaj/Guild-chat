@@ -6,6 +6,7 @@ import MessageComposer from "./MessageComposer";
 import MembersSidebar from "./MembersSidebar";
 import { useNavDrawer } from "../layout/NavDrawerContext";
 import { useProfileOverlay } from "../layout/ProfileOverlayContext";
+import { useUnread } from "../layout/UnreadContext";
 import { useRoomMessages } from "../../hooks/useRoomMessages";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { getCurrentUserId } from "../../api/tokens";
@@ -61,6 +62,19 @@ function RoomView({ roomId, roomName, roomDescription, isDm, peer, draft, onDraf
     messages, messagesById, state, sending, send, edit, remove, refreshImages,
     hasOlder, loadingOlder, olderError, loadOlder,
   } = useRoomMessages(roomId);
+
+  // Reading the open room: its newest message is seen while the tab is visible.
+  const { markRead } = useUnread();
+  const newestId = messages.at(-1)?.id;
+  useEffect(() => {
+    if (!roomId || state !== "success" || !newestId) return undefined;
+    const read = () => {
+      if (document.visibilityState === "visible") markRead(roomId, newestId);
+    };
+    read();
+    document.addEventListener("visibilitychange", read);
+    return () => document.removeEventListener("visibilitychange", read);
+  }, [roomId, state, newestId, markRead]);
 
   const [initializingDm, setInitializingDm] = useState(false);
   const handleSend = async (content, replyToId, files) => {

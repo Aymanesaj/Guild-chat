@@ -16,6 +16,7 @@ import { getRoom, getRooms, hideDm } from "../../api/rooms";
 import { useSocketNotifications } from "../../hooks/useSocketNotifications";
 import { useToast } from "../ui/ToastProvider";
 import { useMobileViewport } from "../../hooks/useMobileViewport";
+import { UnreadProvider } from "./UnreadContext";
 
 const AppShellRoot = styled.div`
   display: flex;
@@ -102,7 +103,8 @@ function AppShellContent({ onLogout }) {
   useEffect(
     () =>
       onRoomEvent((event) => {
-        if (event.type === "activity") return; // previews: the group list shows none
+        // Previews and read marks: the group list shows neither (badges follow them in UnreadContext).
+        if (event.type === "activity" || event.type === "read") return;
         mutationSeq.current += 1;
         loadRooms();
       }),
@@ -237,55 +239,62 @@ function AppShellContent({ onLogout }) {
 
   return (
     <NavDrawerProvider value={navDrawer}>
-      <RoomNavigationProvider navigateToRoom={handleRoomChange}>
-        <AppShellRoot ref={viewportRef}>
-          {/* Wrapped on both sides of the breakpoint and in the same tree slot:
-              swapping the wrapper in and out would remount Sidebar on rotation. */}
-          <SlidePanel
-            $asOverlay={isPhone}
-            $open={!isPhone || isNavOpen}
-            $side="left"
-            onClose={closeNav}
-          >
-            <Sidebar
-              isDirectMessages={isDirectMessages}
-              activeRoomId={activeRoomId?.id}
-              rooms={rooms}
-              roomsState={roomsState}
-              onRoomCreated={addRoom}
-              onRoomUpdated={updateRoom}
-              onRoomLeft={removeRoom}
-              onRoomChange={handleRoomChange}
-              onDirectMessages={handleDirectMessages}
-              onLogout={onLogout}
+      <UnreadProvider
+        userId={currentUser?.id}
+        groupRooms={rooms}
+        activeRoomId={isDirectMessages ? null : activeRoomId?.id}
+      >
+        <RoomNavigationProvider navigateToRoom={handleRoomChange}>
+          <AppShellRoot ref={viewportRef}>
+            {/* Wrapped on both sides of the breakpoint and in the same tree slot:
+                swapping the wrapper in and out would remount Sidebar on rotation. */}
+            <SlidePanel
+              $asOverlay={isPhone}
+              $open={!isPhone || isNavOpen}
+              $side="left"
+              onClose={closeNav}
+            >
+              <Sidebar
+                isDirectMessages={isDirectMessages}
+                activeRoomId={activeRoomId?.id}
+                rooms={rooms}
+                roomsState={roomsState}
+                onRoomCreated={addRoom}
+                onRoomUpdated={updateRoom}
+                onRoomLeft={removeRoom}
+                onRoomChange={handleRoomChange}
+                onDirectMessages={handleDirectMessages}
+                onLogout={onLogout}
+                onNavigateNotification={navigateNotification}
+              />
+            </SlidePanel>
+
+            <MainContent>
+              <MainPanel
+                activeView={isDirectMessages ? true : activeRoom}
+                onRoomInitialized={handleRoomInitialized}
+                onHideDm={handleHideDm}
+              />
+            </MainContent>
+          </AppShellRoot>
+
+          {profile && (
+            <ProfileOverlay
+              key={profileNavigation.id}
+              user={profile}
+              initialTab={profileNavigation.tab}
+              onClose={closeProfile}
             />
-          </SlidePanel>
+          )}
 
-          <MainContent>
-            <MainPanel
-              activeView={isDirectMessages ? true : activeRoom}
-              onRoomInitialized={handleRoomInitialized}
-              onHideDm={handleHideDm}
+          {previewUser && (
+            <ProfilePreviewPopover
+              target={previewUser}
+              onClose={closeUserPreview}
             />
-          </MainContent>
-        </AppShellRoot>
-
-        {profile && (
-          <ProfileOverlay
-            key={profileNavigation.id}
-            user={profile}
-            initialTab={profileNavigation.tab}
-            onClose={closeProfile}
-          />
-        )}
-
-        {previewUser && (
-          <ProfilePreviewPopover
-            target={previewUser}
-            onClose={closeUserPreview}
-          />
-        )}
-      </RoomNavigationProvider>
+          )}
+        </RoomNavigationProvider>
+      </UnreadProvider>
     </NavDrawerProvider>
   );
 }
