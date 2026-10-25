@@ -166,12 +166,13 @@ export function useRoomMessages(roomId) {
     [roomId, appendMessage],
   );
 
-  /** Image links expire after a few minutes: the message again, with fresh ones. */
+  /** Image links expire after a few minutes: the message again, with fresh ones. Returns it. */
   const refreshImages = useCallback(async (messageId) => {
     const fresh = await getMessage(messageId);
     setMessages((previous) =>
       previous.map((item) => (item.id === fresh.id ? { ...item, attachments: fresh.attachments } : item)),
     );
+    return fresh;
   }, []);
 
   /**

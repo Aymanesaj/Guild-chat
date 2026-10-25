@@ -39,6 +39,15 @@ export function messagePreviewText(message) {
   return "";
 }
 
+/**
+ * True when an image's signed link has expired, or will within `marginMs`.
+ * False without a known expiry: the link is then used as it is.
+ */
+export function imageLinkExpired(image, now = Date.now(), marginMs = 5000) {
+  const expiresAt = Date.parse(image?.url_expires_at);
+  return expiresAt <= now + marginMs;
+}
+
 /** CSS aspect-ratio for an image, so its space is kept before it loads. */
 export function imageAspectRatio(image) {
   return image?.width > 0 && image?.height > 0 ? `${image.width} / ${image.height}` : "4 / 3";

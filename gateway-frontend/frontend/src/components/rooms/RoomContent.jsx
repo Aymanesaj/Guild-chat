@@ -20,7 +20,7 @@ import MessageByteCount from "../ui/MessageByteCount";
 import ConversationIntro from "./ConversationIntro";
 import { MAX_MESSAGE_BYTES, MAX_MESSAGE_INPUT_BYTES, MESSAGE_SIZE_ERROR, limitMessageInput, messageByteLength } from "../../utils/messageContent";
 import { describeSystemMessage } from "../../utils/systemMessage";
-import { imageAspectRatio, messagePreviewText } from "../../utils/attachments";
+import { imageAspectRatio, imageLinkExpired, messagePreviewText } from "../../utils/attachments";
 
 const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
 const MESSAGE_GROUP_GAP = 60 * 60 * 1000;
@@ -770,6 +770,29 @@ function MessageImages({ messageId, images, onRefresh }) {
     }
   }
 
+  /**
+   * A link left on screen past url_expires_at would open storage's "expired"
+   * page. Then the tab is opened at once (a tab opened after the request
+   * would count as a popup and be blocked) and sent to a fresh link.
+   */
+  async function openImage(event, image) {
+    if (!imageLinkExpired(image)) return; // still valid, or unknown: the link opens itself
+
+    event.preventDefault();
+    const tab = window.open("", "_blank");
+    if (tab) tab.opener = null;
+    try {
+      const fresh = await onRefresh?.(messageId);
+      const url = fresh?.attachments?.find((item) => item.media_id === image.media_id)?.url;
+      if (!url) throw new Error("No fresh link");
+      if (tab) tab.location.href = url;
+      else window.open(url, "_blank", "noopener,noreferrer");
+    } catch {
+      tab?.close();
+      setFailed((current) => new Set(current).add(image.url)); // shows the retry placeholder
+    }
+  }
+
   return (
     <ImageGrid $count={images.length}>
       {images.map((image) => image.url && !failed.has(image.url) ? (
@@ -780,6 +803,7 @@ function MessageImages({ messageId, images, onRefresh }) {
           rel="noopener noreferrer"
           $ratio={ratio(image)}
           title="Open image"
+          onClick={(event) => openImage(event, image)}
         >
           <img
             src={image.url}

@@ -3,6 +3,7 @@ import {
   MAX_IMAGE_BYTES,
   imageAspectRatio,
   imageFileError,
+  imageLinkExpired,
   messagePreviewText,
   pickImages,
 } from "./attachments";
@@ -71,6 +72,24 @@ describe("messagePreviewText", () => {
   it("is empty for nothing at all", () => {
     expect(messagePreviewText(null)).toBe("");
     expect(messagePreviewText({ content: null })).toBe("");
+  });
+});
+
+describe("imageLinkExpired", () => {
+  const now = Date.parse("2026-10-24T10:00:00Z");
+
+  it("is false while the link has more than 5 seconds left", () => {
+    expect(imageLinkExpired({ url_expires_at: "2026-10-24T10:00:06Z" }, now)).toBe(false);
+  });
+
+  it("is true once expired, or about to", () => {
+    expect(imageLinkExpired({ url_expires_at: "2026-10-24T09:59:00Z" }, now)).toBe(true);
+    expect(imageLinkExpired({ url_expires_at: "2026-10-24T10:00:04Z" }, now)).toBe(true);
+  });
+
+  it("is false without a known expiry", () => {
+    expect(imageLinkExpired({ url_expires_at: null }, now)).toBe(false);
+    expect(imageLinkExpired(undefined, now)).toBe(false);
   });
 });
 
