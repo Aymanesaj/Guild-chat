@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import styled from "styled-components";
-import { TbHash, TbMessageCircle, TbUsers } from "react-icons/tb";
-import { Button } from "../ui";
+import { TbCheck, TbChevronDown, TbHash, TbMessageCircle, TbTrash, TbUsers } from "react-icons/tb";
+import { Button, IconButton } from "../ui";
+import { useToast } from "../ui/ToastProvider";
+import MemberActionsMenu from "./MemberActionsMenu";
 import { NavToggleButton } from "../layout/NavDrawerContext";
 
 const PanelHeader = styled.header`
@@ -41,16 +44,28 @@ const MembersButton = styled(Button)`
   }
 `;
 
-function RoomHeader({ roomName, isDm, onToggleMembers, onHideDm }) {
-  const [removing, setRemoving] = useState(false);
-  const removeConversation = async () => {
-    if (removing) return;
-    setRemoving(true);
+function RoomHeader({ roomName, isDm, onToggleMembers, onHideDm, onMarkRead }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [menuRect, setMenuRect] = useState(null);
+  const triggerRef = useRef(null);
+  const actionPending = useRef(false);
+  const runAction = async (action) => {
+    if (actionPending.current || !action) return;
+    actionPending.current = true;
+    setBusy(true);
     try {
-      await onHideDm();
+      await action();
+    } catch (error) {
+      toast.error(error?.message || "Couldn't update this conversation.");
     } finally {
-      setRemoving(false);
+      actionPending.current = false;
+      setBusy(false);
     }
+  };
+  const closeMenu = () => {
+    setMenuRect(null);
+    triggerRef.current?.focus();
   };
   const TitleIcon = isDm ? TbMessageCircle : TbHash;
 
@@ -63,10 +78,33 @@ function RoomHeader({ roomName, isDm, onToggleMembers, onHideDm }) {
       </HeaderTitle>
 
       {isDm && onHideDm && (
-        <Button type="button" $variant="ghost" $size="sm"
-          disabled={removing} onClick={removeConversation}>
-          Remove conversation
-        </Button>
+        <>
+          <IconButton
+            ref={triggerRef}
+            type="button"
+            aria-label="Conversation options"
+            title="Conversation options"
+            aria-haspopup="menu"
+            aria-expanded={Boolean(menuRect)}
+            disabled={busy}
+            onClick={(event) => setMenuRect(event.currentTarget.getBoundingClientRect())}
+          >
+            <TbChevronDown size={20} />
+          </IconButton>
+          {menuRect && createPortal(
+            <MemberActionsMenu
+              anchorRect={menuRect}
+              actions={[
+                { key: "read", label: "Mark as read", icon: TbCheck, disabled: !onMarkRead || busy,
+                  onSelect: () => runAction(onMarkRead) },
+                { key: "delete", label: "Delete conversation", icon: TbTrash, danger: true, disabled: busy,
+                  onSelect: () => runAction(onHideDm) },
+              ]}
+              onClose={closeMenu}
+            />,
+            document.body,
+          )}
+        </>
       )}
 
       {/* A DM has exactly two members and no roster to manage. */}

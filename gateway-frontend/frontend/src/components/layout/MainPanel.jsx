@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import DmView from "../dms/DmView";
 import RoomView from "../rooms/RoomView";
 import { getOrCreateDm, openDm } from "../../api/rooms";
@@ -9,6 +9,7 @@ function MainPanel({ activeView, onRoomInitialized, onHideDm }) {
   // Kept above RoomView so drafts survive room switches and visits to the DM list.
   // This state is discarded with the signed-in app on logout.
   const [drafts, setDrafts] = useState({});
+  const pendingFirstSends = useRef(new Set());
 
   // The peer may send first while this local conversation is open. Discover
   // that persisted room without creating one, then load and subscribe normally.
@@ -20,7 +21,7 @@ function MainPanel({ activeView, onRoomInitialized, onHideDm }) {
       const requestSeq = ++seq;
       try {
         const room = await openDm(activeView.peer);
-        if (!cancelled && requestSeq === seq && !room.isDraft) {
+        if (!cancelled && requestSeq === seq && !room.isDraft && !pendingFirstSends.current.has(activeView.id)) {
           onRoomInitialized(activeView.id, room);
         }
       } catch {
@@ -51,9 +52,15 @@ function MainPanel({ activeView, onRoomInitialized, onHideDm }) {
     const text = content.trim();
     if (!text) return;
     assertMessageSize(text);
-    const room = await getOrCreateDm(peerId);
-    await sendMessage(room.id, text);
-    onRoomInitialized(activeView.id, room);
+    if (pendingFirstSends.current.has(activeView.id)) throw new Error("A message is already being sent to this conversation.");
+    pendingFirstSends.current.add(activeView.id);
+    try {
+      const room = await getOrCreateDm(peerId);
+      await sendMessage(room.id, text);
+      onRoomInitialized(activeView.id, room);
+    } finally {
+      pendingFirstSends.current.delete(activeView.id);
+    }
   };
 
   const updateDraft = (value) => {

@@ -114,6 +114,7 @@ function RoomView({ roomId, roomName, roomDescription, isDm, peer, draft, onDraf
           roomName={roomName}
           isDm={isDm}
           onHideDm={onHideDm}
+          onMarkRead={roomId && state === "success" && newestId ? () => markRead(roomId, newestId) : undefined}
           onToggleMembers={toggleMembers}
         />
 

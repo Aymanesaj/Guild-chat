@@ -110,4 +110,17 @@ class NotificationControllerTest {
                 .andExpect(jsonPath("$.all").value(true))
                 .andExpect(jsonPath("$.unread").value(0));
     }
+
+    @Test
+    void marksFriendRequestsReadWithoutListingOrPostingNotificationIds() throws Exception {
+        when(notificationService.markFriendRequestsRead(USER))
+                .thenReturn(new NotificationService.ReadResult(List.of(ID), false, 2));
+
+        mockMvc.perform(put("/notifications/read-friend-requests")
+                        .requestAttr(AuthenticationFilter.USER_ID_ATTRIBUTE, USER))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ids[0]").value(ID))
+                .andExpect(jsonPath("$.all").value(false))
+                .andExpect(jsonPath("$.unread").value(2));
+    }
 }

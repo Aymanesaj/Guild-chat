@@ -4,6 +4,7 @@ import {
   getUnreadCounts,
   listNotifications,
   markAllNotificationsRead,
+  markFriendRequestNotificationsRead,
   markNotificationsRead,
   markRoomRead,
 } from "./notifications";
@@ -53,6 +54,12 @@ describe("getUnreadCounts", () => {
 });
 
 describe("read marks and notifications", () => {
+  it("marks incoming friend-request notifications through the scoped endpoint", async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { ids: ["n1"], all: false, unread: 2 }));
+    expect(await markFriendRequestNotificationsRead()).toEqual({ ids: ["n1"], all: false, unread: 2 });
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/chat/notifications/read-friend-requests");
+    expect(fetchMock.mock.calls[0][1].method).toBe("PUT");
+  });
   it("markRoomRead PUTs the message id", async () => {
     fetchMock.mockResolvedValueOnce(json(200, { room_id: 5, last_read_id: "m1", unread: 0 }));
 

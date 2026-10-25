@@ -321,7 +321,7 @@ async function handleFrame(frame) {
       });
       break;
     case "room.read":
-      emitRoomEvent({ type: "read", roomId: data.room_id, unread: data.unread ?? 0 });
+      emitRoomEvent({ type: "read", roomId: data.room_id, lastReadId: data.last_read_id, unread: data.unread ?? 0 });
       break;
     case "notification.new":
     case "notification.read":

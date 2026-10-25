@@ -12,6 +12,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.IntStream;
 
@@ -34,6 +35,7 @@ import com.fttranscendence.chatservice.model.Message;
 import com.fttranscendence.chatservice.model.Notification;
 import com.fttranscendence.chatservice.model.SystemEvent;
 import com.fttranscendence.chatservice.repository.NotificationStore;
+import com.fttranscendence.chatservice.repository.ReadStateStore;
 
 @ExtendWith(MockitoExtension.class)
 class NotificationServiceTest {
@@ -48,13 +50,15 @@ class NotificationServiceTest {
     @Mock
     private NotificationStore store;
     @Mock
+    private ReadStateStore readStates;
+    @Mock
     private ApplicationEventPublisher events;
 
     private NotificationService service;
 
     @BeforeEach
     void setUp() {
-        service = new NotificationService(store, Clock.fixed(NOW, ZoneOffset.UTC), events);
+        service = new NotificationService(store, readStates, Clock.fixed(NOW, ZoneOffset.UTC), events);
     }
 
     /** The stored copy, as insert returns it. */
@@ -206,5 +210,53 @@ class NotificationServiceTest {
         verify(store).markAllRead(ALICE, NOW);
         assertThat(read).isEqualTo(new NotificationService.ReadResult(null, true, 0));
         verify(events).publishEvent(new NotificationsReadEvent(ALICE, read));
+    }
+
+    @Test
+    void openingFriendsMarksOnlyIncomingRequestNotificationsAndBroadcastsTheirIds() {
+        when(store.markFriendRequestsRead(ALICE, NOW)).thenReturn(List.of(ID));
+        when(store.unreadCount(ALICE)).thenReturn(2);
+
+        NotificationService.ReadResult read = service.markFriendRequestsRead(ALICE);
+
+        assertThat(read).isEqualTo(new NotificationService.ReadResult(List.of(ID), false, 2));
+        verify(events).publishEvent(new NotificationsReadEvent(ALICE, read));
+        verify(store, never()).markAllRead(any(), any());
+    }
+
+    @Test
+    void roomReadClearsMatchingNotificationsAndAnnouncesTheirIds() {
+        when(store.markRoomRead(ALICE, 42L, ID, NOW)).thenReturn(List.of("notification-id"));
+        when(store.unreadCount(ALICE)).thenReturn(3);
+
+        service.onRoomRead(new RoomReadEvent(ALICE, new ReadStateService.ReadMark(42L, ID, 0)));
+
+        verify(events).publishEvent(new NotificationsReadEvent(ALICE,
+                new NotificationService.ReadResult(List.of("notification-id"), false, 3)));
+    }
+
+    @Test
+    void roomReadWithNoMatchingNotificationsDoesNotAnnounce() {
+        service.onRoomRead(new RoomReadEvent(ALICE, new ReadStateService.ReadMark(42L, ID, 0)));
+
+        verify(store).markRoomRead(ALICE, 42L, ID, NOW);
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    void notificationInsertedAfterRoomWasReadIsAlsoCleared() {
+        storesAs(ID);
+        when(readStates.lastRead(BOB, List.of(42L))).thenReturn(Map.of(42L, ID));
+        when(store.markRoomRead(BOB, 42L, ID, NOW)).thenReturn(List.of(ID));
+
+        service.onMessageCreated(new MessageCreatedEvent(roomEvent("ROLE_CHANGED", ALICE, BOB, "ADMIN")));
+
+        var ordered = org.mockito.Mockito.inOrder(store, events, readStates);
+        ordered.verify(store).insert(any());
+        ordered.verify(events).publishEvent(any(NotificationCreatedEvent.class));
+        ordered.verify(readStates).lastRead(BOB, List.of(42L));
+        ordered.verify(store).markRoomRead(BOB, 42L, ID, NOW);
+        ordered.verify(events).publishEvent(new NotificationsReadEvent(BOB,
+                new NotificationService.ReadResult(List.of(ID), false, 0)));
     }
 }

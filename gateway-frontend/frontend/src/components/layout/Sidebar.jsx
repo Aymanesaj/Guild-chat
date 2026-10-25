@@ -126,9 +126,22 @@ const NavItemButton = styled.button`
   }
 `;
 
-/** Pushed to the end of a nav row, before the room options button. */
+/** Pushed to the end of a nav row. */
 const RowBadge = styled(UnreadBadge)`
   margin-left: auto;
+`;
+
+const RoomUnreadBadge = styled(RowBadge)`
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+
+  /* Touch devices always show the options button, so keep both visible. */
+  @media (hover: none) {
+    position: static;
+    transform: none;
+  }
 `;
 
 const DirectMessagesSection = styled.section`
@@ -146,6 +159,14 @@ const RoomRow = styled.div`
   &:focus-within .room-options-trigger {
     opacity: 1;
     pointer-events: auto;
+  }
+
+  @media (hover: hover) {
+    &:hover ${RoomUnreadBadge},
+    &:focus-within ${RoomUnreadBadge},
+    &:has(> .room-options-trigger[aria-expanded="true"]) ${RoomUnreadBadge} {
+      opacity: 0;
+    }
   }
 `;
 
@@ -220,7 +241,8 @@ function Sidebar({
   onRoomChange,
   onDirectMessages,
   onLogout,
-  onNavigateNotification,
+  notificationUnread,
+  onOpenNotifications,
 }) {
   const [createOpen, setCreateOpen] = useState(false);
   const toast = useToast();
@@ -241,7 +263,7 @@ function Sidebar({
 
   return (
     <SidebarRoot>
-      <SidebarHeader rooms={rooms} onNavigateNotification={onNavigateNotification} />
+      <SidebarHeader notificationUnread={notificationUnread} onOpenNotifications={onOpenNotifications} />
 
       <DirectMessagesButton
         isDirectMessages={isDirectMessages}
@@ -273,11 +295,11 @@ function Sidebar({
   );
 }
 
-function SidebarHeader({ rooms, onNavigateNotification }) {
+function SidebarHeader({ notificationUnread, onOpenNotifications }) {
   return (
     <SidebarHeaderBox>
       <SidebarTitle>GuildChat</SidebarTitle>
-      <NotificationBell rooms={rooms} onNavigate={onNavigateNotification} />
+      <NotificationBell unread={notificationUnread} onClick={onOpenNotifications} />
     </SidebarHeaderBox>
   );
 }
@@ -358,7 +380,7 @@ function RoomButton({ room, active, onClick, onRoomUpdated, onRoomLeft }) {
         <span>{room.name}</span>
         {/* The open room is being read: its count is about to clear. */}
         {!active && unread > 0 && (
-          <RowBadge aria-label={`${unread} unread`}>{formatUnread(unread)}</RowBadge>
+          <RoomUnreadBadge aria-label={`${unread} unread`}>{formatUnread(unread)}</RoomUnreadBadge>
         )}
       </NavItemButton>
       <RoomOptionsButton room={room} onRoomUpdated={onRoomUpdated} onRoomLeft={onRoomLeft} />

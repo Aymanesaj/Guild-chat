@@ -110,4 +110,47 @@ class NotificationStoreTest extends MongoTestSupport {
 
         assertThat(store.unreadCount(ALICE)).isEqualTo(NotificationStore.MAX_COUNTED);
     }
+
+    @Test
+    void roomReadOnlyClearsThisUsersEventsThroughTheReadPositionAcrossAllPages() {
+        String boundary = String.format("%024x", 25);
+        List<String> read = IntStream.rangeClosed(1, 25)
+                .mapToObj(i -> store.insert(forUser(ALICE, String.format("%024x", i))).orElseThrow().id())
+                .toList();
+        Notification later = store.insert(forUser(ALICE, String.format("%024x", 26))).orElseThrow();
+        Notification otherRoom = store.insert(Notification.of(ALICE, Notification.ROLE_CHANGED,
+                BOB, 43L, "ADMIN", null, String.format("%024x", 0), NOW)).orElseThrow();
+        store.insert(forUser(BOB, boundary));
+        Notification friend = store.insert(Notification.of(ALICE, Notification.FRIEND_REQUEST,
+                BOB, null, null, "friendship", "friend-event", NOW)).orElseThrow();
+
+        assertThat(store.markRoomRead(ALICE, 42L, boundary, NOW)).containsExactlyInAnyOrderElementsOf(read);
+        assertThat(store.markRoomRead(ALICE, 42L, boundary, NOW.plusSeconds(60))).isEmpty();
+        assertThat(store.unreadCount(ALICE)).isEqualTo(3);
+        assertThat(store.unreadCount(BOB)).isEqualTo(1);
+        assertThat(store.page(ALICE, null, 50).stream().filter(n -> n.readAt() == null).map(Notification::id))
+                .containsExactlyInAnyOrder(later.id(), otherRoom.id(), friend.id());
+        assertThat(store.page(ALICE, null, 50).stream().filter(n -> read.contains(n.id())))
+                .allSatisfy(n -> assertThat(n.readAt()).isEqualTo(NOW));
+    }
+
+    @Test
+    void friendRequestReadCoversEveryPageButNotOtherTypesOrOtherUsers() {
+        List<String> requests = IntStream.range(0, 25).mapToObj(i -> store.insert(Notification.of(
+                ALICE, Notification.FRIEND_REQUEST, BOB, null, null, "friendship-" + i, "request-" + i, NOW))
+                .orElseThrow().id()).toList();
+        store.insert(Notification.of(BOB, Notification.FRIEND_REQUEST, ALICE, null, null, "other", "other", NOW));
+        Notification room = store.insert(forUser(ALICE, "room-event")).orElseThrow();
+        Notification accepted = store.insert(Notification.of(ALICE, Notification.FRIEND_ACCEPTED,
+                BOB, null, null, "accepted", "accepted", NOW)).orElseThrow();
+
+        assertThat(store.markFriendRequestsRead(ALICE, NOW)).containsExactlyInAnyOrderElementsOf(requests);
+        assertThat(store.markFriendRequestsRead(ALICE, NOW.plusSeconds(60))).isEmpty();
+        assertThat(store.unreadCount(ALICE)).isEqualTo(2);
+        assertThat(store.unreadCount(BOB)).isEqualTo(1);
+        assertThat(store.page(ALICE, null, 50).stream().filter(n -> n.readAt() == null).map(Notification::id))
+                .containsExactlyInAnyOrder(room.id(), accepted.id());
+        assertThat(store.page(ALICE, null, 50).stream().filter(n -> requests.contains(n.id())))
+                .allSatisfy(n -> assertThat(n.readAt()).isEqualTo(NOW));
+    }
 }

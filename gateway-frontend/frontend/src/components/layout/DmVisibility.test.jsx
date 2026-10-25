@@ -3,7 +3,8 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import AppShell from "./AppShell";
 import MainPanel from "./MainPanel";
-import { getOrCreateDm, hideDm, syncDmRooms } from "../../api/rooms";
+import { sendMessage } from "../../api/messages";
+import { getOrCreateDm, hideDm, openDm, syncDmRooms } from "../../api/rooms";
 
 const state = vi.hoisted(() => ({ listeners: new Set(), visible: [], error: vi.fn() }));
 vi.mock("../../api/rooms", async (original) => ({
@@ -12,7 +13,7 @@ vi.mock("../../api/rooms", async (original) => ({
   syncDmRooms: vi.fn(async () => state.visible),
   hideDm: vi.fn(),
   getOrCreateDm: vi.fn(),
-  openDm: vi.fn(async (peer) => ({ id: `draft-dm:${peer.id}`, isDraft: true, type: "dm", peer })),
+  openDm: vi.fn(),
 }));
 vi.mock("../../api/messages", () => ({
   connectChat: vi.fn(), sendMessage: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock("../../api/messages", () => ({
 vi.mock("../../api/friends", () => ({ getFriendsList: async () => [{ id: "bob", username: "Bob" }] }));
 vi.mock("../../hooks/usePresence", () => ({ usePresence: () => new Map() }));
 vi.mock("../../hooks/useSocketNotifications", () => ({ useSocketNotifications: () => {} }));
+vi.mock("../../hooks/useNotificationFeed", () => ({ useNotificationFeed: () => ({ unread: 0 }) }));
 vi.mock("../../hooks/useMediaQuery", () => ({ useMediaQuery: () => false }));
 vi.mock("../ui/ToastProvider", () => ({ useToast: () => ({ error: state.error }) }));
 vi.mock("./ProfileOverlayContext", () => ({
@@ -30,9 +32,13 @@ vi.mock("./ProfileOverlayContext", () => ({
 vi.mock("./Sidebar", () => ({ default: ({ onDirectMessages }) => <button onClick={onDirectMessages}>DM home</button> }));
 vi.mock("../rooms/RoomView", async () => {
   const { default: Header } = await import("../rooms/RoomHeader");
-  return { default: ({ roomName, isDm, onHideDm, draft, onDraftChange }) => <>
+  return { default: ({ roomId, roomName, isDm, onHideDm, draft, onDraftChange, onSendDraft }) => <>
     <Header roomName={roomName} isDm={isDm} onHideDm={onHideDm} />
+    <output aria-label="Room id">{roomId ?? "temporary"}</output>
     <button onClick={() => onDraftChange("unsent text")}>Write draft</button>
+    <button disabled={!onSendDraft} onClick={async () => {
+      try { await onSendDraft(draft); onDraftChange(""); } catch (error) { state.error(error.message); }
+    }}>Send first message</button>
     <input aria-label="Message draft" value={draft} onChange={(event) => onDraftChange(event.target.value)} />
   </> };
 });
@@ -42,11 +48,15 @@ let root;
 let container;
 const dm = { id: 42, type: "dm", peer_id: "bob", peer: { id: "bob", username: "Bob" },
   last_message: { id: "old", content: "old history preview", sent_at: "2026-10-24T10:00:00Z" } };
-const buttons = () => [...container.querySelectorAll("button")];
+const buttons = () => [...document.body.querySelectorAll("button")];
 async function click(label) {
   const button = buttons().find((item) => item.textContent === label || item.getAttribute("aria-label") === label);
   expect(button, `button ${label}`).toBeTruthy();
   await act(async () => button.click());
+}
+async function deleteConversation() {
+  await click("Conversation options");
+  await click("Delete conversation");
 }
 async function emit(event) {
   await act(async () => [...state.listeners].forEach((listener) => listener(event)));
@@ -65,16 +75,20 @@ beforeEach(() => {
   state.visible = [dm];
   hideDm.mockImplementation(async () => { state.visible = []; });
   getOrCreateDm.mockImplementation(async () => { state.visible = [dm]; return dm; });
+  openDm.mockImplementation(async (peer) => state.visible.find((room) => room.peer?.id === peer.id)
+    ?? { id: `draft-dm:${peer.id}`, isDraft: true, type: "dm", peer_id: peer.id, peer });
+  sendMessage.mockResolvedValue({ id: "first", room_id: 42, content: "unsent text" });
   container = document.createElement("div");
+  document.body.appendChild(container);
   root = createRoot(container);
 });
-afterEach(() => act(() => root.unmount()));
+afterEach(() => { act(() => root.unmount()); container.remove(); });
 
 it("hides an open persisted DM, returns home, and keeps it absent on sync", async () => {
   await mount();
   await openBob();
   await click("Write draft");
-  await click("Remove conversation");
+  await deleteConversation();
   expect(hideDm).toHaveBeenCalledWith(42);
   expect(container.textContent).toContain("Direct Messages");
   expect(container.textContent).not.toContain("old history preview");
@@ -85,15 +99,54 @@ it("hides an open persisted DM, returns home, and keeps it absent on sync", asyn
   expect(container.querySelector('[aria-label="Message draft"]').value).toBe("unsent text");
 });
 
-it("explicit friend reopening uses getOrCreateDm and opens the same persisted DM", async () => {
+it("opening a friend stays temporary until sending, then initializes the persisted DM", async () => {
   state.visible = [];
   await mount();
   await click("Toggle friends");
   await click("Message Bob");
-  expect(getOrCreateDm).toHaveBeenCalledWith("bob");
+  expect(openDm).toHaveBeenCalledWith({ id: "bob", username: "Bob" });
+  expect(getOrCreateDm).not.toHaveBeenCalled();
+  expect(sendMessage).not.toHaveBeenCalled();
+  expect(container.querySelector('[aria-label="Room id"]').textContent).toBe("temporary");
   expect(container.textContent).toContain("Bob");
-  await click("Remove conversation");
+  await click("Write draft");
+  await click("Send first message");
+  expect(getOrCreateDm).toHaveBeenCalledWith("bob");
+  expect(sendMessage).toHaveBeenCalledWith(42, "unsent text");
+  expect(container.querySelector('[aria-label="Room id"]').textContent).toBe("42");
+  await deleteConversation();
   expect(hideDm).toHaveBeenCalledWith(42);
+});
+
+it("room discovery cannot initialize a temporary DM while its first send is pending", async () => {
+  state.visible = [];
+  let finish;
+  sendMessage.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  await mount();
+  await click("Toggle friends");
+  await click("Message Bob");
+  await click("Write draft");
+  await click("Send first message");
+  await emit({ type: "added", roomId: 42 });
+  expect(container.querySelector('[aria-label="Room id"]').textContent).toBe("temporary");
+  await act(async () => finish({ id: "first" }));
+  expect(container.querySelector('[aria-label="Room id"]').textContent).toBe("42");
+});
+
+it("a failed first send preserves the temporary conversation and draft for retry", async () => {
+  state.visible = [];
+  sendMessage.mockRejectedValueOnce(new Error("Send failed"));
+  await mount();
+  await click("Toggle friends");
+  await click("Message Bob");
+  await click("Write draft");
+  await click("Send first message");
+  expect(container.querySelector('[aria-label="Room id"]').textContent).toBe("temporary");
+  expect(container.querySelector('[aria-label="Message draft"]').value).toBe("unsent text");
+  expect(state.error).toHaveBeenCalledWith("Send failed");
+  await click("Send first message");
+  expect(container.querySelector('[aria-label="Room id"]').textContent).toBe("42");
+  expect(sendMessage).toHaveBeenCalledTimes(2);
 });
 
 it("room.added discovers a hidden DM, restores its preview, and activity updates it", async () => {
@@ -118,8 +171,8 @@ it("a hide failure leaves the active DM open and reports the error", async () =>
   hideDm.mockRejectedValue(new Error("Try again"));
   await mount();
   await openBob();
-  await click("Remove conversation");
-  expect(container.textContent).toContain("Remove conversation");
+  await deleteConversation();
+  expect(container.querySelector('[aria-label="Conversation options"]')).toBeTruthy();
   expect(state.error).toHaveBeenCalledWith("Try again");
 });
 
@@ -129,7 +182,7 @@ it("room.removed on another device closes the active DM", async () => {
   state.visible = [];
   await emit({ type: "removed", roomId: "42" });
   expect(container.textContent).toContain("Direct Messages");
-  expect(container.textContent).not.toContain("Remove conversation");
+  expect(container.querySelector('[aria-label="Conversation options"]')).toBeNull();
 });
 
 it("does not interrupt a different conversation opened while hiding is pending", async () => {
@@ -137,18 +190,18 @@ it("does not interrupt a different conversation opened while hiding is pending",
   hideDm.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
   await mount();
   await openBob();
-  await click("Remove conversation");
+  await deleteConversation();
   await click("DM home");
   await click("Toggle friends");
   await click("Message Bob");
   await act(async () => finish());
-  expect(container.textContent).toContain("Remove conversation");
+  expect(container.querySelector('[aria-label="Conversation options"]')).toBeTruthy();
 });
 
 it.each([true, false])("draft DM has no remove action (isDraft=%s)", async (isDraft) => {
   await mount(<MainPanel activeView={{ ...dm, id: "draft-dm:bob", isDraft }}
     onRoomInitialized={vi.fn()} onHideDm={vi.fn()} />);
-  expect(container.textContent).not.toContain("Remove conversation");
+  expect(container.querySelector('[aria-label="Conversation options"]')).toBeNull();
   expect(hideDm).not.toHaveBeenCalled();
 });
 
@@ -168,5 +221,5 @@ it("group rooms do not expose the DM remove action", async () => {
   await mount(<MainPanel activeView={{ id: 43, type: "group", name: "Group" }}
     onRoomInitialized={vi.fn()} onHideDm={vi.fn()} />);
   expect(container.textContent).toContain("Members");
-  expect(container.textContent).not.toContain("Remove conversation");
+  expect(container.querySelector('[aria-label="Conversation options"]')).toBeNull();
 });

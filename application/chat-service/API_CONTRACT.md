@@ -390,6 +390,11 @@ from another tab) changes nothing and is not an error.
 `last_read_id` is the mark after the call (it can be newer than the one
 sent). `unread` counts what is left after it, as in `GET /rooms/unread`.
 The same object is sent to the user's sockets as `room.read`.
+Room event notifications whose source system message is at or before this
+read position are also marked read, including notifications on older pages.
+Their ids and the remaining notification count are broadcast as
+`notification.read`. A notification inserted after its source message was
+already read is cleared the same way.
 
 | Status | Code | When |
 |---|---|---|
@@ -492,11 +497,27 @@ caller's, or already read, are ignored (no error).
 | 400 | `TOO_MANY_IDS` | More than 100 distinct ids |
 | 400 | `INVALID_NOTIFICATION_ID` | An id is not a notification id |
 
+#### `PUT /notifications/read-friend-requests`
+
+No body. Marks the caller's unread `FRIEND_REQUEST` notifications read across
+all pages. Call when opening the Friends section of the profile overlay.
+Other activity, including `FRIEND_ACCEPTED`, is unchanged.
+
+`200` → `{ "ids": [...], "all": false, "unread": 2 }`. Broadcasts the same
+object as `notification.read`, keeping other tabs, badges and activity toasts
+in sync. The notification list does not need to be loaded first.
+
 #### `PUT /notifications/read-all`
 
 No body. `200` → `{ "ids": null, "all": true, "unread": 0 }`.
 
 Both reads are also sent to the user's sockets as `notification.read`.
+Room reads also emit this event when they clear related activity notifications.
+Clients should use `notification.new` as the source for activity toasts (using
+the notification id), and dismiss those toasts when that id is read. Friend
+and system `room.activity` frames must not produce duplicate activity toasts.
+Ordinary message toasts remain tied to `room.activity`; `room.read` clears
+those through `last_read_id`.
 
 ### `GET /presence?ids=a,b,c`: online status
 

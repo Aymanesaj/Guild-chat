@@ -13,10 +13,12 @@ import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { PHONE_QUERY } from "../../constants/breakpoints";
 import { connectChat, onRoomEvent } from "../../api/messages";
 import { getRoom, getRooms, hideDm } from "../../api/rooms";
+import { useNotificationFeed } from "../../hooks/useNotificationFeed";
 import { useSocketNotifications } from "../../hooks/useSocketNotifications";
 import { useToast } from "../ui/ToastProvider";
 import { useMobileViewport } from "../../hooks/useMobileViewport";
-import { UnreadProvider } from "./UnreadContext";
+import { UnreadProvider, useUnread } from "./UnreadContext";
+import { formatUnread } from "../../utils/notifications";
 
 const AppShellRoot = styled.div`
   display: flex;
@@ -53,8 +55,22 @@ const MainContent = styled.main`
   }
 `;
 
+function NotificationTabTitle({ activityUnread }) {
+  const { unreadConversations } = useUnread();
+  const total = activityUnread + unreadConversations.reduce((sum, { count }) => sum + count, 0);
+
+  useEffect(() => {
+    const count = formatUnread(total);
+    document.title = count ? `(${count}) GuildChat` : "GuildChat";
+    return () => { document.title = "GuildChat"; };
+  }, [total]);
+
+  return null;
+}
+
 function AppShellContent({ onLogout }) {
   const toast = useToast();
+  const notificationFeed = useNotificationFeed();
   const [isDirectMessages, setIsDirectMessages] = useState(true);
   const [activeRoomId, setActiveRoomId] = useState(null);
 
@@ -205,7 +221,7 @@ function AppShellContent({ onLogout }) {
     }
   };
 
-  useSocketNotifications(currentUser?.id, isDirectMessages ? null : activeRoomId?.id, navigateNotification, rooms);
+  useSocketNotifications(currentUser?.id, isDirectMessages ? null : activeRoomId?.id, navigateNotification, rooms, notificationFeed);
 
   // A first send may finish after navigation. Replace only its own draft and
   // keep whichever view the user has since chosen.
@@ -244,6 +260,7 @@ function AppShellContent({ onLogout }) {
         groupRooms={rooms}
         activeRoomId={isDirectMessages ? null : activeRoomId?.id}
       >
+        <NotificationTabTitle activityUnread={notificationFeed.unread} />
         <RoomNavigationProvider navigateToRoom={handleRoomChange}>
           <AppShellRoot ref={viewportRef}>
             {/* Wrapped on both sides of the breakpoint and in the same tree slot:
@@ -265,7 +282,8 @@ function AppShellContent({ onLogout }) {
                 onRoomChange={handleRoomChange}
                 onDirectMessages={handleDirectMessages}
                 onLogout={onLogout}
-                onNavigateNotification={navigateNotification}
+                notificationUnread={notificationFeed.unread}
+                onOpenNotifications={() => navigateNotification({ type: "profile", tab: "notifications" })}
               />
             </SlidePanel>
 
@@ -283,6 +301,9 @@ function AppShellContent({ onLogout }) {
               key={profileNavigation.id}
               user={profile}
               initialTab={profileNavigation.tab}
+              notificationFeed={notificationFeed}
+              rooms={rooms}
+              onNavigateNotification={navigateNotification}
               onClose={closeProfile}
             />
           )}

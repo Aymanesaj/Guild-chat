@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { getOrCreateDm, hideDm, sortDmRooms, syncDmRooms } from "./rooms";
+import { getOrCreateDm, hideDm, openDm, sortDmRooms, syncDmRooms } from "./rooms";
 import { request } from "./http";
 
 vi.mock("./http", async (original) => ({ ...(await original()), request: vi.fn() }));
@@ -14,13 +14,26 @@ it("hides through the encoded DM DELETE endpoint", async () => {
     { method: "DELETE" }, "Failed to remove conversation");
 });
 
-it("explicit reopening uses get-or-create and preserves the persisted room id", async () => {
+it("sending uses get-or-create and preserves the persisted room id", async () => {
   request.mockResolvedValue({ id: 42, type: "DM", userIdIfDm: "bob" });
   const room = await getOrCreateDm("bob");
   expect(request).toHaveBeenCalledWith("/api/orgs/rooms/dm", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: "bob" }),
   }, "Failed to open conversation");
   expect(room).toMatchObject({ id: 42, type: "dm", peer_id: "bob" });
+});
+
+it("opening a new or hidden DM only reads and returns a temporary conversation", async () => {
+  request.mockResolvedValue([]);
+  const peer = { id: "bob", username: "Bob" };
+  expect(await openDm(peer)).toMatchObject({ id: "draft-dm:bob", isDraft: true, type: "dm", peer });
+  expect(request).toHaveBeenCalledExactlyOnceWith("/api/orgs/rooms/dm", {}, "Failed to fetch conversations");
+});
+
+it("opening a visible DM reuses it without a creation request", async () => {
+  request.mockResolvedValue([{ id: 42, type: "DM", userIdIfDm: "bob" }]);
+  expect(await openDm({ id: "bob", username: "Bob" })).toMatchObject({ id: 42, type: "dm", peer_id: "bob" });
+  expect(request).toHaveBeenCalledExactlyOnceWith("/api/orgs/rooms/dm", {}, "Failed to fetch conversations");
 });
 
 it("drops hidden DMs on sync and fetches their preview again when rediscovered", async () => {

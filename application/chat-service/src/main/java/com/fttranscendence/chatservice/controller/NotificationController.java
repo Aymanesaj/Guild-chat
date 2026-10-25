@@ -53,6 +53,12 @@ public class NotificationController {
         return NotificationsReadResponse.from(notificationService.markRead(userId, request.ids()));
     }
 
+    @PutMapping("/read-friend-requests")
+    public NotificationsReadResponse markFriendRequestsRead(
+            @RequestAttribute(AuthenticationFilter.USER_ID_ATTRIBUTE) String userId) {
+        return NotificationsReadResponse.from(notificationService.markFriendRequestsRead(userId));
+    }
+
     @PutMapping("/read-all")
     public NotificationsReadResponse markAllRead(@RequestAttribute(AuthenticationFilter.USER_ID_ATTRIBUTE) String userId) {
         return NotificationsReadResponse.from(notificationService.markAllRead(userId));

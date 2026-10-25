@@ -126,7 +126,7 @@ export async function hideDm(roomId) {
   );
 }
 
-/** Read-only discovery for an existing local draft; explicit opens use getOrCreateDm. */
+/** Opening a chat only reads existing DMs; a new or hidden chat starts locally. */
 export async function openDm(peer) {
   const rooms = await getDmRooms();
   const existing = rooms.find((room) => (room.peer_id ?? room.peer?.id) === peer.id);
@@ -142,7 +142,7 @@ export async function openDm(peer) {
   };
 }
 
-/** Creates or reveals the existing DM on explicit open or first send. */
+/** Called when sending: creates the DM or reveals the existing conversation. */
 export async function getOrCreateDm(userId) {
   const room = await request(
     DM_ROOMS,
