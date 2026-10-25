@@ -1,8 +1,10 @@
 import { useEffect, useRef } from "react";
 import styled from "styled-components";
+import { TbX } from "react-icons/tb";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
-import { Card, fadeIn } from "../ui";
+import { Card, IconButton, fadeIn } from "../ui";
 import NotificationsPanel from "./NotificationsPanel";
+import NotificationOptionsButton from "./NotificationOptionsButton";
 
 const Overlay = styled.div`
   position: fixed;
@@ -30,6 +32,22 @@ const NotificationsCard = styled(Card)`
   max-height: 100%;
   overflow: hidden;
   color: var(--text-primary);
+`;
+
+const Header = styled.header`
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+
+  h2 {
+    flex: 1;
+    margin: 0;
+    font-size: var(--text-md);
+    font-weight: 700;
+  }
 `;
 
 export default function NotificationsOverlay({ feed, rooms, onNavigate, onClose }) {
@@ -71,12 +89,18 @@ export default function NotificationsOverlay({ feed, rooms, onNavigate, onClose 
         aria-label="Notifications"
         onKeyDown={handleKeyDown}
       >
+        <Header>
+          <h2>Notifications</h2>
+          <NotificationOptionsButton feed={feed} />
+          <IconButton type="button" onClick={onClose} aria-label="Close notifications">
+            <TbX size={20} />
+          </IconButton>
+        </Header>
         <NotificationsPanel
           feed={feed}
           rooms={rooms}
           onNavigate={onNavigate}
           onClose={onClose}
-          showCloseButton
         />
       </NotificationsCard>
     </Overlay>

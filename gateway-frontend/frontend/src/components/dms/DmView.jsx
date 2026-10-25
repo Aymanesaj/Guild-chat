@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styled from "styled-components";
 import { TbMessageCircle, TbUsers } from "react-icons/tb";
 import FriendsSidebar from "./FriendsSidebar";
-import { sortDmRooms, syncDmRooms, toConversation } from "../../api/rooms";
+import { hideDm, sortDmRooms, syncDmRooms, toConversation } from "../../api/rooms";
 import { onRoomEvent } from "../../api/messages";
 import { usePresence } from "../../hooks/usePresence";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
@@ -127,6 +127,15 @@ function DmView() {
     }
   }, []);
 
+  const deleteConversation = async (roomId) => {
+    await hideDm(roomId);
+    // Discard older refreshes so they cannot restore the deleted row.
+    loadSeq.current += 1;
+    const next = knownRooms.current.filter((room) => String(room.id) !== String(roomId));
+    knownRooms.current = next;
+    setRooms(next);
+  };
+
   // No polling: the list loads once on mount, then follows the chat socket
   // (onRoomEvent below) — a DM someone else starts arrives as room.added, a
   // message in any DM as room.activity, and a reconnect as resync.
@@ -191,6 +200,7 @@ function DmView() {
         <DmList
           conversations={withPresence}
           state={ loading }
+          onDelete={deleteConversation}
         />
       </DmMain>
 

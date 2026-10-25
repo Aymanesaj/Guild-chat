@@ -21,7 +21,7 @@ const StartForm = styled(FriendRequestForm)`
   margin: var(--space-3) auto 0;
 `;
 
-function DmList({ conversations, state }) {
+function DmList({ conversations, state, onDelete }) {
   if (state === "loading") {
     return (
       <DmListRoot aria-busy="true">
@@ -65,7 +65,7 @@ function DmList({ conversations, state }) {
   return (
     <DmListRoot>
       {conversations.map((conversation) => (
-        <DmItem key={conversation.id} conversation={conversation} />
+        <DmItem key={conversation.id} conversation={conversation} onDelete={onDelete} />
       ))}
     </DmListRoot>
   );

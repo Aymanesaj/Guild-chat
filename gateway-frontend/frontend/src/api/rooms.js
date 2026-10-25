@@ -240,6 +240,7 @@ export function toConversation(room) {
     avatar: peer?.avatar ?? null,
     status: peer?.status ?? "offline",
     lastMessage: last?.content ?? "",
+    lastMessageId: last?.id ?? null,
     timestamp: formatTimestamp(last?.sent_at),
   };
 }

@@ -16,6 +16,7 @@ import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { PHONE_QUERY } from "../../constants/breakpoints";
 import NotificationsPanel from "./NotificationsPanel";
 import NotificationsOverlay from "./NotificationsOverlay";
+import NotificationOptionsButton from "./NotificationOptionsButton";
 import UserAvatar from "../profile/UserAvatar";
 import FriendRequestForm from "../profile/FriendRequestForm";
 import MessageByteCount from "../ui/MessageByteCount";
@@ -970,6 +971,9 @@ export default function ProfileOverlay({
                   >
                     Notifications
                   </SectionTab>
+                  {managementSection === "notifications" && (
+                    <NotificationOptionsButton feed={notificationFeed} />
+                  )}
                 </SectionTabs>
 
                 {managementSection === "friends" && (

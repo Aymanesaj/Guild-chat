@@ -27,7 +27,7 @@ const RoomMain = styled.div`
   min-width: 0;
 `;
 
-function RoomView({ roomId, roomName, roomDescription, isDm, peer, draft, onDraftChange, onSendDraft, onHideDm }) {
+function RoomView({ roomId, roomName, roomDescription, isDm, peer, draft, onDraftChange, onSendDraft }) {
   const { isPhone, isNavOpen, closeNav } = useNavDrawer();
   const { profile, previewUser } = useProfileOverlay();
 
@@ -113,8 +113,6 @@ function RoomView({ roomId, roomName, roomDescription, isDm, peer, draft, onDraf
         <RoomHeader
           roomName={roomName}
           isDm={isDm}
-          onHideDm={onHideDm}
-          onMarkRead={roomId && state === "success" && newestId ? () => markRead(roomId, newestId) : undefined}
           onToggleMembers={toggleMembers}
         />
 
