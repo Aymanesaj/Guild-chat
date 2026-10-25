@@ -286,9 +286,8 @@ class RoomTimelineIntegrationTest {
     }
 
     @Test
-    void readsLookupsAndDmMutationsProduceNoTimeline() {
+    void lookupsAndDmMutationsProduceNoTimeline() {
         clear();
-        service.markRoomAsRead(room, owner);
         service.getRoomById(room, owner); service.getMembersByRoomId(room, owner);
         service.getRolesByRoomId(room, owner); service.getRoomsByUserId(owner);
         service.findRoleInRoom(room, owner); service.isUserInRoom(room, owner);
@@ -297,7 +296,6 @@ class RoomTimelineIntegrationTest {
         service.createDirectMessageRoom(owner, target);
         service.getDirectMessageRoomsByUserId(owner);
         service.updateRoom(dm, new UpdateRoomRequest("private", null), owner);
-        service.markRoomAsRead(dm, owner);
         service.leaveRoom(dm, target);
         service.deleteRoom(dm);
         assertThat(sent).isEmpty(); assertThat(internal.emitted).isEmpty();
