@@ -60,35 +60,6 @@ docker compose up -d --build media-service
 ```
 
 The script only creates missing objects; it preserves existing data and passwords.
-Existing uploads also need their `MediaUpload` records transferred from the old
-database; pointing Media at an empty database makes old images unavailable even
-when the objects still exist in R2. After applying Media migrations to the shared
-database, recover those records on the machine hosting the app:
-
-```bash
-# Find the old container, including stopped containers.
-docker ps -a --filter label=com.docker.compose.service=media-postgres --format '{{.Names}}'
-bash databases/postgres/recover-media.sh <old-container-name>
-```
-
-The recovery script saves both database dumps under `backups/media-recovery-*`,
-then merges missing IDs in a transaction. It preserves new uploads and existing
-records, including deletion/status changes; it can be rerun safely. It temporarily
-starts a stopped source container and stops it again afterward. Run this only
-after Media has switched to the shared database and no service writes to the old
-database. It does not alter R2 objects or restore objects already deleted from R2.
-
-Keep the old `media_database` volume until old images load successfully. Deployment
-uses `--remove-orphans`, so the old container may already be gone. In that case:
-
-```bash
-docker volume ls --filter label=com.docker.compose.volume=media_database --format '{{.Name}}'
-bash databases/postgres/recover-media.sh --volume <old-volume-name>
-```
-
-This mode temporarily mounts the existing volume in an isolated Postgres 16
-container, then removes that temporary container while retaining the volume.
-
 This is a runnable Fastify starter. R2 operations, database access, upload routes
 and gRPC still need implementation; no gRPC server runs yet.
 The intended browser flow remains Nginx → Identity/Chat, with authorized,
