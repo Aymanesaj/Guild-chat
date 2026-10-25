@@ -9,6 +9,7 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
 import com.fttranscendence.chatservice.config.RabbitMQConfig;
+import com.fttranscendence.chatservice.service.NotificationService;
 import com.fttranscendence.chatservice.websocket.ChatWebSocketHandler;
 import com.fttranscendence.chatservice.websocket.WsEvents;
 
@@ -23,9 +24,11 @@ public class FriendshipEventConsumer {
 
     private static final Logger logger = LoggerFactory.getLogger(FriendshipEventConsumer.class);
     private final ChatWebSocketHandler sockets;
+    private final NotificationService notifications;
 
-    public FriendshipEventConsumer(ChatWebSocketHandler sockets) {
+    public FriendshipEventConsumer(ChatWebSocketHandler sockets, NotificationService notifications) {
         this.sockets = sockets;
+        this.notifications = notifications;
     }
 
 
@@ -39,10 +42,12 @@ public class FriendshipEventConsumer {
             case FRIEND_REQUEST_SENT -> {
                 sockets.sendToUser(addressee, WsEvents.FRIEND_REQUEST_RECEIVED, data(event , requester));
                 sockets.sendToUser(requester, WsEvents.FRIEND_REQUEST_SENT, data(event , addressee));
+                notifications.friendRequestSent(event.eventId(), event.friendshipId(), requester, addressee);
             }
             case FRIEND_REQUEST_ACCEPTED -> {
                 sockets.sendToUser(addressee, WsEvents.FRIEND_REQUEST_ADDED, data(event , requester));
                 sockets.sendToUser(requester, WsEvents.FRIEND_REQUEST_ADDED, data(event , addressee));
+                notifications.friendRequestAccepted(event.eventId(), event.friendshipId(), requester, addressee);
             }
         }
          logger.info("Consumed friendship event={} id={} friendship={}",

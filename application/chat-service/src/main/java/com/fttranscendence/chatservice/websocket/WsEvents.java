@@ -41,6 +41,10 @@ public final class WsEvents {
     public static final String ROOM_ACTIVITY = "room.activity";
     /** You read a room (maybe in another tab). data: { room_id, last_read_id, unread } */
     public static final String ROOM_READ = "room.read";
+    /** A notification for you was stored. data: the notification */
+    public static final String NOTIFICATION_NEW = "notification.new";
+    /** You marked notifications read (maybe in another tab). data: { ids, all, unread } */
+    public static final String NOTIFICATION_READ = "notification.read";
 
     /** Someone sent you a friend request. data: { friendship_id, user_id: requester } */
     public static final String FRIEND_REQUEST_RECEIVED = "friend.request.received";

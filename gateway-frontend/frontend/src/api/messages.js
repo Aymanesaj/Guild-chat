@@ -315,7 +315,17 @@ async function handleFrame(frame) {
         roomId: data.room_id,
         change: data.change,
         preview: toPreview(data.message),
+        // Unread counts: only other people's messages count, never room events.
+        senderId: data.message.sender_id ?? null,
+        isSystem: data.message.content_type === "system",
       });
+      break;
+    case "room.read":
+      emitRoomEvent({ type: "read", roomId: data.room_id, unread: data.unread ?? 0 });
+      break;
+    case "notification.new":
+    case "notification.read":
+      notificationListeners.forEach((listener) => listener({ event, data }));
       break;
     case "friend.request.received":
     case "friend.request.sent":
@@ -503,9 +513,12 @@ export function subscribeToPresence(userIds, handler) {
  *   { type: "removed",  roomId }  you can no longer see it: refetch the list
  *   { type: "updated",  roomId }  name, members or roles changed
  *   { type: "activity", roomId, change: "new" | "edited" | "deleted",
- *     preview: { id, content, sent_at } }
+ *     preview: { id, content, sent_at }, senderId, isSystem }
  *                                 a message in one of your rooms; for every
  *                                 room you are in, DMs and groups alike
+ *   { type: "read", roomId, unread }
+ *                                 you read this room (maybe in another tab):
+ *                                 its unread count is now `unread`
  *   { type: "resync" }            the socket reconnected and events may have
  *                                 been missed: refetch whatever you show
  *

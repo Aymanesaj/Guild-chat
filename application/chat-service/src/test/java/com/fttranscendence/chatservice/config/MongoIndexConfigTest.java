@@ -15,6 +15,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.index.IndexInfo;
 import com.fttranscendence.chatservice.support.MongoTestSupport;
 import com.fttranscendence.chatservice.model.Message;
+import com.fttranscendence.chatservice.model.Notification;
 import com.fttranscendence.chatservice.model.ReadState;
 import com.fttranscendence.chatservice.model.SystemEvent;
 
@@ -145,6 +146,26 @@ class MongoIndexConfigTest extends MongoTestSupport {
         assertThat(index).as("index %s must exist", MongoIndexConfig.READ_STATE_INDEX).isNotNull();
         assertThat(index.getIndexFields()).extracting(field -> field.getKey()).containsExactly("user_id", "room_id");
         assertThat(index.isUnique()).isTrue();
+    }
+
+    @Test
+    @DisplayName("creates the notification indexes: unique source per user, list order, 30-day expiry")
+    void createsNotificationIndexes() {
+        indexConfig.createIndexes();
+
+        List<IndexInfo> indexes = mongoTemplate.indexOps(Notification.COLLECTION).getIndexInfo();
+        IndexInfo source = named(indexes, MongoIndexConfig.NOTIFICATION_SOURCE_INDEX);
+        assertThat(source.getIndexFields()).extracting(field -> field.getKey()).containsExactly("user_id", "source_id");
+        assertThat(source.isUnique()).isTrue();
+        assertThat(named(indexes, MongoIndexConfig.NOTIFICATION_LIST_INDEX).getIndexFields())
+                .extracting(field -> field.getKey()).containsExactly("user_id", "_id");
+        assertThat(named(indexes, MongoIndexConfig.NOTIFICATION_EXPIRY_INDEX).getExpireAfter())
+                .contains(MongoIndexConfig.NOTIFICATION_RETENTION);
+    }
+
+    private static IndexInfo named(List<IndexInfo> indexes, String name) {
+        return indexes.stream().filter(info -> name.equals(info.getName())).findFirst()
+                .orElseThrow(() -> new AssertionError("index " + name + " must exist"));
     }
 
     private IndexInfo roomHistoryIndex() {

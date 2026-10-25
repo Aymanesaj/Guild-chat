@@ -81,7 +81,8 @@ export async function getRoom(roomId) {
 }
 
 /** GET /rooms/dm — the caller's DM rooms, each with its peer resolved. */
-async function getDmRooms() {
+/** The caller's DM rooms, each with its peer. No previews: see syncDmRooms. */
+export async function getDmRooms() {
   const rooms = await request(DM_ROOMS, {}, "Failed to fetch conversations");
   return withPeers((rooms || []).map(normalizeRoom));
 }
