@@ -13,6 +13,7 @@ import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.support.converter.MessageConversionException;
 
 import com.fttranscendence.chatservice.config.RabbitMQConfig;
+import com.fttranscendence.chatservice.service.NotificationService;
 import com.fttranscendence.chatservice.websocket.ChatWebSocketHandler;
 
 class FriendshipEventConsumerTest {
@@ -22,7 +23,8 @@ class FriendshipEventConsumerTest {
     static final String EVENT = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 
     final ChatWebSocketHandler sockets = mock(ChatWebSocketHandler.class);
-    final FriendshipEventConsumer consumer = new FriendshipEventConsumer(sockets);
+    final NotificationService notifications = mock(NotificationService.class);
+    final FriendshipEventConsumer consumer = new FriendshipEventConsumer(sockets, notifications);
 
     static FriendshipEvent event(FriendshipEventType type) {
         return new FriendshipEvent(EVENT, type, 1, FRIENDSHIP, ALICE, BOB, "2026-10-21T10:00:00.000Z");
@@ -65,6 +67,8 @@ class FriendshipEventConsumerTest {
         verify(sockets).sendToUser(BOB, "friend.request.received", Map.of("friendship_id", FRIENDSHIP, "user_id", ALICE));
         verify(sockets).sendToUser(ALICE, "friend.request.sent", Map.of("friendship_id", FRIENDSHIP, "user_id", BOB));
         verifyNoMoreInteractions(sockets);
+        verify(notifications).friendRequestSent(EVENT, FRIENDSHIP, ALICE, BOB);
+        verifyNoMoreInteractions(notifications);
     }
 
     @Test
@@ -74,6 +78,8 @@ class FriendshipEventConsumerTest {
         verify(sockets).sendToUser(ALICE, "friend.added", Map.of("friendship_id", FRIENDSHIP, "user_id", BOB));
         verify(sockets).sendToUser(BOB, "friend.added", Map.of("friendship_id", FRIENDSHIP, "user_id", ALICE));
         verifyNoMoreInteractions(sockets);
+        verify(notifications).friendRequestAccepted(EVENT, FRIENDSHIP, ALICE, BOB);
+        verifyNoMoreInteractions(notifications);
     }
 
     @Test
@@ -89,7 +95,7 @@ class FriendshipEventConsumerTest {
                 new FriendshipEvent(null, FriendshipEventType.FRIEND_REQUEST_SENT, 1, FRIENDSHIP, ALICE, BOB, null))) {
             assertThatThrownBy(() -> consumer.consume(invalid)).isInstanceOf(IllegalArgumentException.class);
         }
-        verifyNoInteractions(sockets);
+        verifyNoInteractions(sockets, notifications);
     }
 
     @Test

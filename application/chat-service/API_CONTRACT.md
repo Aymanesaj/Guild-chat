@@ -424,6 +424,80 @@ duplicates are ignored.
 | 400 | `TOO_MANY_IDS` | More than 100 distinct ids |
 | 400 | `INVALID_PARAMETER` | An id is not a number |
 
+### Notifications
+
+What happened **to** the user, kept for a notification list. Messages are
+not here: unread counts cover them (`GET /rooms/unread`).
+
+```json
+{
+  "id": "6add484103da7fa3b799b290",
+  "type": "ROLE_CHANGED",
+  "actor_id": "a215c5f8-d810-4518-ad4c-8d551eb6dfc4",
+  "room_id": 5,
+  "role": "ADMIN",
+  "friendship_id": null,
+  "created_at": "2026-10-25T10:00:00Z",
+  "read": false
+}
+```
+
+| `type` | Sent to | `actor_id` | Other fields | Suggested sentence |
+|---|---|---|---|---|
+| `FRIEND_REQUEST` | The addressee | Who sent it | `friendship_id` | **{actor}** sent you a friend request |
+| `FRIEND_ACCEPTED` | Who sent the request | Who accepted | `friendship_id` | **{actor}** accepted your friend request |
+| `ROOM_ADDED` | Who was added | Who added them | `room_id` | **{actor}** added you to **{room}** |
+| `ROOM_REMOVED` | Who was removed | Who removed them | `room_id` | **{actor}** removed you from **{room}** |
+| `ROLE_CHANGED` | Whose role changed | Who changed it | `room_id`, `role` (`OWNER` when ownership was transferred to them) | **{actor}** made you {role} in **{room}** |
+
+- Ids only: resolve `actor_id` through identity and `room_id` through your
+  room list when rendering. After `ROOM_REMOVED` the room is no longer in the
+  list: say "a room" when its name is unknown.
+- Only the person affected is notified, never for something they did
+  themselves. Fields a type does not use are `null`.
+- Each event notifies once, even if the broker delivers it twice.
+- Kept **30 days**, then deleted.
+- `friendship_id` is identity's request id. The request may have been
+  answered or cancelled since: refetch requests rather than trusting the
+  notification.
+- **Unknown `type`:** new types may be added. Show a neutral line or skip it.
+
+#### `GET /notifications`: list
+
+Newest first, cursor-paginated like history.
+
+| Query | Default | Rules |
+|---|---|---|
+| `limit` | 20 | 1–50 |
+| `before` | none (newest page) | a notification id; returns older ones |
+
+`200` → array of notifications. `400 INVALID_LIMIT` / `400 INVALID_CURSOR`.
+
+#### `GET /notifications/unread-count`
+
+`200` → `{ "unread": 3 }`. Stops at 100: show "99+".
+
+#### `PUT /notifications/read`: mark some read
+
+```json
+{ "ids": ["6add484103da7fa3b799b290"] }
+```
+
+`200` → `{ "ids": [...], "all": false, "unread": 2 }`. Ids that are not the
+caller's, or already read, are ignored (no error).
+
+| Status | Code | When |
+|---|---|---|
+| 400 | `MISSING_IDS` | No ids |
+| 400 | `TOO_MANY_IDS` | More than 100 distinct ids |
+| 400 | `INVALID_NOTIFICATION_ID` | An id is not a notification id |
+
+#### `PUT /notifications/read-all`
+
+No body. `200` → `{ "ids": null, "all": true, "unread": 0 }`.
+
+Both reads are also sent to the user's sockets as `notification.read`.
+
 ### `GET /presence?ids=a,b,c`: online status
 
 Any authenticated user may ask about any user. `ids` is comma-separated
@@ -522,6 +596,8 @@ none). They keep room lists and DM previews live without polling.
 | `room.updated` | `{ "room_id": 5 }` | A room you are in changed: renamed, a member joined or left, or a role changed |
 | `room.activity` | `{ "room_id": 5, "change": "new" \| "edited" \| "deleted", "message": <message object> }` | A message was sent, edited or deleted in any room you are in, the sender included. Image `url`s are `null`: it is a preview. |
 | `room.read` | `{ "room_id": 5, "last_read_id": "66f0...", "unread": 0 }` | You marked a room read (`PUT /rooms/{id}/read`), in this tab or another: update its badge |
+| `notification.new` | a notification (see [Notifications](#notifications)) | A notification for you was stored: prepend it and add 1 to the badge |
+| `notification.read` | `{ "ids": [...] \| null, "all": true \| false, "unread": 2 }` | You marked notifications read, in this tab or another: mark them read and set the badge to `unread` |
 
 The `room.added` / `room.removed` / `room.updated` frames carry only the id:
 refetch the list over REST (org-service), which applies its own permission

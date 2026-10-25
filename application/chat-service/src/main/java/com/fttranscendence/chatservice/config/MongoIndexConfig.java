@@ -1,5 +1,7 @@
 package com.fttranscendence.chatservice.config;
 
+import java.time.Duration;
+
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,6 +16,7 @@ import org.springframework.data.mongodb.core.index.Index;
 import org.springframework.data.mongodb.core.index.PartialIndexFilter;
 import org.springframework.data.mongodb.core.query.Criteria;
 
+import com.fttranscendence.chatservice.model.Notification;
 import com.fttranscendence.chatservice.model.ReadState;
 
 @Configuration
@@ -28,6 +31,12 @@ public class MongoIndexConfig {
     static final String SYSTEM_EVENT_INDEX = "event_id_unique";
 
     static final String READ_STATE_INDEX = "user_id_1_room_id_1_unique";
+
+    static final String NOTIFICATION_SOURCE_INDEX = "user_id_1_source_id_1_unique";
+    static final String NOTIFICATION_LIST_INDEX = "user_id_1__id_-1";
+    static final String NOTIFICATION_EXPIRY_INDEX = "created_at_ttl";
+    /** Notifications are deleted by MongoDB this long after they were created. */
+    static final Duration NOTIFICATION_RETENTION = Duration.ofDays(30);
 
     private final MongoTemplate mongoTemplate;
 
@@ -89,6 +98,29 @@ public class MongoIndexConfig {
         } catch (DataAccessException e) {
             log.error("Could not create MongoDB index {} on {}: a user could get two read marks "
                     + "for one room until it exists", READ_STATE_INDEX, ReadState.COLLECTION, e);
+        }
+
+        // Notifications: one per source and user (redelivered events), the
+        // list newest first, and expiry after NOTIFICATION_RETENTION.
+        try {
+            var ops = mongoTemplate.indexOps(Notification.COLLECTION);
+            ops.ensureIndex(new Index()
+                    .on("user_id", Sort.Direction.ASC)
+                    .on("source_id", Sort.Direction.ASC)
+                    .unique()
+                    .named(NOTIFICATION_SOURCE_INDEX));
+            ops.ensureIndex(new CompoundIndexDefinition(
+                    new Document().append("user_id", 1).append("_id", -1))
+                    .named(NOTIFICATION_LIST_INDEX));
+            ops.ensureIndex(new Index()
+                    .on("created_at", Sort.Direction.ASC)
+                    .expire(NOTIFICATION_RETENTION)
+                    .named(NOTIFICATION_EXPIRY_INDEX));
+
+            log.info("MongoDB indexes ready on {}", Notification.COLLECTION);
+        } catch (DataAccessException e) {
+            log.error("Could not create MongoDB indexes on {}: duplicate notifications, slow lists "
+                    + "or no expiry until they exist", Notification.COLLECTION, e);
         }
     }
 }
